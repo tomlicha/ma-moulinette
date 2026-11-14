@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getStatus, sendToStrava } from './client';
 
 const reply = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
@@ -44,6 +44,23 @@ describe('client du relais Strava', () => {
       throw new TypeError('Failed to fetch');
     }) as typeof fetch;
     expect(await sendToStrava(fit, meta, down)).toMatchObject({ ok: false, reason: 'error' });
+  });
+
+  it('nettoie une clé d’accès collée avec un saut de ligne, sinon fetch refuse l’en-tête (« Invalid value »)', async () => {
+    const store = new Map<string, string>([['zwift2.ownerKey', 'abc\ndef​ ']]);
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null });
+    try {
+      // Comme le vrai fetch : la construction des en-têtes lève si une valeur est invalide.
+      let sent: Headers | undefined;
+      const f = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+        sent = new Headers(init?.headers);
+        return new Response(JSON.stringify({ activityId: '5' }));
+      }) as typeof fetch;
+      expect(await sendToStrava(fit, meta, f)).toMatchObject({ ok: true });
+      expect(sent!.get('x-owner-key')).toBe('abcdef');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('lit le statut, et lève une erreur claire sans relais', async () => {

@@ -28,7 +28,8 @@ export function setOwnerKey(key: string): void {
 }
 
 const authHeaders = (): Record<string, string> => {
-  const key = getOwnerKey();
+  // Une clé collée avec un saut de ligne ou un caractère invisible rend l'en-tête invalide et fait échouer fetch lui-même.
+  const key = getOwnerKey().replace(/[^\x21-\x7e]/g, '');
   return key ? { [OWNER_HEADER]: key } : {};
 };
 
