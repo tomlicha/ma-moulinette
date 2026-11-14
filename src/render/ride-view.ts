@@ -68,7 +68,7 @@ export class RideView {
   ) {
     this.rider = new Rider(assets);
     this.path = new WorldPath(route);
-    const world = buildWorld(this.path, this.scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW);
+    const world = buildWorld(this.path, this.scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets);
     this.sky = world.sky;
     this.world = world;
     this.gates = new IntervalGates(this.path);
@@ -174,7 +174,7 @@ export class RideView {
     this.place(this.dist);
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
-    this.world.update(dt);
+    this.world.update(dt, this.dist);
     this.follow(dt);
     this.renderer.render(this.scene, this.camera);
 

@@ -1,32 +1,34 @@
 import * as THREE from 'three/webgpu';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { BIKE_NODE } from './asset-contract';
+import type { RiderAssets } from './assets';
+import { RegionMaterial } from './region-material';
+import { aimBasis, DEFAULT_BODY as BODY, offset, SKELETON, sub, twoBone, v3, type Basis, type Joint, type V3 } from './rider-pose';
 import { ROAD_HALF, type WorldPath } from './world-path';
 
 /**
- * Marie, accroupie au bord de la route : son vélo est retourné sur la selle et le guidon, elle fait tourner la roue
- * arrière en resserrant quelque chose. Figure en volumes simples, dans le style du reste du décor.
+ * Marie, le même avatar que le cycliste, accroupie au bord de la route derrière son vélo retourné sur la selle et le
+ * guidon : elle fait tourner la roue arrière en la resserrant. Même modèle, même squelette, même palette : seule la
+ * pose change, calculée comme celle du pédalage (voir `rider-pose.ts`).
  *
- * Repère local : l'origine est sous ses pieds, +x pointe vers le vélo, le vélo est posé le long de z
- * (roue arrière à z = 0, roue avant à z = -1).
+ * Repère local du groupe : le vélo est posé le long de z (l'avant vers +z), à x = 0 ; Marie est derrière lui, côté
+ * extérieur (x < 0), face à la route. Origine au sol.
  */
-const COLORS = {
-  jersey: 0x5be3c9,
-  tights: 0x23283a,
-  skin: 0xe8b48f,
-  hair: 0x5a3420,
-  shoe: 0xf2f2ee,
-  frame: 0xd9483b,
-  tyre: 0x1b1d22,
-  rim: 0xc9ced6,
-  metal: 0x8d939d,
-  toolbox: 0xd9483b,
-  helmet: 0xf3f6f9,
-  bottle: 0xf2cf3a,
-};
 
-/** Distance du bord de la chaussée à Marie, en m ; le vélo est 0,55 m plus loin. */
+/** Distance du bord de la chaussée au vélo, en m ; Marie est `STANCE_M` plus loin. */
 const SHOULDER_GAP_M = 2.0;
+/** Distance entre Marie et le plan du vélo, en m. */
+const STANCE_M = 0.72;
 /** Distance à laquelle Marie est assise sur le parcours (sur la montée, loin de la clôture). */
 export const MARIE_DISTANCE_M = 1850;
+/** Au-delà de cette distance le long de la route, Marie n'est ni dessinée ni animée. */
+const VISIBLE_RANGE_M = 400;
+
+const DEG = Math.PI / 180;
+const LEFT = v3(1, 0, 0);
+const dirAt = (angle: number) => v3(0, Math.sin(angle), Math.cos(angle));
+
+const COLORS = { metal: 0x8d939d, tyre: 0x1b1d22, toolbox: 0xd9483b, lid: 0xb23a2f, bottle: 0xf2cf3a, lever: 0x4cc9f0 };
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -40,22 +42,11 @@ function shadowed<T extends THREE.Mesh>(m: T): T {
   return m;
 }
 
-/** Capsule (ou cylindre) tendue entre deux points. */
-function limb(a: THREE.Vector3, b: THREE.Vector3, radius: number, mat: THREE.Material, capsule = true): THREE.Mesh {
-  const len = a.distanceTo(b);
-  const geo = capsule
-    ? new THREE.CapsuleGeometry(radius, Math.max(0.001, len - 2 * radius), 4, 8)
-    : new THREE.CylinderGeometry(radius, radius, len, 8);
-  const m = shadowed(new THREE.Mesh(geo, mat));
+/** Cylindre tendu entre deux points. */
+function limb(a: THREE.Vector3, b: THREE.Vector3, radius: number, mat: THREE.Material): THREE.Mesh {
+  const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, a.distanceTo(b), 8), mat));
   m.position.copy(a).add(b).multiplyScalar(0.5);
   m.quaternion.setFromUnitVectors(v(0, 1, 0), b.clone().sub(a).normalize());
-  return m;
-}
-
-function ball(center: THREE.Vector3, radius: number, mat: THREE.Material, scale = v(1, 1, 1)): THREE.Mesh {
-  const m = shadowed(new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 10), mat));
-  m.position.copy(center);
-  m.scale.copy(scale);
   return m;
 }
 
@@ -65,128 +56,157 @@ function box(size: THREE.Vector3, pos: THREE.Vector3, mat: THREE.Material): THRE
   return m;
 }
 
-/** Roue dont le plan est yz (axe selon x), centrée sur l'origine de son groupe. */
-function buildWheel(): THREE.Group {
-  const g = new THREE.Group();
-  const tyre = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.02, 8, 36).rotateY(Math.PI / 2), material(COLORS.tyre, 0.9)));
-  const rim = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.308, 0.008, 6, 36).rotateY(Math.PI / 2), material(COLORS.rim, 0.4)));
-  const hub = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 10).rotateZ(Math.PI / 2), material(COLORS.metal, 0.4)));
-  g.add(tyre, rim, hub);
-  const spokeMat = material(COLORS.rim, 0.4);
-  const spokeGeo = new THREE.BoxGeometry(0.004, 0.62, 0.004);
-  for (let k = 0; k < 8; k++) {
-    const s = new THREE.Mesh(spokeGeo, spokeMat);
-    s.rotation.x = (k * Math.PI) / 8;
-    g.add(s);
+interface Pose {
+  root: V3;
+  bases: Record<string, Basis>;
+}
+
+/**
+ * Accroupie face à +z (repère de l'avatar : y en haut, x à sa gauche) : pieds à plat, genoux devant les pointes,
+ * buste penché, mains sur la roue à `hub`. `wiggle` (-1..1) fait bouger le buste et les mains au rythme du geste.
+ */
+function crouchPose(hub: V3, wiggle: number): Pose {
+  const j = {} as Record<Joint, V3>;
+  const root = v3(0, 0.42, -0.22);
+  const torso = (54 + 2.5 * wiggle) * DEG;
+  j.root = root;
+  j.lumbar = offset(root, [dirAt(torso + 22 * DEG), BODY.pelvis]);
+  j.thorax = offset(j.lumbar, [dirAt(torso + 6 * DEG), BODY.spine]);
+  j.neckBase = offset(j.thorax, [dirAt(torso - 9 * DEG), BODY.chest]);
+  j.headBase = offset(j.neckBase, [dirAt(66 * DEG), BODY.neck]);
+  j.headTop = offset(j.headBase, [dirAt(46 * DEG), BODY.head]); // tête penchée sur le travail
+  const bases: Record<string, Basis> = {
+    pelvis: aimBasis(sub(j.lumbar, root), LEFT),
+    spine: aimBasis(sub(j.thorax, j.lumbar), LEFT),
+    chest: aimBasis(sub(j.neckBase, j.thorax), LEFT),
+    neck: aimBasis(sub(j.headBase, j.neckBase), LEFT),
+    head: aimBasis(sub(j.headTop, j.headBase), LEFT),
+  };
+  for (const [s, side] of [['l', 1], ['r', -1]] as const) {
+    const ankle = v3(side * 0.11, BODY.ankleHeight + 0.015, 0);
+    const ball = offset(ankle, [v3(0, -0.03, 0.126), 1]);
+    const hip = offset(root, [bases.pelvis!.x, side * BODY.hipHalfWidth]);
+    const knee = twoBone(hip, ankle, BODY.thigh, BODY.shin, v3(side * 0.25, 0.4, 1));
+    const shoulder = offset(j.neckBase, [bases.chest!.x, side * BODY.shoulderHalfWidth], [bases.chest!.y, -BODY.shoulderDrop]);
+    // La main gauche tient la roue, la droite la fait tourner : elle va et vient.
+    const sway = side === 1 ? 0.012 * wiggle : 0.03 * wiggle;
+    const wrist = offset(hub, [v3(side * 0.09, 0.05 + sway, -0.1), 1]);
+    const elbow = twoBone(shoulder, wrist, BODY.upperArm, BODY.forearm, v3(side * 0.6, -0.3, -0.5));
+    const knuckle = offset(wrist, [v3(0, -0.2, 1), 0.098]);
+    Object.assign(j, { [`hip_${s}`]: hip, [`knee_${s}`]: knee, [`ankle_${s}`]: ankle, [`ball_${s}`]: ball });
+    bases[`thigh_${s}`] = aimBasis(sub(knee, hip), LEFT);
+    bases[`shin_${s}`] = aimBasis(sub(ankle, knee), LEFT);
+    bases[`foot_${s}`] = aimBasis(sub(ball, ankle), LEFT);
+    bases[`upperarm_${s}`] = aimBasis(sub(elbow, shoulder), LEFT);
+    bases[`forearm_${s}`] = aimBasis(sub(wrist, elbow), LEFT);
+    bases[`hand_${s}`] = aimBasis(sub(knuckle, wrist), LEFT);
   }
-  return g;
+  return { root, bases };
 }
 
 export interface Marie {
   group: THREE.Group;
-  /** Fait tourner la roue arrière et balance Marie au rythme de son geste. */
-  update(dtS: number): void;
+  /**
+   * Fait tourner la roue arrière et balance Marie au rythme de son geste. Avec `riderDistM`, Marie disparaît (et ne coûte
+   * plus rien) quand le coureur en est loin : avatar et vélo pèsent plus de 500 000 triangles.
+   */
+  update(dtS: number, riderDistM?: number): void;
 }
 
-export function buildMarie(path: WorldPath, d = MARIE_DISTANCE_M): Marie {
+export function buildMarie(path: WorldPath, assets: RiderAssets, d = MARIE_DISTANCE_M): Marie {
   const root = new THREE.Group();
-  const jersey = material(COLORS.jersey, 0.7);
-  const tights = material(COLORS.tights, 0.85);
-  const skin = material(COLORS.skin, 0.75);
-  const hair = material(COLORS.hair, 0.9);
-  const frame = material(COLORS.frame, 0.5);
-  const metal = material(COLORS.metal, 0.4);
+  const kit = new RegionMaterial(); // la palette du cycliste
+  const paint = (o: THREE.Object3D) =>
+    o.traverse((c) => {
+      const mesh = c as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = kit;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    });
 
   /* ---------- Vélo retourné ---------- */
-  const bike = new THREE.Group();
-  const X = 0.55;
-  const rear = v(X, 0.66, 0);
-  const front = v(X, 0.66, -1);
-  const bb = v(X, 0.74, -0.42);
-  const saddle = v(X, 0.06, -0.3);
-  const topRear = v(X, 0.1, -0.31);
-  const headTop = v(X, 0.08, -0.78);
-  const headBottom = v(X, 0.31, -0.86);
-  bike.add(
-    limb(bb, saddle, 0.014, frame, false), // tube de selle
-    limb(topRear, headTop, 0.014, frame, false), // tube horizontal
-    limb(bb, headBottom, 0.018, frame, false), // tube diagonal
-    limb(headTop, headBottom, 0.02, frame, false), // tube de direction
-    limb(bb, rear, 0.01, frame, false), // bases
-    limb(topRear, rear, 0.008, frame, false), // haubans
-    limb(headBottom, front, 0.012, metal, false), // fourche
-    box(v(0.12, 0.025, 0.24), v(X, 0.03, -0.28), material(COLORS.tyre, 0.7)), // selle
-    limb(v(X - 0.21, 0.03, -0.74), v(X + 0.21, 0.03, -0.74), 0.011, metal, false), // guidon
-    limb(bb, bb.clone().add(v(0.1, 0.12, 0.13)), 0.012, metal, false), // manivelle
-    shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.006, 20).rotateZ(Math.PI / 2), metal)),
-  );
-  (bike.children[bike.children.length - 1] as THREE.Mesh).position.set(X - 0.04, bb.y, bb.z);
+  const bike = assets.bike.clone(true);
+  paint(bike);
+  const flipped = new THREE.Group();
+  flipped.rotation.z = Math.PI; // sur la selle et le guidon
+  flipped.add(bike);
+  root.add(flipped);
+  flipped.updateMatrixWorld(true);
+  flipped.position.y = -new THREE.Box3().setFromObject(flipped).min.y;
+  root.updateMatrixWorld(true);
+  const rearWheel = bike.getObjectByName(BIKE_NODE.rearWheel)!;
+  const hubWorld = rearWheel.getWorldPosition(new THREE.Vector3());
 
-  const rearWheel = buildWheel();
-  rearWheel.position.copy(rear);
-  const frontPivot = new THREE.Group(); // roue avant légèrement braquée
-  frontPivot.position.copy(front);
-  frontPivot.rotation.y = 0.28;
-  frontPivot.add(buildWheel());
-  bike.add(rearWheel, frontPivot);
-  root.add(bike);
+  /* ---------- Marie : l'avatar du cycliste, derrière la roue arrière ---------- */
+  const holder = new THREE.Group();
+  holder.position.set(-STANCE_M, 0, hubWorld.z);
+  holder.rotation.y = Math.PI / 2; // face au vélo, c'est-à-dire à +x
+  root.add(holder);
+  const avatar = cloneSkinned(assets.avatar) as THREE.Group;
+  paint(avatar);
+  holder.add(avatar);
+  const bones = SKELETON.map((b) => avatar.getObjectByName(b.bone)!);
+  const parentIndex = SKELETON.map((b) => SKELETON.findIndex((o) => o.bone === b.parent));
+  const hub = v3(0, hubWorld.y, STANCE_M); // le moyeu, dans le repère de Marie
+  const world = SKELETON.map(() => new THREE.Quaternion());
+  const m = new THREE.Matrix4();
+  const applyPose = (wiggle: number) => {
+    const pose = crouchPose(hub, wiggle);
+    SKELETON.forEach((def, i) => {
+      const b = pose.bases[def.bone]!;
+      world[i]!.setFromRotationMatrix(m.makeBasis(v(b.x.x, b.x.y, b.x.z), v(b.y.x, b.y.y, b.y.z), v(b.z.x, b.z.y, b.z.z)));
+      const bone = bones[i]!;
+      if (def.parent) bone.quaternion.copy(world[parentIndex[i]!]!).invert().multiply(world[i]!);
+      else bone.quaternion.copy(world[i]!);
+    });
+    bones[0]!.position.set(pose.root.x, pose.root.y, pose.root.z);
+  };
+  applyPose(0);
 
-  /* ---------- Marie ---------- */
-  const body = new THREE.Group();
-  body.position.set(-0.12, 0.36, 0); // pivot au bassin
-  const P = (x: number, y: number, z: number) => v(x + 0.12, y - 0.36, z); // coordonnées « monde » → repère du corps
-  const legs = new THREE.Group(); // jambes fixes : seul le haut du corps se balance
-  root.add(legs, body);
-
-  for (const z of [-0.13, 0.13]) {
-    legs.add(
-      limb(v(0, 0.1, z), v(0.28, 0.42, z * 1.15), 0.055, tights),
-      limb(v(0.28, 0.42, z * 1.15), v(-0.12, 0.34, z * 0.8), 0.07, tights),
-      box(v(0.26, 0.08, 0.1), v(0.07, 0.04, z), material(COLORS.shoe, 0.8)),
-    );
-  }
-  body.add(
-    limb(P(-0.12, 0.36, 0), P(0.17, 0.82, 0), 0.15, jersey), // buste penché en avant
-    limb(P(0.17, 0.84, 0), P(0.2, 0.9, 0), 0.045, skin), // cou
-    ball(P(0.27, 0.99, 0), 0.115, skin),
-    ball(P(0.24, 1.01, 0), 0.125, hair, v(1, 0.95, 1.02)),
-    limb(P(0.14, 0.98, 0), P(0.02, 0.84, 0), 0.035, hair), // queue-de-cheval
-    ball(P(0.36, 1.0, 0.05), 0.014, material(0x23283a)),
-    ball(P(0.36, 1.0, -0.05), 0.014, material(0x23283a)),
-  );
-  for (const z of [-1, 1]) {
-    const shoulder = P(0.17, 0.82, z * 0.19);
-    const elbow = P(0.36, 0.58, z * 0.24);
-    const hand = P(0.52, 0.64, z * 0.07);
-    body.add(limb(shoulder, elbow, 0.05, jersey), limb(elbow, hand, 0.04, skin), ball(hand, 0.045, skin));
-  }
   /* ---------- Affaires sur l'herbe ---------- */
-  const helmet = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), material(COLORS.helmet, 0.6)));
-  helmet.position.set(-0.45, 0, 0.7);
+  const zM = hubWorld.z;
+  const lids = material(COLORS.lid, 0.6);
+  const tube = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.013, 6, 24).rotateX(Math.PI / 2), material(COLORS.tyre, 0.9)));
+  tube.position.set(-0.5, 0.015, zM + 0.5); // chambre à air sortie du pneu
   root.add(
-    box(v(0.32, 0.1, 0.18), v(0.35, 0.05, 0.62), material(COLORS.toolbox, 0.6)), // boîte à outils
-    limb(v(0.2, 0.03, -0.55), v(0.2, 0.03, -1.05), 0.018, metal, false), // pompe posée à plat
-    helmet,
-    limb(v(0.95, 0.02, 0.55), v(0.95, 0.2, 0.55), 0.035, material(COLORS.bottle, 0.5), false), // bidon
-    buildSign(),
+    box(v(0.2, 0.1, 0.34), v(-0.5, 0.05, zM - 0.6), material(COLORS.toolbox, 0.6)), // boîte à outils
+    box(v(0.21, 0.012, 0.35), v(-0.5, 0.1, zM - 0.6), lids),
+    box(v(0.09, 0.03, 0.04), v(-0.5, 0.115, zM - 0.6), lids),
+    limb(v(-1.0, 0.03, zM - 0.1), v(-1.0, 0.03, zM + 0.45), 0.018, material(COLORS.metal, 0.4)), // pompe posée à plat
+    limb(v(-1.0, 0.03, zM + 0.45), v(-1.0, 0.03, zM + 0.56), 0.024, material(COLORS.tyre, 0.8)),
+    limb(v(-0.4, 0.012, zM + 0.1), v(-0.42, 0.012, zM + 0.3), 0.008, material(COLORS.lever, 0.5)), // démonte-pneus
+    limb(v(-0.34, 0.012, zM + 0.14), v(-0.37, 0.012, zM + 0.34), 0.008, material(COLORS.lever, 0.5)),
+    tube,
+    limb(v(-1.1, 0.02, zM + 0.8), v(-1.1, 0.2, zM + 0.8), 0.035, material(COLORS.bottle, 0.5)), // bidon
+    limb(v(-1.1, 0.2, zM + 0.8), v(-1.1, 0.235, zM + 0.8), 0.016, material(COLORS.tyre, 0.6)),
+    buildSign(zM),
   );
 
   /* ---------- Pose dans le monde ---------- */
   const lat = -(ROAD_HALF + SHOULDER_GAP_M);
   const p = path.point(d);
   const s = path.side(d);
+  const grade = (path.point(d + 1).y - path.point(d - 1).y) / 2;
+  root.rotation.order = 'YXZ';
+  // +x local → vers la route (+s), z local → sens de la marche ; l'ensemble suit la pente.
+  root.rotation.y = Math.atan2(-s.z, s.x);
+  root.rotation.x = -Math.atan(grade);
   root.position.set(p.x + s.x * lat, path.groundHeight(d, lat), p.z + s.z * lat);
-  // +x local → vers le vélo, donc vers le bord extérieur de la route (-s) ; z local = sens inverse de la marche,
-  // si bien que la roue avant (z = -1) regarde dans le sens de la marche.
-  root.rotation.y = Math.atan2(s.z, -s.x);
 
   let t = 0;
   return {
     group: root,
-    update(dtS: number) {
+    update(dtS: number, riderDistM?: number) {
+      if (riderDistM !== undefined) {
+        const lap = path.route.lengthM;
+        const delta = (((riderDistM - d) % lap) + lap + lap / 2) % lap - lap / 2;
+        root.visible = Math.abs(delta) < VISIBLE_RANGE_M;
+      }
+      if (!root.visible) return;
       t += dtS;
       rearWheel.rotation.x -= dtS * 2.4;
-      body.rotation.z = Math.sin(t * 2.1) * 0.035;
+      applyPose(Math.sin(t * 2.1));
     },
   };
 }
@@ -225,8 +245,8 @@ function signTexture(): THREE.CanvasTexture | undefined {
   return tex;
 }
 
-/** Pancarte sur deux piquets, face vers +z local, c'est-à-dire vers le coureur qui arrive. */
-function buildSign(): THREE.Group {
+/** Pancarte sur deux piquets, plantée en amont de Marie. */
+function buildSign(zM: number): THREE.Group {
   const g = new THREE.Group();
   const wood = material(0x6b4a2e, 0.9);
   const tex = signTexture();
@@ -237,6 +257,7 @@ function buildSign(): THREE.Group {
   const board = shadowed(new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), [wood, wood, wood, wood, face, wood]));
   board.position.set(0, 0.6 + h / 2, 0);
   g.add(board);
-  g.position.set(1.7, 0, SIGN_BEFORE_M);
+  g.rotation.y = Math.PI; // face vers le coureur qui arrive, c'est-à-dire vers -z
+  g.position.set(-2.1, 0, zM - SIGN_BEFORE_M);
   return g;
 }

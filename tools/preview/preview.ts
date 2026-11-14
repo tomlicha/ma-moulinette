@@ -76,7 +76,7 @@ const place = (kit: Kit, x: number, z: number, yawDeg: number) => {
 let world: ReturnType<typeof buildWorld> | undefined;
 if (shot === 'marie' || shot === 'marie-chase') {
   const path = new WorldPath(DEMO_ROUTE);
-  world = buildWorld(path, scene, WORLD_LOW);
+  world = buildWorld(path, scene, WORLD_LOW, assets);
   const d = MARIE_DISTANCE_M;
   const f = path.forward(d);
   const s = path.side(d);

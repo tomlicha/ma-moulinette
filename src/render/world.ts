@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { SunLight } from 'three/addons/lights/SunLight.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { RiderAssets } from './assets';
 import { buildMarie } from './marie';
 import { fbm, mulberry32, smoothstep, valueNoise } from './noise';
 import { ROAD_HALF, TERRAIN_HALF, type WorldPath } from './world-path';
@@ -35,7 +36,7 @@ export interface World {
   sky: THREE.Mesh;
   sun: SunLight;
   /** Anime les éléments vivants du décor (Marie et sa roue). */
-  update(dtS: number): void;
+  update(dtS: number, riderDistM?: number): void;
 }
 
 export interface WorldOptions {
@@ -554,7 +555,7 @@ function buildSky(): THREE.Mesh {
   return m;
 }
 
-export function buildWorld(path: WorldPath, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH): World {
+export function buildWorld(path: WorldPath, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH, assets?: RiderAssets): World {
   const group = new THREE.Group();
   group.add(
     buildTerrain(path),
@@ -588,9 +589,9 @@ export function buildWorld(path: WorldPath, scene: THREE.Scene, opts: WorldOptio
   scene.background = PALETTE.horizon.clone();
   // Brume légère : elle bleuit les montagnes sans les effacer.
   scene.fog = new THREE.Fog(PALETTE.horizon.getHex(), 1500, 11000);
-  const marie = buildMarie(path);
-  group.add(marie.group);
+  const marie = assets ? buildMarie(path, assets) : undefined;
+  if (marie) group.add(marie.group);
 
   scene.add(group, sky, sun, fill);
-  return { group, sky, sun, update: (dtS) => marie.update(dtS) };
+  return { group, sky, sun, update: (dtS, riderDistM) => marie?.update(dtS, riderDistM) };
 }
