@@ -154,7 +154,10 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
     state = s;
     actionsEl.dataset.state = s;
     sendBtn.disabled = s === 'sending';
-    set('sendLabel', s === 'sending' ? 'Envoi…' : s === 'error' ? 'Réessayer' : content?.strava === 'login' ? 'Connecter Strava et envoyer' : 'Envoyer à Strava');
+    set(
+      'sendLabel',
+      s === 'sending' ? 'Envoi…' : content?.strava === 'login' ? 'Connecter Strava et envoyer' : s === 'error' ? 'Réessayer' : 'Envoyer à Strava',
+    );
     el('count').hidden = s !== 'countdown';
     drain.classList.toggle('run', s === 'countdown');
     el('badge').innerHTML = s === 'error' ? ICON.warn : ICON.check;
@@ -211,7 +214,9 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
         ...(out.activityUrl ? { url: out.activityUrl } : {}),
       });
     } else {
-      setState(out.kept ? 'error' : 'none', { title: 'Envoi impossible', sub: out.message });
+      // Accès Strava perdu : le bouton dit qu'il rouvrira la connexion, pas seulement « Réessayer ».
+      if (out.login) content.strava = 'login';
+      setState(out.kept ? 'error' : 'none', { title: out.login ? 'Connexion Strava à refaire' : 'Envoi impossible', sub: out.message });
     }
   }
 

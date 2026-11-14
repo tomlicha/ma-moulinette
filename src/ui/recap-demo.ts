@@ -23,7 +23,7 @@ export function showRecapDemo(host: HTMLElement, mode: string, workout: Workout,
           () =>
             resolve(
               mode === 'echec'
-                ? { ok: false, message: 'échec (relais injoignable : Failed to fetch), la sortie est gardée en mémoire', kept: true }
+                ? { ok: false, message: 'échec (relais injoignable : Failed to fetch), la sortie est gardée en mémoire', kept: true, login: false }
                 : { ok: true, name: n, activityUrl: 'https://www.strava.com/' },
             ),
           1200,

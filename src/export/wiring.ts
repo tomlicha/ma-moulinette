@@ -16,7 +16,14 @@ export type StravaReadiness = 'none' | 'locked' | 'login' | 'ready';
 
 export type StravaOutcome =
   | { ok: true; activityUrl?: string; processing?: boolean; name: string }
-  | { ok: false; message: string; /** La sortie est gardée en mémoire : un nouvel essai a un sens. */ kept: boolean };
+  | {
+      ok: false;
+      message: string;
+      /** La sortie est gardée en mémoire : un nouvel essai a un sens. */
+      kept: boolean;
+      /** Le nouvel essai passera par la connexion à Strava (accès révoqué, rafraîchissement refusé). */
+      login: boolean;
+    };
 
 export interface ExportWiring {
   /** À appeler à chaque snapshot de la sortie virtuelle. */
@@ -187,13 +194,13 @@ export function setupExport(opts: {
   async function send(name?: string): Promise<StravaOutcome> {
     const fail = (message: string, kept: boolean): StravaOutcome => {
       log(`Strava : ${message}`);
-      return { ok: false, message, kept };
+      return { ok: false, message, kept, login: !!strava?.configured && !strava.connected };
     };
     // La fenêtre de connexion doit s'ouvrir dans le geste utilisateur, avant tout `await`, sinon elle est bloquée.
     if (strava?.locked) {
       // Site public : le relais Strava n'obéit qu'au propriétaire, qui saisit sa clé une seule fois par appareil.
       const key = window.prompt('Clé d’accès Ma Moulinette (nécessaire pour envoyer à Strava)', getOwnerKey());
-      if (!key) return { ok: false, message: 'clé d’accès non saisie', kept: true };
+      if (!key) return { ok: false, message: 'clé d’accès non saisie', kept: true, login: false };
       setOwnerKey(key.trim());
       await refreshStrava();
       if (strava?.locked) {
