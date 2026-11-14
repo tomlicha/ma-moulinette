@@ -27,6 +27,8 @@ import { setupAppShell } from './ui/app-shell';
 import { setupWorkoutEditor } from './ui/workout-editor';
 import { RideHud } from './ui/hud';
 import { setupRideMenu } from './ui/ride-menu';
+import { setupRecap } from './ui/recap';
+import { summarize } from './ui/recap-model';
 import { createRadar } from './ui/radar';
 import { setupHomeBackground } from './ui/home-background';
 import { controlModes } from './ui/radar-model';
@@ -300,7 +302,14 @@ function stopRide(resetTrainer = true) {
   setState(currentState, trainer?.name);
 }
 
-rideBtn.addEventListener('click', () => (ride ? stopRide() : startRide()));
+rideBtn.addEventListener('click', () => {
+  if (!ride) return startRide();
+  stopRide();
+  // Arrêt volontaire, hors séance : la sortie est figée et son récapitulatif s'affiche (docs/design/recap.md).
+  if (runner) return;
+  exporter.onRideStopped();
+  offerRecap();
+});
 
 async function start(t: TrainerAdapter, nameHint?: string) {
   attach(t);
@@ -585,9 +594,13 @@ function tickWorkout() {
   const s = running ? runner.advance(dt) : runner.state();
   renderWorkout(s);
   if (s.done) {
+    const done = { workout: runner.workout, ftpW: runner.ftpW };
     exporter.onWorkoutFinished(); // l'export s'arrêtera à la fin du dernier palier (export/wiring.ts)
-    return finishWorkout('séance terminée');
+    finishWorkout('séance terminée');
+    return offerRecap(done);
   }
+  // Consigne et palier notés dans l'enregistrement : le récapitulatif en tire la courbe et les blocs tenus.
+  if (running) exporter.onWorkoutState(s.targetW, s.stepIndex);
   if (!running || woErgOptOut || woSending || now < woHoldUntil) return;
 
   if (s.targetW === undefined) {
@@ -733,9 +746,28 @@ refreshWorkoutChoices();
 
 setupAppShell();
 const rideMenu = setupRideMenu({ prefs, opener: $<HTMLButtonElement>('ride-menu-open'), dialog: $<HTMLDialogElement>('ride-menu'), stats: $('view-stats') });
+// Avant le routeur, qui applique l'écran courant dès sa création et ferme le récapitulatif hors de la Sortie.
+const recap = setupRecap($<HTMLDialogElement>('recap'), {
+  send: (name) => exporter.sendToStrava(name),
+  downloadFit: () => void exporter.downloadFit(),
+  // Après un arrêt de la sortie, « Reprendre la sortie » la relance ; après une séance, elle n'a jamais cessé.
+  // Un envoi programmé est déjà parti avec la sortie figée ; sinon, l'export suivant couvrira toute la sortie.
+  onContinue: () => {
+    exporter.releaseFrozen();
+    if (!ride && currentState === 'connected') startRide();
+  },
+  onFinish: () => {
+    stopRide();
+    router.go('accueil');
+  },
+});
+
 const router = setupRouter((v) => {
   view?.setActive(v === 'sortie');
-  if (v !== 'sortie') rideMenu.close();
+  if (v !== 'sortie') {
+    rideMenu.close();
+    recap.close();
+  }
   else armAutoStart();
   if (v === 'seances') editor.sync();
 });
@@ -892,7 +924,35 @@ const exporter = setupExport({
   stravaButton: $<HTMLButtonElement>('export-strava'),
   routeName: DEMO_ROUTE.name,
   log,
+  // Arrêt puis 5 s de pédalage après la fin : le récapitulatif s'efface de lui-même (docs/design/recap.md).
+  onResumed: () => {
+    if (!recap.open) return;
+    log('pédalage repris : récapitulatif fermé');
+    recap.dismissByPedaling();
+  },
 });
+
+/** En dessous, pas de récapitulatif : un démarrage pour rien ou un essai. */
+const RECAP_MIN_S = 60;
+
+/** Récapitulatif de fin de sortie : après une séance menée au bout, ou une sortie arrêtée à la main. */
+function offerRecap(done?: { workout: Workout; ftpW: number }) {
+  const rec = exporter.current();
+  if (!rec || rec.timerS < RECAP_MIN_S || router.current() !== 'sortie') return;
+  const ftpW = done?.ftpW ?? readFtp();
+  rideMenu.close();
+  recap.show({
+    summary: summarize(rec, { ftpW, ...(done ? { workout: done.workout } : {}) }),
+    eyebrow: done ? 'Séance terminée' : 'Sortie terminée',
+    title: done?.workout.name ?? DEMO_ROUTE.name,
+    place: DEMO_ROUTE.name,
+    startMs: rec.startMs,
+    defaultName: exporter.defaultName(),
+    strava: exporter.strava(),
+    rideRunning: !!ride,
+  });
+  log(`récapitulatif : ${Math.round(rec.timerS)} s, Strava ${exporter.strava()}`);
+}
 
 
 if (webBluetoothAvailable()) {
@@ -944,6 +1004,15 @@ RideView.create($<HTMLCanvasElement>('view'), DEMO_ROUTE, {
     $('view-stats').textContent = 'rendu 3D indisponible';
     log(`rendu 3D indisponible : ${e instanceof Error ? e.message : e}`);
   });
+
+// Aperçu du récapitulatif sans rouler, en développement seulement (voir ui/recap-demo.ts) : ?recap, ?recap=libre…
+if (import.meta.env.DEV && params.has('recap')) {
+  const sample = SAMPLE_WORKOUTS.find((s) => s.id === 'sweet-spot')!;
+  void import('./ui/recap-demo').then((m) => {
+    router.go('sortie');
+    m.showRecapDemo($('recap').parentElement!, params.get('recap') ?? '', parseWorkout(sample.fileName, sample.text), readFtp(), DEMO_ROUTE.name);
+  });
+}
 
 // En dernier : tout l'état de la page est initialisé avant la première connexion.
 setState(currentState); // chaque bouton reçoit dès le départ sa raison d'être indisponible

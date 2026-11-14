@@ -1,0 +1,254 @@
+/*
+ * Écran récapitulatif de fin de sortie. Référence : docs/design/recap.md.
+ * Grand écran : carte « Ligne d'arrivée » (R1) sur la scène floutée. Téléphone couché : « Bilan » (R2) plein écran.
+ * Thème clair (« crème chaud », comme l'accueil) par défaut, sombre (verre du HUD) si le système le demande.
+ * Zones de puissance : celles de la séance du HUD (--hz1 à --hz6), en blocs pleins, dans les deux thèmes.
+ */
+.recap {
+  --rc-fg: #14171A;
+  --rc-muted: #4F5865;
+  --rc-ok: #23733A;
+  --rc-ok-bg: rgb(43 138 62 / .12);
+  --rc-err: #C92A2A;
+  --rc-err-bg: rgb(201 42 42 / .1);
+  --rc-card: rgb(255 255 255 / .94);
+  --rc-edge: rgb(90 60 30 / .12);
+  --rc-shadow: 0 16px 48px rgb(80 50 20 / .22);
+  --rc-page: #F4EDE3;
+  --rc-panel: #FFFFFF;
+  --rc-panel-edge: rgb(90 60 30 / .16);
+  --rc-tile: #F7F2EA;
+  --rc-bar: #FFFFFF;
+  --rc-ghost-line: #8B8478;
+  --rc-ghost-bg: #FFFFFF;
+  --rc-input-line: #8B8478;
+  --rc-input-bg: #FFFFFF;
+  --rc-line: #14171A;
+  --rc-halo: rgb(255 255 255 / .95);
+  --rc-ftp: rgb(20 23 26 / .55);
+  --rc-strava: #FC5200; /* orange Strava, texte blanc gras d'au moins 17 px : 3,3:1, suffisant en grand texte */
+  --hz1: #C4CDD8; --hz2: #2E9BFF; --hz3: #1FE07F; --hz4: #FFD60A; --hz5: #FF7A1A; --hz6: #FF2D55;
+  --rc-num: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+
+  position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 16px; border: 0;
+  background: transparent; color: var(--rc-fg); font: 500 16px/1.3 Barlow, system-ui, sans-serif; overflow: auto; overscroll-behavior: contain;
+  color-scheme: light;
+}
+.recap[open] { display: grid; place-items: center; }
+.recap::backdrop { background: rgb(244 237 227 / .3); -webkit-backdrop-filter: blur(7px) saturate(.9); backdrop-filter: blur(7px) saturate(.9); }
+
+@media (prefers-color-scheme: dark) {
+  .recap {
+    --rc-fg: #FFFFFF;
+    --rc-muted: #D3DCE8;
+    --rc-ok: #5BE3C9;
+    --rc-ok-bg: rgb(91 227 201 / .14);
+    --rc-err: #FF8A85;
+    --rc-err-bg: rgb(255 138 133 / .14);
+    --rc-card: rgb(24 30 40 / .78);
+    --rc-edge: rgb(255 255 255 / .14);
+    --rc-shadow: 0 16px 56px rgb(5 10 20 / .45);
+    --rc-page: radial-gradient(120% 80% at 20% 0%, #15263F 0%, #0B1422 60%);
+    --rc-panel: rgb(255 255 255 / .04);
+    --rc-panel-edge: rgb(255 255 255 / .1);
+    --rc-tile: rgb(255 255 255 / .05);
+    --rc-bar: rgb(6 12 22 / .92);
+    --rc-ghost-line: rgb(255 255 255 / .45);
+    --rc-ghost-bg: rgb(255 255 255 / .04);
+    --rc-input-line: rgb(255 255 255 / .22);
+    --rc-input-bg: rgb(255 255 255 / .06);
+    --rc-line: #FFFFFF;
+    --rc-halo: rgb(11 20 34 / .7);
+    --rc-ftp: rgb(255 255 255 / .6);
+    color-scheme: dark;
+  }
+  .recap::backdrop { background: rgb(11 20 34 / .5); }
+}
+
+/* --- Grand écran : la carte --- */
+.rc-card {
+  width: min(780px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 20px; padding: 30px 36px 26px;
+  border-radius: 24px; background: var(--rc-card); border: 1px solid var(--rc-edge); box-shadow: var(--rc-shadow);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
+}
+.recap[open] .rc-card { animation: rc-in .32s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes rc-in { from { translate: 0 24px; opacity: 0; } to { translate: 0 0; opacity: 1; } }
+
+.recap :is(button, a, .rc-eyebrow, .rc-badge, .rc-tile-last) svg { flex: none; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.recap :focus-visible { outline: 3px solid var(--rc-fg); outline-offset: 2px; }
+
+.rc-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.rc-titles { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rc-eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--rc-ok); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.rc-eyebrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
+.recap h2 { margin: 0; font: 700 52px/1 var(--rc-num); color: var(--rc-fg); overflow-wrap: anywhere; }
+.rc-kicker { display: none; }
+.rc-when { margin: 0; font-size: 16px; color: var(--rc-muted); }
+.rc-meta { display: none; }
+.rc-chip { flex: none; display: flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 999px; background: var(--rc-ok-bg); color: var(--rc-ok); font-size: 15px; font-weight: 700; white-space: nowrap; }
+.rc-chip[data-all='false'] { background: var(--rc-tile); color: var(--rc-fg); }
+
+.rc-big { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.rc-stat, .rc-tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rc-lab { font-size: 15px; font-weight: 600; color: var(--rc-muted); }
+.rc-num { font: 700 44px/1 var(--rc-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rc-unit { margin-left: 4px; font-size: .48em; font-weight: 600; color: var(--rc-muted); }
+.rc-more { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; font-size: 16px; color: var(--rc-muted); }
+.rc-more b { color: var(--rc-fg); font-weight: 700; }
+
+.rc-chart { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.rc-chart svg { display: block; width: 100%; height: 104px; overflow: visible; }
+.rc-chart .z1 { fill: var(--hz1); } .rc-chart .z2 { fill: var(--hz2); } .rc-chart .z3 { fill: var(--hz3); }
+.rc-chart .z4 { fill: var(--hz4); } .rc-chart .z5 { fill: var(--hz5); } .rc-chart .z6 { fill: var(--hz6); }
+.rc-ftp { stroke: var(--rc-ftp); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.rc-halo, .rc-power { fill: none; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.rc-halo { stroke: var(--rc-halo); stroke-width: 4.2; }
+.rc-power { stroke: var(--rc-line); stroke-width: 1.6; }
+.rc-axis { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--rc-muted); }
+.rc-legend { text-align: center; }
+.rc-zbar, .rc-zlegend, .rc-grid { display: none; }
+.rc-zbar .z1 { background: var(--hz1); } .rc-zbar .z2 { background: var(--hz2); } .rc-zbar .z3 { background: var(--hz3); }
+.rc-zbar .z4 { background: var(--hz4); } .rc-zbar .z5 { background: var(--hz5); } .rc-zbar .z6 { background: var(--hz6); }
+
+/* --- Actions : la disposition suit l'état de l'envoi (recap.ts) --- */
+.rc-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 14px; align-items: center; margin-top: 4px; }
+.rc-actions:is([data-state='countdown'], [data-state='manual'], [data-state='sending']) { grid-template-areas: 'send continue' 'bottom bottom'; }
+.rc-actions[data-state='error'] { grid-template-areas: 'status status' 'send continue' 'bottom bottom'; }
+.rc-actions[data-state='sent'] { grid-template-areas: 'status view' 'continue bottom'; }
+.rc-actions[data-state='none'] { grid-template-areas: 'status status' 'continue bottom'; }
+.rc-status { grid-area: status; } .rc-send { grid-area: send; } .rc-view { grid-area: view; } .rc-continue { grid-area: continue; }
+/* Nom et liens sur une rangée à part : leur largeur ne doit pas rogner le bouton Strava au-dessus. */
+.rc-bottom { grid-area: bottom; display: flex; align-items: center; gap: 16px; min-width: 0; }
+.rc-bottom .rc-name { flex: 1 1 auto; }
+.rc-bottom .rc-tools { margin-left: auto; }
+
+.rc-send {
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; height: 64px; padding: 0 24px;
+  border: 0; border-radius: 16px; background: var(--rc-strava); color: #FFFFFF; font: 700 22px Barlow, system-ui, sans-serif; white-space: nowrap; cursor: pointer;
+}
+.rc-send:hover:not(:disabled) { filter: brightness(1.06); }
+.rc-send:disabled { opacity: .7; cursor: progress; }
+.rc-send > svg { width: 23px; height: 23px; }
+.rc-count { margin-left: auto; display: flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; background: rgb(0 0 0 / .18); font-size: 17px; font-variant-numeric: tabular-nums; }
+.rc-count-short { display: none; }
+.rc-drain { position: absolute; left: 0; bottom: 0; width: 100%; height: 5px; background: rgb(255 255 255 / .8); transform-origin: left center; transform: scaleX(0); }
+.rc-drain.run { animation: rc-drain linear both; }
+@keyframes rc-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .recap[open] .rc-card { animation: none; }
+  .rc-drain.run { animation: none; transform: none; opacity: .5; }
+}
+
+.rc-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 64px; padding: 0 24px; border-radius: 16px;
+  border: 1.5px solid var(--rc-ghost-line); background: var(--rc-ghost-bg); color: var(--rc-fg); font: 600 19px Barlow, system-ui, sans-serif;
+  white-space: nowrap; text-decoration: none; cursor: pointer;
+}
+.rc-ghost:hover { border-color: var(--rc-fg); }
+.rc-ghost svg { width: 20px; height: 20px; stroke-width: 2.2; }
+.rc-view { height: 52px; font-size: 17px; }
+.rc-actions[data-state='sent'] .rc-continue, .rc-actions[data-state='none'] .rc-continue { height: 56px; font-size: 18px; }
+
+.rc-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rc-name label { flex: none; font-size: 15px; font-weight: 600; color: var(--rc-muted); }
+.rc-name input {
+  flex: 1 1 auto; min-width: 0; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--rc-input-line);
+  background: var(--rc-input-bg); color: var(--rc-fg); font: 600 16px Barlow, system-ui, sans-serif;
+}
+.rc-tools { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.rc-link {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--rc-muted); font: 600 15px Barlow, system-ui, sans-serif; text-decoration: underline; white-space: nowrap; cursor: pointer;
+}
+.rc-link:hover { color: var(--rc-fg); }
+.rc-link svg { width: 16px; height: 16px; stroke-width: 2.2; }
+
+.rc-status { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 10px 14px; border-radius: 18px; background: var(--rc-ok-bg); }
+.rc-badge { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--rc-ok-bg); color: var(--rc-ok); }
+.rc-badge svg { width: 24px; height: 24px; stroke-width: 2.6; }
+.rc-status-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rc-status-text b { font-size: 19px; font-weight: 700; }
+.rc-status-text span { font-size: 15px; color: var(--rc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-actions:is([data-state='error'], [data-state='none']) .rc-status { background: var(--rc-err-bg); }
+.rc-actions:is([data-state='error'], [data-state='none']) .rc-badge { background: transparent; color: var(--rc-err); }
+.rc-actions:is([data-state='error'], [data-state='none']) .rc-status-text span { white-space: normal; }
+
+/* Fenêtre basse (portable, tablette couchée) : la carte se resserre plutôt que de défiler. */
+@media (max-height: 700px) {
+  .rc-card { gap: 14px; padding: 22px 28px 20px; }
+  .recap h2 { font-size: 42px; }
+  .rc-num { font-size: 36px; }
+  .rc-chart svg { height: 76px; }
+  .rc-send, .rc-ghost { height: 56px; }
+}
+
+/* --- Téléphone couché : le « Bilan » plein écran (même condition que les autres écrans) --- */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .recap { padding: 0; overflow: hidden; }
+  .recap::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .rc-card {
+    width: 100%; height: 100%; max-height: none; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; background: var(--rc-page);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+    display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'head head' 'chart grid' 'actions actions'; gap: 10px 12px;
+    --rc-pl: max(16px, env(safe-area-inset-left)); --rc-pr: max(16px, env(safe-area-inset-right));
+    padding: max(10px, env(safe-area-inset-top)) var(--rc-pr) 0 var(--rc-pl);
+  }
+  .recap[open] .rc-card { animation-name: rc-fade; }
+  @keyframes rc-fade { from { opacity: 0; } to { opacity: 1; } }
+
+  .rc-head { grid-area: head; align-items: baseline; }
+  .rc-eyebrow, .rc-when, .rc-chip, .rc-big, .rc-more { display: none; }
+  .recap h2 { font-size: 28px; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rc-kicker { display: inline; margin-right: 10px; font: 700 12px Barlow, system-ui, sans-serif; color: var(--rc-ok); letter-spacing: .08em; text-transform: uppercase; vertical-align: middle; }
+  .rc-meta { display: block; flex: none; margin: 0; font-size: 13px; color: var(--rc-muted); }
+
+  .rc-chart { grid-area: chart; min-height: 0; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--rc-panel); border: 1px solid var(--rc-panel-edge); }
+  .rc-chart svg { flex: 1 1 0; min-height: 0; height: auto; }
+  .rc-axis { font-size: 12px; }
+  .rc-legend { display: none; }
+  .rc-zbar { display: flex; gap: 2px; height: 12px; border-radius: 4px; overflow: hidden; }
+  .rc-zbar span { flex: 1 1 0; }
+  .rc-zlegend { display: flex; justify-content: space-between; gap: 8px; margin: 0; font-size: 12px; color: var(--rc-muted); }
+  .rc-zlegend .top { color: var(--rc-fg); font-weight: 700; }
+
+  .rc-grid { grid-area: grid; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 6px; min-height: 0; }
+  .rc-tile { justify-content: center; gap: 3px; padding: 6px 10px; border-radius: 12px; background: var(--rc-tile); }
+  .rc-tile .rc-lab { font-size: 12px; }
+  .rc-tile .rc-num { font-size: 24px; }
+  .rc-tile .rc-unit { font-size: 12px; margin-left: 3px; }
+  .rc-tile-last[data-ok='true'] { gap: 2px; background: var(--rc-ok-bg); color: var(--rc-ok); font-size: 12px; font-weight: 700; }
+  .rc-tile-last svg { width: 16px; height: 16px; stroke-width: 2.6; }
+
+  /* Barre du bas sur toute la largeur : nom, « Ne pas envoyer », Continuer, Strava. */
+  .rc-actions {
+    grid-area: actions; display: flex; align-items: center; gap: 10px; margin: 0 calc(-1 * var(--rc-pr)) 0 calc(-1 * var(--rc-pl));
+    padding: 12px var(--rc-pr) max(14px, env(safe-area-inset-bottom)) var(--rc-pl); background: var(--rc-bar); border-top: 1px solid var(--rc-panel-edge);
+  }
+  .rc-bottom { display: contents; }
+  .rc-status { order: 0; flex: 1 1 0; padding: 0; background: transparent; gap: 10px; }
+  .rc-actions:is([data-state='error'], [data-state='none']) .rc-status { background: transparent; }
+  .rc-bottom .rc-name { order: 1; flex: 1 1 0; }
+  .rc-bottom .rc-tools { order: 2; gap: 8px; margin-left: 0; }
+  .rc-view { order: 3; }
+  .rc-continue { order: 4; }
+  .rc-send { order: 5; }
+  .rc-name label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .rc-name input { height: 50px; font-size: 15px; }
+  .rc-actions[data-state='error'] .rc-name { display: none; }
+  .rc-send, .rc-ghost, .rc-actions[data-state='sent'] .rc-continue, .rc-actions[data-state='none'] .rc-continue { height: 50px; padding: 0 16px; border-radius: 12px; font-size: 16px; }
+  .rc-send { font-size: 17px; gap: 9px; }
+  .rc-send > svg { width: 18px; height: 18px; }
+  .rc-ghost svg { width: 17px; height: 17px; }
+  .rc-count { height: 26px; padding: 0 9px; font-size: 14px; }
+  .rc-count-long { display: none; }
+  .rc-count-short { display: inline; }
+  .rc-link { height: 44px; font-size: 14px; }
+  /* La place manque : « Terminer » sans la suite, et le FIT (peu utile sur un téléphone) tant que l'envoi n'est pas réglé. */
+  .rc-long { display: none; }
+  .rc-actions:is([data-state='countdown'], [data-state='manual'], [data-state='sending'], [data-state='error']) .rc-fit { display: none; }
+  .rc-badge { width: 40px; height: 40px; }
+  .rc-status-text b { font-size: 16px; }
+  .rc-status-text span { font-size: 13px; }
+  .rc-actions:is([data-state='error'], [data-state='none']) .rc-status-text span { white-space: nowrap; }
+}

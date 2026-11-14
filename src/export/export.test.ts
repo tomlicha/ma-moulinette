@@ -118,11 +118,26 @@ describe('RideRecorder, fin de séance', () => {
     expect(rec.state).toBe('paused');
   });
 
-  it('compte les secondes pédalées après un instant, roue libre exclue', () => {
-    const rec = record(10, () => ({ powerW: 200 }));
-    record(20, (i) => (i < 20 ? { powerW: 0, cadenceRpm: 0 } : { powerW: 120, cadenceRpm: 85 }), rec, 10);
-    expect(rec.pedalingSecondsAfter(T0 + 10_000)).toBe(10);
-    expect(rec.pedalingSecondsAfter(T0)).toBe(20);
+  it('voit une reprise : un arrêt, puis des secondes pédalées d’affilée', () => {
+    const rec = record(10, () => ({ powerW: 200 })); // fin de séance à T0 + 10 s
+    record(3, () => ({ powerW: 0, cadenceRpm: 0 }), rec, 10); // arrêt
+    record(4, () => ({ powerW: 120, cadenceRpm: 85 }), rec, 13);
+    expect(rec.resumedAfter(T0 + 10_000, 5)).toBe(false); // 4 s seulement
+    record(1, () => ({ powerW: 120, cadenceRpm: 85 }), rec, 17);
+    expect(rec.resumedAfter(T0 + 10_000, 5)).toBe(true);
+  });
+
+  it('ne voit pas de reprise sans arrêt : on mouline après la fin de la séance', () => {
+    const rec = record(40, () => ({ powerW: 90, cadenceRpm: 70 }));
+    expect(rec.resumedAfter(T0 + 10_000, 5)).toBe(false);
+  });
+
+  it('repart de zéro si le pédalage s’interrompt avant la fin du compte', () => {
+    const rec = record(1, () => ({ powerW: 0 }));
+    record(4, () => ({ powerW: 150 }), rec, 1);
+    record(1, () => ({ cadenceRpm: 0, powerW: 0 }), rec, 5);
+    record(4, () => ({ powerW: 150 }), rec, 6);
+    expect(rec.resumedAfter(T0, 5)).toBe(false);
   });
 });
 

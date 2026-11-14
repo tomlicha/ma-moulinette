@@ -8,6 +8,10 @@ export interface Sample {
   speedMs?: number;
   distanceM?: number;
   altitudeM?: number;
+  /** Séance : consigne du moment, en W. Sert au récapitulatif ; non encodée dans le FIT. */
+  targetW?: number;
+  /** Séance : rang du palier en cours dans la séance. Sert au récapitulatif ; non encodé dans le FIT. */
+  stepIndex?: number;
 }
 
 export type SampleValues = Partial<Omit<Sample, 't'>>;
@@ -32,7 +36,7 @@ export type RecorderState = 'idle' | 'recording' | 'paused';
 /** Au-delà de ce délai sans nouvelle valeur, un champ est jugé périmé et omis de l'échantillon. */
 const STALE_MS = 3000;
 
-const FIELDS = ['powerW', 'cadenceRpm', 'heartRateBpm', 'speedMs', 'distanceM', 'altitudeM'] as const;
+const FIELDS = ['powerW', 'cadenceRpm', 'heartRateBpm', 'speedMs', 'distanceM', 'altitudeM', 'targetW', 'stepIndex'] as const;
 
 /**
  * Enregistre la sortie à 1 Hz. Pur : l'appelant fournit l'horloge, les valeurs et le rythme des `tick`.
@@ -122,14 +126,23 @@ export class RideRecorder {
     };
   }
 
-  /** Secondes enregistrées après `tMs` où le cycliste pédalait (puissance ou cadence non nulle). */
-  pedalingSecondsAfter(tMs: number): number {
-    let n = 0;
-    for (let i = this.samples.length - 1; i >= 0 && this.samples[i]!.t >= tMs; i--) {
-      const s = this.samples[i]!;
-      if ((s.powerW ?? 0) > 0 || (s.cadenceRpm ?? 0) > 0) n++;
+  /**
+   * Le cycliste est-il reparti après `tMs` ? Il faut un arrêt (une seconde sans puissance ni cadence), puis `seconds`
+   * secondes pédalées d'affilée. Le pédalage qui continue sans arrêt après `tMs` (on mouline en fin de séance) ne compte pas.
+   */
+  resumedAfter(tMs: number, seconds: number): boolean {
+    let stopped = false;
+    let run = 0;
+    for (const s of this.samples) {
+      if (s.t < tMs) continue;
+      if ((s.powerW ?? 0) > 0 || (s.cadenceRpm ?? 0) > 0) {
+        if (stopped && ++run >= seconds) return true;
+      } else {
+        stopped = true;
+        run = 0;
+      }
     }
-    return n;
+    return false;
   }
 
   reset() {
