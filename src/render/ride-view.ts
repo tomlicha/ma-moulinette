@@ -3,7 +3,7 @@ import type { Route } from '../sim/route';
 import { createRenderer, type Backend } from './renderer';
 import { loadRiderAssets, type RiderAssets } from './assets';
 import { Rider } from './rider';
-import { buildWorld, WORLD_HIGH, WORLD_LOW } from './world';
+import { buildWorld, WORLD_HIGH, WORLD_LOW, type World } from './world';
 import { WorldPath } from './world-path';
 import { IntervalGates } from './interval-gate';
 import type { IntervalGate } from '../workout/gate';
@@ -45,6 +45,7 @@ export class RideView {
   private readonly path: WorldPath;
   private readonly rider: Rider;
   private readonly sky: THREE.Mesh;
+  private readonly world: World;
   private readonly gates: IntervalGates;
   private readonly frameTimes: number[] = [];
   private readonly resizeObserver: ResizeObserver;
@@ -69,6 +70,7 @@ export class RideView {
     this.path = new WorldPath(route);
     const world = buildWorld(this.path, this.scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW);
     this.sky = world.sky;
+    this.world = world;
     this.gates = new IntervalGates(this.path);
     this.scene.add(this.rider.group, this.gates.group);
     renderer.setPixelRatio(quality === 'high' ? Math.min(window.devicePixelRatio, 2) : 1);
@@ -172,6 +174,7 @@ export class RideView {
     this.place(this.dist);
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
+    this.world.update(dt);
     this.follow(dt);
     this.renderer.render(this.scene, this.camera);
 

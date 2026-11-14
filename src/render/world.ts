@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { SunLight } from 'three/addons/lights/SunLight.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildMarie } from './marie';
 import { fbm, mulberry32, smoothstep, valueNoise } from './noise';
 import { ROAD_HALF, TERRAIN_HALF, type WorldPath } from './world-path';
 
@@ -33,6 +34,8 @@ export interface World {
   group: THREE.Group;
   sky: THREE.Mesh;
   sun: SunLight;
+  /** Anime les éléments vivants du décor (Marie et sa roue). */
+  update(dtS: number): void;
 }
 
 export interface WorldOptions {
@@ -585,6 +588,9 @@ export function buildWorld(path: WorldPath, scene: THREE.Scene, opts: WorldOptio
   scene.background = PALETTE.horizon.clone();
   // Brume légère : elle bleuit les montagnes sans les effacer.
   scene.fog = new THREE.Fog(PALETTE.horizon.getHex(), 1500, 11000);
+  const marie = buildMarie(path);
+  group.add(marie.group);
+
   scene.add(group, sky, sun, fill);
-  return { group, sky, sun };
+  return { group, sky, sun, update: (dtS) => marie.update(dtS) };
 }

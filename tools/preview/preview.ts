@@ -5,6 +5,7 @@
  * - `shot=lineup` (défaut) : trois coureurs, trois quarts avant, profil, trois quarts arrière ;
  *   `shot=close` : un coureur en gros plan ; `shot=chase` : vue de poursuite comme en jeu.
  * - `yaw` (degrés) et `zoom` pour `shot=close`, `crank` (degrés) pour figer le pédalier, `spin=1` pour animer.
+ * - `shot=marie` : Marie dans le vrai décor, vue de près (`yaw`, `zoom`) ; `shot=marie-chase` : vue de poursuite à son approche.
  * - `webgl` pour forcer le repli WebGL2 ; `shadows=0` pour couper les ombres (juger le modelé sans auto-ombrage).
  */
 import * as THREE from 'three/webgpu';
@@ -12,6 +13,10 @@ import { loadRiderAssets } from '../../src/render/assets';
 import type { Kit } from '../../src/render/region-material';
 import { createRenderer } from '../../src/render/renderer';
 import { Rider } from '../../src/render/rider';
+import { buildWorld, WORLD_LOW } from '../../src/render/world';
+import { WorldPath } from '../../src/render/world-path';
+import { MARIE_DISTANCE_M } from '../../src/render/marie';
+import { DEMO_ROUTE } from '../../src/sim/route';
 
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (params.has(k) ? Number(params.get(k)) : d);
@@ -68,7 +73,32 @@ const place = (kit: Kit, x: number, z: number, yawDeg: number) => {
   return r;
 };
 
-if (shot === 'lineup') {
+let world: ReturnType<typeof buildWorld> | undefined;
+if (shot === 'marie' || shot === 'marie-chase') {
+  const path = new WorldPath(DEMO_ROUTE);
+  world = buildWorld(path, scene, WORLD_LOW);
+  const d = MARIE_DISTANCE_M;
+  const f = path.forward(d);
+  const s = path.side(d);
+  if (shot === 'marie') {
+    const t = path.point(d).addScaledVector(s, -5.6).add(new THREE.Vector3(0, 0.55, 0));
+    const a = (num('yaw', 20) * Math.PI) / 180; // 0 : vu de la route, 90 : vu de l'arrière
+    const dist = 4.2 / num('zoom', 1);
+    camera.fov = 40;
+    camera.near = 0.1;
+    camera.far = 9000;
+    camera.position.copy(t).addScaledVector(s, Math.cos(a) * dist).addScaledVector(f, -Math.sin(a) * dist).add(new THREE.Vector3(0, 1.0, 0));
+    camera.lookAt(t);
+  } else {
+    const ahead = num('before', 14);
+    const p = path.point(d - ahead).addScaledVector(path.side(d - ahead), -1.6);
+    camera.fov = 58;
+    camera.near = 0.3;
+    camera.far = 8000;
+    camera.position.copy(p).addScaledVector(path.forward(d - ahead), -4.4).add(new THREE.Vector3(0, 1.85, 0));
+    camera.lookAt(p.clone().addScaledVector(path.forward(d - ahead), 8).add(new THREE.Vector3(0, -0.8, 0)));
+  }
+} else if (shot === 'lineup') {
   place(KITS[0]!, -1.75, 0, 35); // trois quarts avant
   place(KITS[2]!, 0, 0, 90); // profil, avant vers la droite
   place(KITS[1]!, 1.75, 0, 145); // trois quarts arrière
@@ -118,6 +148,7 @@ renderer.setAnimationLoop((now) => {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (params.get('spin') === '1') for (const r of riders) r.animate(dt, 90, 9);
+  world?.update(dt);
   renderer.render(scene, camera);
   info.textContent = `${backend} · ${renderer.info.render.triangles.toLocaleString('fr-FR')} triangles · ${renderer.info.render.drawCalls} appels de dessin`;
 });
