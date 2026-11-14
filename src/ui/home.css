@@ -78,7 +78,7 @@ button.radar-core:focus-visible { outline: 3px solid var(--r-ink); outline-offse
 .radar-tag[data-tone='error'] .s { color: var(--r-err); }
 
 /*
- * --- Logo « La Moulinette » ---
+ * --- Logo « Ma Moulinette » ---
  * Mot en capitales condensées penchées, « LA » en petit au-dessus de la première lettre, et un plateau de pédalier
  * (anneau denté, bras, moyeu) à la place du O. Taille : celle du texte parent (`font-size`), couleur du mot : `color`.
  */

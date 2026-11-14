@@ -1,11 +1,21 @@
 # L'application (site statique construit par Vite dans dist/), servie par Cloudflare Workers : `npm run deploy:app`.
 # Le récepteur de journaux a sa propre configuration : wrangler.toml.
-name = "la-moulinette-ride"
+name = "ma-moulinette-ride"
+main = "worker/app.ts"
 compatibility_date = "2026-11-01"
 workers_dev = true
 preview_urls = false
 
 [assets]
 directory = "./dist"
+# Seules les adresses /api/* passent par worker/app.ts (passerelle Strava) ; le reste est servi directement.
+run_worker_first = ["/api/*"]
 # Une seule page : toute adresse inconnue renvoie index.html.
 not_found_handling = "single-page-application"
+
+# Jetons Strava : même base que les journaux (table strava_tokens, migration 0002).
+[[d1_databases]]
+binding = "DB"
+database_name = "ma-moulinette-logs"
+database_id = "ed2eb97b-7694-4cbb-bb89-e4e9dd3bef73"
+migrations_dir = "worker/migrations"

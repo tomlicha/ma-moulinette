@@ -7,7 +7,7 @@ import { createFileStore } from './file-store.ts';
 
 describe('stockage en fichier', () => {
   let dir: string;
-  beforeEach(async () => void (dir = await mkdtemp(join(tmpdir(), 'zwift2-logs-'))));
+  beforeEach(async () => void (dir = await mkdtemp(join(tmpdir(), 'ma-moulinette-logs-'))));
   afterEach(() => rm(dir, { recursive: true, force: true }));
 
   const row = (receivedAt: number): StoredReport => ({ session: 's', reason: 'error', context: {}, entries: [], receivedAt });

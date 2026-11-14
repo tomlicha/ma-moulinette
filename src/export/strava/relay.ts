@@ -21,6 +21,12 @@ export interface RelayOptions {
   clientId?: string;
   clientSecret?: string;
   store: TokenStore;
+  /**
+   * Clé du propriétaire. Présente : tout (connexion, envoi, déconnexion) exige l'en-tête `x-owner-key`, et l'état OAuth est
+   * signé avec elle au lieu d'être gardé en mémoire (un Worker n'a pas de mémoire d'une requête à l'autre).
+   * Absente : relais ouvert, réservé au serveur de dev sur localhost.
+   */
+  ownerKey?: string;
   fetch?: Fetch;
   /** Secondes epoch. */
   now?: () => number;
@@ -33,6 +39,7 @@ const REFRESH_MARGIN_S = 300;
 const STATE_TTL_S = 600;
 /** En-tête exigé sur les requêtes qui modifient quoi que ce soit : un autre site ne peut pas l'envoyer sans préalerte CORS. */
 export const CSRF_HEADER = 'x-zwift2';
+export const OWNER_HEADER = 'x-owner-key';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -45,8 +52,25 @@ const closePage = (message: string, ok: boolean, status = 200) =>
     { status, headers: { 'content-type': 'text/html; charset=utf-8' } },
   );
 
+const enc = new TextEncoder();
+const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
+
+async function hmac(key: string, msg: string): Promise<string> {
+  const k = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(await crypto.subtle.sign('HMAC', k, enc.encode(msg)));
+}
+
+/** Comparaison en temps constant : la clé ne se devine pas par le temps de réponse. */
+function safeEqual(a: string, b: string): boolean {
+  const x = enc.encode(a);
+  const y = enc.encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diff === 0;
+}
+
 /**
- * Relais local entre la page et Strava : le secret client et les jetons ne quittent jamais ce module.
+ * Relais entre la page et Strava : le secret client et les jetons ne quittent jamais ce module.
  * Renvoie `undefined` pour une URL qui n'est pas de son ressort, afin de passer la main au serveur suivant.
  */
 export function createStravaRelay(opts: RelayOptions) {
@@ -55,6 +79,29 @@ export function createStravaRelay(opts: RelayOptions) {
   const cfg: ClientConfig | undefined =
     opts.clientId && opts.clientSecret ? { clientId: opts.clientId, clientSecret: opts.clientSecret } : undefined;
   const states = new Map<string, number>();
+  const ownerKey = opts.ownerKey;
+
+  const authorized = (req: Request) => !ownerKey || safeEqual(req.headers.get(OWNER_HEADER) ?? '', ownerKey);
+
+  async function newState(): Promise<string> {
+    if (!ownerKey) {
+      const state = crypto.randomUUID();
+      states.set(state, now() + STATE_TTL_S);
+      return state;
+    }
+    const exp = String(now() + STATE_TTL_S);
+    return `${exp}.${await hmac(ownerKey, `state:${exp}`)}`;
+  }
+
+  async function checkState(state: string): Promise<boolean> {
+    if (!ownerKey) {
+      const expires = states.get(state);
+      states.delete(state);
+      return !!expires && expires >= now();
+    }
+    const [exp = '', sig = ''] = state.split('.');
+    return Number(exp) >= now() && safeEqual(sig, await hmac(ownerKey, `state:${exp}`));
+  }
 
   async function freshTokens(force = false): Promise<Tokens | undefined> {
     const t = await opts.store.load();
@@ -80,13 +127,14 @@ export function createStravaRelay(opts: RelayOptions) {
   async function upload(req: Request): Promise<Response> {
     if (!cfg) return json({ error: 'not_configured' }, 503);
     if (!sameOrigin(req) || !req.headers.get(CSRF_HEADER)) return json({ error: 'forbidden' }, 403);
+    if (!authorized(req)) return json({ error: 'locked' }, 403);
     const fit = new Uint8Array(await req.arrayBuffer());
     if (!fit.length) return json({ error: 'empty' }, 400);
     if (fit.length > MAX_FIT_BYTES) return json({ error: 'too_large' }, 413);
 
     const url = new URL(req.url);
     const meta = {
-      name: url.searchParams.get('name') || 'Sortie La Moulinette',
+      name: url.searchParams.get('name') || 'Ma Moulinette',
       externalId: url.searchParams.get('externalId') || `zwift2-${now()}`,
     };
 
@@ -132,24 +180,29 @@ export function createStravaRelay(opts: RelayOptions) {
     const route = url.pathname.slice(PREFIX.length);
 
     if (route === 'status' && req.method === 'GET') {
+      // Verrouillé : on n'apprend rien sur le compte connecté, seulement qu'une clé est nécessaire.
+      if (!authorized(req)) return json({ configured: !!cfg, connected: false, locked: true });
       const t = cfg ? await opts.store.load() : undefined;
       return json({ configured: !!cfg, connected: !!t, athlete: t?.athlete });
     }
 
-    if (route === 'login' && req.method === 'GET') {
-      if (!cfg) return closePage('Strava n’est pas configuré : renseigner STRAVA_CLIENT_ID et STRAVA_CLIENT_SECRET dans .env.local.', false, 503);
-      const state = crypto.randomUUID();
-      states.set(state, now() + STATE_TTL_S);
+    if (route === 'login' && (req.method === 'GET' || req.method === 'POST')) {
+      if (!cfg) return closePage('Strava n’est pas configuré : renseigner STRAVA_CLIENT_ID et STRAVA_CLIENT_SECRET (.env.local en local, secrets du Worker en ligne).', false, 503);
       const redirect = `${url.origin}${PREFIX}callback`;
-      return Response.redirect(authorizeUrl(cfg.clientId, redirect, state), 302);
+      // POST : la clé voyage en en-tête, jamais dans une adresse ; la réponse est l'adresse Strava à ouvrir.
+      if (req.method === 'POST') {
+        if (!sameOrigin(req) || !req.headers.get(CSRF_HEADER)) return json({ error: 'forbidden' }, 403);
+        if (!authorized(req)) return json({ error: 'locked' }, 403);
+        return json({ url: authorizeUrl(cfg.clientId, redirect, await newState()) });
+      }
+      if (ownerKey) return closePage('Accès verrouillé : connecter Strava depuis l’application.', false, 403);
+      return Response.redirect(authorizeUrl(cfg.clientId, redirect, await newState()), 302);
     }
 
     if (route === 'callback' && req.method === 'GET') {
       if (!cfg) return closePage('Strava n’est pas configuré.', false, 503);
       const state = url.searchParams.get('state') ?? '';
-      const expires = states.get(state);
-      states.delete(state);
-      if (!expires || expires < now()) return closePage('Connexion refusée : état inconnu ou expiré. Relancer depuis la page.', false, 400);
+      if (!(await checkState(state))) return closePage('Connexion refusée : état inconnu ou expiré. Relancer depuis la page.', false, 400);
       const code = url.searchParams.get('code');
       if (url.searchParams.get('error') || !code) return closePage('Connexion Strava annulée.', false, 400);
       try {
@@ -164,6 +217,7 @@ export function createStravaRelay(opts: RelayOptions) {
 
     if (route === 'logout' && req.method === 'POST') {
       if (!sameOrigin(req) || !req.headers.get(CSRF_HEADER)) return json({ error: 'forbidden' }, 403);
+      if (!authorized(req)) return json({ error: 'locked' }, 403);
       await opts.store.save(undefined);
       return json({ connected: false });
     }

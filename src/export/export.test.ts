@@ -229,6 +229,6 @@ describe('FIT Activity', () => {
   });
 
   it('nomme le fichier sans caractère interdit', () => {
-    expect(fitFileName(new Date(2026, 9, 27, 18, 5).getTime())).toBe('la-moulinette-20261027-1805.fit');
+    expect(fitFileName(new Date(2026, 9, 27, 18, 5).getTime())).toBe('ma-moulinette-20261027-1805.fit');
   });
 });

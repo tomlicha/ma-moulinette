@@ -1,4 +1,4 @@
-# La Moulinette
+# Ma Moulinette
 
 App d'entraînement home trainer (cyclisme, puis course à pied), avec rendu 3D, capteurs Bluetooth et multijoueur.
 
@@ -41,17 +41,9 @@ Le protocole Wahoo est repris du code de GoldenCheetah, sans documentation offic
 
 `src/sensors/hub.ts` fusionne le trainer et la ceinture cardio ; les deux se reconnectent seuls après une coupure (60 s maximum).
 
-### Export FIT, intervals.icu et Strava
+### Export FIT et Strava
 
 `src/export/` : la sortie est enregistrée à 1 Hz (puissance, cadence, cardio, et vitesse, distance, altitude quand la sortie virtuelle tourne), en pause quand le trainer est déconnecté. « Exporter FIT » télécharge un fichier FIT Activity encodé avec le SDK officiel de Garmin (`@garmin/fitsdk`), chargé seulement à l'export.
-
-Envoi à intervals.icu, sans abonnement, depuis le serveur de dev uniquement :
-
-1. Sur https://intervals.icu/settings, tout en bas, copier la clé d'API personnelle.
-2. Copier `.env.example` en `.env.local` et renseigner `INTERVALS_API_KEY` (le fichier n'est jamais commité).
-3. Relancer `npm run dev` : le bouton « Envoyer à intervals.icu » apparaît. Il dépose le fichier FIT et le journal affiche le lien de l'activité.
-
-La clé reste dans le relais du serveur Vite (`src/export/intervals/relay.ts`) et n'est jamais envoyée au navigateur ; ne la colle ni dans le code ni dans une conversation. intervals.icu écarte les fichiers en double : renvoyer la même sortie ne crée rien de plus. Le dépôt est fait d'après la documentation d'intervals.icu (`POST /api/v1/athlete/0/activities`, authentification basique `API_KEY`) ; validé de bout en bout sur un vrai compte le 27 octobre 2026 : activité créée (type `VirtualRide`, source `UPLOAD`, puissance et distance présentes), renvoi du même fichier détecté comme doublon sans rien créer, suppression de l'activité de test.
 
 Envoi à Strava, depuis le serveur de dev uniquement :
 
@@ -107,13 +99,13 @@ L'écran Sortie est plein écran : le rendu 3D occupe toute la fenêtre, un bout
 
 ```
 npx wrangler login
-npx wrangler d1 create zwift2-logs          # copier database_id dans wrangler.toml
-npx wrangler d1 migrations apply zwift2-logs --remote
+npx wrangler d1 create ma-moulinette-logs          # copier database_id dans wrangler.toml
+npx wrangler d1 migrations apply ma-moulinette-logs --remote
 npx wrangler secret put INGEST_TOKEN        # jeton d'envoi, le même que VITE_LOG_TOKEN
 npx wrangler secret put READ_TOKEN          # jeton de lecture, jamais dans l'application
-npx wrangler deploy                         # affiche https://zwift2-logs.<compte>.workers.dev
+npx wrangler deploy                         # affiche https://ma-moulinette-logs.<compte>.workers.dev
 ```
 
-Puis `VITE_LOG_ENDPOINT=https://zwift2-logs.<compte>.workers.dev/api/logs/ingest` au build de l'application, et `ALLOWED_ORIGIN` de `wrangler.toml` au domaine de l'application. La relecture par `curl` est la même que ci-dessus. Le jeton d'envoi étant public, une règle de limitation de débit (Cloudflare, tableau de bord > Sécurité > WAF) protège le quota gratuit d'un envoi massif. Vérifié en local avec `wrangler dev` (D1 simulé) et par tests ; pas encore déployé sur un vrai compte.
+Puis `VITE_LOG_ENDPOINT=https://ma-moulinette-logs.<compte>.workers.dev/api/logs/ingest` au build de l'application, et `ALLOWED_ORIGIN` de `wrangler.toml` au domaine de l'application. La relecture par `curl` est la même que ci-dessus. Le jeton d'envoi étant public, une règle de limitation de débit (Cloudflare, tableau de bord > Sécurité > WAF) protège le quota gratuit d'un envoi massif. Vérifié en local avec `wrangler dev` (D1 simulé) et par tests ; pas encore déployé sur un vrai compte.
 
 Le récepteur (`receiver.ts`) reste un gestionnaire `Request` vers `Response` indépendant de Node et de Cloudflare : un autre `LogStore` suffit pour l'héberger ailleurs. Les rapports contiennent le nom de l'appareil Bluetooth et le navigateur, pas de position ni de compte ; le rapport est lisible par quiconque détient le jeton de lecture. Vérifié : tests unitaires, serveur autonome et serveur de dev avec `curl`. Non vérifié : un envoi réel depuis la page avec un vrai trainer.

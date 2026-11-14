@@ -1,5 +1,5 @@
 # Récepteur de journaux sur Cloudflare Workers + D1. Mise en route : voir « Journaux d'erreurs à distance » dans le README.
-name = "zwift2-logs"
+name = "ma-moulinette-logs"
 main = "worker/index.ts"
 compatibility_date = "2026-11-01"
 workers_dev = true
@@ -15,6 +15,6 @@ crons = ["0 3 * * *"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "zwift2-logs"
-database_id = "9610a50e-302f-4e1e-984a-3d7cd29229cd"
+database_name = "ma-moulinette-logs"
+database_id = "ed2eb97b-7694-4cbb-bb89-e4e9dd3bef73"
 migrations_dir = "worker/migrations"

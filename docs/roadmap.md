@@ -20,7 +20,6 @@ Mise à jour du 27 octobre 2026. Référence : [analyse technique](analyse-techn
 | Simulation physique | Fait : puissance, pente, air, roulement, inertie, freinage sans pédalage, parcours bouclé | Ressenti du SIM confirmé ; réglages à affiner |
 | Rendu 3D | Première itération : monde, ombres en cascades, cycliste animé, caméra de poursuite, WebGPU et repli WebGL2 | WebGPU confirmé sur l'ordinateur de Tom ; **aucune mesure de performance** |
 | Export FIT | Fait ; bouton essayé dans la vraie page avec le trainer simulé, fichier relu avec le décodeur de Garmin | Fichier non encore ouvert dans Strava ni Garmin Connect |
-| Envoi à intervals.icu | Fait via un relais dans le serveur de dev, avec la clé d'API personnelle (sans abonnement) | Oui sur un vrai compte : création, doublon détecté, suppression ; reste à essayer avec une vraie sortie sur ton matériel |
 | Envoi à Strava | Fait via un relais dans le serveur de dev ; abonnement requis pour créer l'application | **Non** : jamais lancé avec de vrais identifiants |
 | Tapis, capteur de foulée (seconde vague) | Non commencé | — |
 | Multijoueur, backend, comptes | Non commencé | — |
@@ -37,7 +36,7 @@ L'ordre suit le risque : on lève d'abord ce qui peut invalider l'architecture, 
 ### Étape 1. Fermer les inconnues de ce qui existe (court)
 
 1. **Mesurer le rendu.** Relever la ligne de statistiques de la vue 3D (i/s, p50, p95, triangles) sur l'ordinateur de Tom, en WebGPU puis en WebGL2, pendant une sortie de plusieurs minutes. Cible : p95 ≤ 16,7 ms (ENF-02). C'est la première donnée réelle pour le PoC 2.
-2. **Essayer l'export avec ton matériel** : faire une vraie sortie, puis « Envoyer à intervals.icu » (l'envoi marche déjà avec une sortie simulée). L'envoi à Strava est facultatif et demande l'abonnement (voir plus bas).
+2. **Essayer l'export avec ton matériel** : faire une vraie sortie, puis « Envoyer à Strava » (demande l'abonnement, voir plus bas).
 3. **Couvrir plus de matériel.** Un trainer qui expose FTMS (une autre marque que Wahoo). Sans cela, le chemin FTMS, le socle de l'analyse, n'est jamais passé sur un vrai appareil (EF-01, EF-02, PoC 1).
 4. **Affiner le ressenti** : freinage à l'arrêt, pente de départ de la boucle, vitesse virtuelle comparée à celle du trainer.
 
@@ -67,7 +66,7 @@ Serveur de salles Colyseus, 200 coureurs simulés avec gestion d'intérêt, mesu
 
 ### Étape 6. Produit
 
-Comptes (OIDC), base PostgreSQL, hébergement avec région européenne, anglais et français, RGPD et données de santé, PWA installable, télémétrie (ENF-16), intégration continue avec budgets de taille et de performance, téléphone compagnon (EF-10), synchronisations Garmin, TrainingPeaks et intervals.icu (EF-07). La course à pied reste en seconde vague.
+Comptes (OIDC), base PostgreSQL, hébergement avec région européenne, anglais et français, RGPD et données de santé, PWA installable, télémétrie (ENF-16), intégration continue avec budgets de taille et de performance, téléphone compagnon (EF-10), synchronisations Garmin et TrainingPeaks (EF-07). La course à pied reste en seconde vague.
 
 ## Ce qui dépend de Tom
 

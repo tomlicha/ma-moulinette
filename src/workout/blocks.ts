@@ -145,7 +145,7 @@ export function toZwo(name: string, description: string | undefined, blocks: Edi
   });
   return [
     '<workout_file>',
-    '  <author>La Moulinette</author>',
+    '  <author>Ma Moulinette</author>',
     `  <name>${esc(name.trim() || 'Séance sans nom')}</name>`,
     `  <description>${esc(description?.trim() ?? '')}</description>`,
     '  <sportType>bike</sportType>',

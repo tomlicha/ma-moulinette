@@ -293,7 +293,7 @@ La simulation doit être un module TypeScript déterministe, à pas de temps fix
 - Contrôles de plausibilité côté serveur : pics de puissance, rapport puissance/fréquence cardiaque, sauts de vitesse.
 - Catégories de course par W/kg ; double enregistrement possible pour les compétitions.
 
-Sources : [SDK FIT JavaScript de Garmin](https://github.com/garmin/fit-javascript-sdk) · [encodeur FIT JavaScript](https://forums.garmin.com/developer/fit-sdk/f/discussion/361529/ability-to-encode-an-activity-using-javascript-sdk/1884115) · [référence du format .zwo](https://www.github.com/h4l/zwift-workout-file-reference/blob/master/descriptions.yaml) · [formats zwo/mrc/erg/fit (intervals.icu)](https://forum.intervals.icu/t/intervals-icu-api-integration-cookbook/80090)
+Sources : [SDK FIT JavaScript de Garmin](https://github.com/garmin/fit-javascript-sdk) · [encodeur FIT JavaScript](https://forums.garmin.com/developer/fit-sdk/f/discussion/361529/ability-to-encode-an-activity-using-javascript-sdk/1884115) · [référence du format .zwo](https://www.github.com/h4l/zwift-workout-file-reference/blob/master/descriptions.yaml)
 
 ## Multijoueur temps réel
 
@@ -360,7 +360,6 @@ Recommandation : TypeScript de bout en bout (client, temps réel, API) pour part
 | [Strava](https://tryterra.co/blog/strava-api-changes-2026) | Envoi automatique des sorties | OAuth ; programme refondu le 1er juin 2026 ; au-delà de 10 athlètes, capacité soumise à revue sans délai garanti | Données affichables uniquement à leur propriétaire ; usage en IA interdit ; nouvelle URL d'API au 4 janvier 2027 |
 | [Garmin Connect](https://developer.garmin.com/gc-developer-program/training-api) | Pousser les séances vers montres et compteurs (Training API), récupérer des activités (Activity API) | Programme gratuit pour entreprises approuvées | OAuth 1.0a retiré fin 2026, prévoir OAuth 2.0 + PKCE |
 | [TrainingPeaks](https://help.trainingpeaks.com/hc/en-us/articles/234441128-TrainingPeaks-API) | Importer les séances planifiées par le coach, déposer les sorties | Partenaires approuvés, réponse en 7 à 10 jours | Plusieurs fonctions exigent un compte athlète premium |
-| [intervals.icu](https://forum.intervals.icu/t/intervals-icu-api-integration-cookbook/80090) | Séances planifiées (zwo, fit, mrc, erg) et dépôt d'activités | OAuth | Public avancé, intégration simple |
 | [Wahoo Cloud API](https://github.com/api-evangelist/wahoo) | Synchronisation des séances et fichiers FIT | OAuth 2.0, approbation de l'app | Limite de 10 jetons actifs par utilisateur depuis le 1er janvier 2026 |
 | Apple Santé / Health Connect | Écrire les séances et la fréquence cardiaque | Via plugin natif (Capacitor annonce un plugin Santé officiel avec la v9) | Justifie l'app native iOS (règle 4.2) |
 
@@ -469,7 +468,7 @@ Trois inconnues peuvent invalider l'architecture et doivent être levées avant 
 | Implémentations FTMS hétérogènes selon marques | Commandes ERG/SIM ignorées ou instables | Couche « particularités » par modèle, matrice de compatibilité publiée | PoC 1 |
 | Fiabilité du relais par téléphone compagnon | Coupures pour les utilisateurs de Safari ou Firefox sur ordinateur | Reconnexion, tampon ; Chrome ou Edge recommandés | PoC 1 |
 | Rejet App Store (règle 4.2) | Pas de présence iOS | BLE natif, HealthKit, notifications | PoC 4 |
-| Accès Strava, Garmin, TrainingPeaks retardé ou restreint | Fonctions de synchronisation absentes au lancement | Export FIT manuel, intervals.icu, demandes déposées tôt | Action 5 |
+| Accès Strava, Garmin, TrainingPeaks retardé ou restreint | Fonctions de synchronisation absentes au lancement | Export FIT manuel, demandes déposées tôt | Action 5 |
 | Recopie sur téléviseur peu lisible ou décalée | Expérience grand écran dégradée | HUD lisible à distance, HDMI recommandé | Tests sur le parc |
 | Fermeture d'un fournisseur d'infrastructure | Migration forcée | Serveurs conteneurisés, pas de SDK propriétaire | — |
 | Monde vide au lancement | Expérience sociale décevante | Bots meneurs d'allure, fantômes, événements programmés | — |
@@ -503,7 +502,7 @@ Ces exigences traduisent l'évaluation en lignes vérifiables, prêtes à repren
 | EF-04 | Lire vitesse et cadence de course depuis un tapis FTMS ou un capteur de foulée (seconde vague) | Pourrait | PoC 1 |
 | EF-05 | Importer et exécuter des séances .zwo, .erg et .mrc | Doit | Jeu de fichiers de référence |
 | EF-06 | Exporter chaque activité au format FIT | Doit | Validation par le SDK FIT Garmin |
-| EF-07 | Synchroniser les activités avec Strava, Garmin Connect, TrainingPeaks et intervals.icu | Devrait | Tests d'intégration après approbation partenaire |
+| EF-07 | Synchroniser les activités avec Strava, Garmin Connect et TrainingPeaks | Devrait | Tests d'intégration après approbation partenaire |
 | EF-08 | Afficher les autres coureurs en temps réel dans le monde (50 par monde au lancement, extensible) | Doit | PoC 3 |
 | EF-09 | Organiser sorties de groupe et courses avec classement arbitré par le serveur | Devrait | Tests de charge et de bout en bout |
 | EF-10 | Utiliser le téléphone comme télécommande et, pour les navigateurs sans Web Bluetooth, comme relais capteurs | Devrait | PoC 1 |
@@ -567,6 +566,6 @@ Principales références consultées les 26 et 27 octobre 2026 ; chaque section 
 
 - [Capacitor 8](https://blogs.apievangelist.com/blogs/ionic-2025-12-09-announcing-capacitor-8/) · [Capacitor 9](https://www.plushcap.com/content/ionic/blog/ionic-the-road-to-capacitor-9)
 - [Colyseus](https://www.github.com/colyseus/colyseus) · [Nakama](https://heroiclabs.com/blog/unity-multiplayer-backend/) · [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing) · [fin de Hathora](https://docs.edgegap.com/docs/tools-and-integrations/switch-from-hathora)
-- [Strava — changements d'API 2026](https://tryterra.co/blog/strava-api-changes-2026) · [Garmin Training API](https://developer.garmin.com/gc-developer-program/training-api) · [TrainingPeaks API](https://help.trainingpeaks.com/hc/en-us/articles/234441128-TrainingPeaks-API) · [intervals.icu API](https://forum.intervals.icu/t/intervals-icu-api-integration-cookbook/80090)
+- [Strava — changements d'API 2026](https://tryterra.co/blog/strava-api-changes-2026) · [Garmin Training API](https://developer.garmin.com/gc-developer-program/training-api) · [TrainingPeaks API](https://help.trainingpeaks.com/hc/en-us/articles/234441128-TrainingPeaks-API)
 - [Garmin FIT JavaScript SDK](https://github.com/garmin/fit-javascript-sdk) · [référence .zwo](https://www.github.com/h4l/zwift-workout-file-reference/blob/master/descriptions.yaml)
 - [Règle App Store 4.2 et WebView](https://www.mobiloud.com/blog/app-store-review-guidelines-webview-wrapper)

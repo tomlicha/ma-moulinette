@@ -1,19 +1,53 @@
-import { CSRF_HEADER, PREFIX } from './relay';
+import { CSRF_HEADER, OWNER_HEADER, PREFIX } from './relay';
 
 export interface StravaStatus {
   configured: boolean;
   connected: boolean;
   athlete?: string;
+  /** Le relais exige une clé que l'appareil n'a pas (ou plus). */
+  locked?: boolean;
+}
+
+const KEY_STORAGE = 'zwift2.ownerKey';
+
+export function getOwnerKey(): string {
+  try {
+    return localStorage.getItem(KEY_STORAGE) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function setOwnerKey(key: string): void {
+  try {
+    if (key) localStorage.setItem(KEY_STORAGE, key);
+    else localStorage.removeItem(KEY_STORAGE);
+  } catch {
+    /* stockage indisponible : la clé sera redemandée */
+  }
+}
+
+const authHeaders = (): Record<string, string> => {
+  const key = getOwnerKey();
+  return key ? { [OWNER_HEADER]: key } : {};
+};
+
+/** Adresse Strava à ouvrir dans la fenêtre de connexion (le relais y joint un état signé). */
+export async function getLoginUrl(f: Fetch = fetch): Promise<string> {
+  const res = await f(`${PREFIX}login`, { method: 'POST', headers: { [CSRF_HEADER]: '1', ...authHeaders() } });
+  const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+  if (!res.ok || !body.url) throw new Error(body.error === 'locked' ? 'clé d’accès refusée' : `connexion impossible (HTTP ${res.status})`);
+  return body.url;
 }
 
 export type SendResult =
   | { ok: true; activityUrl?: string; processing?: boolean }
-  | { ok: false; reason: 'not_configured' | 'not_connected' | 'rejected' | 'error'; message: string };
+  | { ok: false; reason: 'not_configured' | 'not_connected' | 'locked' | 'rejected' | 'error'; message: string };
 
 type Fetch = typeof fetch;
 
 export async function getStatus(f: Fetch = fetch): Promise<StravaStatus> {
-  const res = await f(`${PREFIX}status`);
+  const res = await f(`${PREFIX}status`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`relais Strava indisponible (HTTP ${res.status})`);
   return (await res.json()) as StravaStatus;
 }
@@ -27,7 +61,7 @@ export async function sendToStrava(
   let res: Response;
   try {
     const q = new URLSearchParams(meta);
-    res = await f(`${PREFIX}upload?${q}`, { method: 'POST', headers: { [CSRF_HEADER]: '1' }, body: fit as BodyInit });
+    res = await f(`${PREFIX}upload?${q}`, { method: 'POST', headers: { [CSRF_HEADER]: '1', ...authHeaders() }, body: fit as BodyInit });
   } catch (e) {
     return { ok: false, reason: 'error', message: `relais injoignable : ${e instanceof Error ? e.message : e}` };
   }
@@ -38,6 +72,7 @@ export async function sendToStrava(
     activityId?: string;
   };
   if (res.status === 503) return { ok: false, reason: 'not_configured', message: 'Strava non configuré (voir .env.example)' };
+  if (res.status === 403 && body.error === 'locked') return { ok: false, reason: 'locked', message: 'clé d’accès refusée' };
   if (res.status === 401) return { ok: false, reason: 'not_connected', message: 'connexion Strava nécessaire' };
   if (!res.ok) return { ok: false, reason: 'error', message: body.message ?? body.error ?? `HTTP ${res.status}` };
   if (body.error) return { ok: false, reason: 'rejected', message: body.error };

@@ -287,3 +287,44 @@ describe('relais Strava, dépôt', () => {
     expect(mem.get()).toBeUndefined();
   });
 });
+
+describe('relais Strava verrouillé par une clé (site public)', () => {
+  const KEY = 'cle-du-proprietaire';
+  const locked = () => {
+    const mem = memoryStore({ accessToken: 'acc', refreshToken: 'ref', expiresAt: NOW + 3600, athlete: 'Tom L' });
+    const strava = fakeStrava({ 'POST /oauth/token': () => j(tokenBody()) });
+    const relay = createStravaRelay({ clientId: '12345', clientSecret: SECRET, ownerKey: KEY, store: mem.store, fetch: strava.fetcher, now: () => NOW, sleep: async () => {} });
+    return { relay, mem, strava };
+  };
+  const withKey = (key: string) => ({ [CSRF_HEADER]: '1', 'x-owner-key': key });
+
+  it("ne révèle ni la connexion ni l'athlète sans la clé", async () => {
+    const { relay } = locked();
+    expect(await (await relay(get('/api/strava/status')))!.json()).toEqual({ configured: true, connected: false, locked: true });
+    const ok = new Request(`${ORIGIN}/api/strava/status`, { headers: { 'x-owner-key': KEY } });
+    expect(await (await relay(ok))!.json()).toMatchObject({ connected: true, athlete: 'Tom L' });
+  });
+
+  it("refuse envoi, connexion et déconnexion sans la bonne clé, sans appeler Strava", async () => {
+    const { relay, strava, mem } = locked();
+    expect((await relay(post('/api/strava/upload', undefined, withKey('mauvaise'))))!.status).toBe(403);
+    expect((await relay(post('/api/strava/login', undefined, withKey('mauvaise'))))!.status).toBe(403);
+    expect((await relay(post('/api/strava/logout', undefined, withKey('mauvaise'))))!.status).toBe(403);
+    expect((await relay(get('/api/strava/login')))!.status).toBe(403); // pas de connexion par adresse : la clé ne doit pas y figurer
+    expect(strava.calls).toEqual([]);
+    expect(mem.get()).toBeDefined();
+  });
+
+  it("rend l'adresse Strava avec un état signé que le retour OAuth accepte, et refuse un état forgé ou expiré", async () => {
+    const { relay, mem } = locked();
+    const res = (await relay(post('/api/strava/login', undefined, withKey(KEY))))!;
+    const url = new URL(((await res.json()) as { url: string }).url);
+    expect(url.searchParams.get('client_id')).toBe('12345');
+    const state = url.searchParams.get('state')!;
+    expect((await relay(get('/api/strava/callback?code=abc&state=forge.abcd')))!.status).toBe(400);
+    expect((await relay(get(`/api/strava/callback?code=abc&state=${state}`)))!.status).toBe(200);
+    expect(mem.get()).toMatchObject({ accessToken: 'acc-new' });
+    const [exp, sig] = state.split('.');
+    expect((await relay(get(`/api/strava/callback?code=abc&state=${Number(exp) + 99999}.${sig}`)))!.status).toBe(400);
+  });
+});

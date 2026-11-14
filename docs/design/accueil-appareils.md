@@ -54,7 +54,7 @@ La **navigation** est la pastille flottante commune à tous les écrans (voir «
 ### Fonds et logo
 
 - **Fonds** : trois scènes SVG ([`src/ui/home-scenes.ts`](../../src/ui/home-scenes.ts)) — Rive du lac (couchant), Quais de nuit, Col des Érables (automne) — qui se relaient **toutes les minutes** par fondu de 1,6 s ([`src/ui/home-background.ts`](../../src/ui/home-background.ts)), en repartant d'une scène tirée au hasard. Le titre et la description suivent l'image. Ils nomment l'ambiance : le seul parcours réellement roulé reste « Colline ». Sans mouvement si le système le demande.
-- **Logo** « La Moulinette » : capitales Barlow Condensed penchées, « LA » en petit à la couleur d'accent, et un plateau de pédalier (anneau denté, bras, moyeu) à la place du O, qui tourne au survol. Balisage dans `index.html` (barre du haut et accueil), style `.logo` dans `home.css`, icône de l'onglet `public/favicon.svg`.
+- **Logo** « Ma Moulinette » : capitales Barlow Condensed penchées, « LA » en petit à la couleur d'accent, et un plateau de pédalier (anneau denté, bras, moyeu) à la place du O, qui tourne au survol. Balisage dans `index.html` (barre du haut et accueil), style `.logo` dans `home.css`, icône de l'onglet `public/favicon.svg`.
 
 ## Style
 
@@ -73,7 +73,7 @@ Code : balisage `#rotate-hint` et `#install-hint` en tête de [`index.html`](../
 Deux chemins, choisis d'après ce que le navigateur sait faire (détection de capacité, jamais de marque) :
 
 - **Le navigateur permet le plein écran** (Android, iPad, ordinateur) : le premier toucher passe en plein écran paysage ; le bouton **Passer en plein écran** de l'invite le refait.
-- **Il ne le permet pas** (tous les navigateurs sur iPhone, qui partagent le moteur de Safari) : aucune page ne peut y masquer les barres du navigateur. Seule l'application **lancée depuis l'écran d'accueil** s'affiche sans elles. Un **guide d'installation** recouvre alors l'application à chaque lancement dans le navigateur, en portrait comme en paysage : Partager, « Sur l'écran d'accueil », puis ouvrir La Moulinette depuis son icône. « Continuer dans le navigateur » l'écarte pour la session ; le bouton de l'invite, devenu **Comment passer en plein écran**, le rouvre. Lancée depuis l'écran d'accueil, l'application n'affiche ni guide ni bouton.
+- **Il ne le permet pas** (tous les navigateurs sur iPhone, qui partagent le moteur de Safari) : aucune page ne peut y masquer les barres du navigateur. Seule l'application **lancée depuis l'écran d'accueil** s'affiche sans elles. Un **guide d'installation** recouvre alors l'application à chaque lancement dans le navigateur, en portrait comme en paysage : Partager, « Sur l'écran d'accueil », puis ouvrir Ma Moulinette depuis son icône. « Continuer dans le navigateur » l'écarte pour la session ; le bouton de l'invite, devenu **Comment passer en plein écran**, le rouvre. Lancée depuis l'écran d'accueil, l'application n'affiche ni guide ni bouton.
 
 | Date | Décision | Pourquoi |
 |---|---|---|

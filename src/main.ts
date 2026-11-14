@@ -629,7 +629,7 @@ function startWorkout() {
   showIntensity(1);
   refreshWorkoutButtons();
   log(`séance démarrée : ${workout.name}, FTP ${runner.ftpW} W`);
-  exporter.onWorkoutStarted();
+  exporter.onWorkoutStarted(workout.name);
   tickWorkout();
 }
 
@@ -890,7 +890,7 @@ const exporter = setupExport({
   hub,
   button: $<HTMLButtonElement>('export-fit'),
   stravaButton: $<HTMLButtonElement>('export-strava'),
-  intervalsButton: $<HTMLButtonElement>('export-intervals'),
+  routeName: DEMO_ROUTE.name,
   log,
 });
 
