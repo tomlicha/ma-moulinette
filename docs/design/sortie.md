@@ -39,6 +39,12 @@ Naviguer vers un autre écran ferme le menu (le routeur appelle `rideMenu.close(
 - **Masse et FTP** : `#mass` et `#wo-ftp` restent la source de vérité du coureur, mais ce sont désormais des champs **cachés** de l'écran Sortie ; la fiche du coureur (écran Appareils) les lit et les met à jour.
 - **Séance choisie** : le sélecteur de l'accueil (`#home-wo-select`) est le seul ; le menu de la sortie ne fait que la dérouler.
 
+## Zwift Cog
+
+Interrupteur « Vitesses virtuelles » et nombre de dents du plateau dans le menu, rubrique **Zwift Cog** (mémorisés). Activé, un sélecteur apparaît à droite de la vue, à mi-hauteur : plus dur, numéro de la vitesse (1 à 24), plus facile. Au clavier : flèches haut et bas, ou + et −. La vitesse de départ est celle dont le braquet est le plus proche du braquet réel (plateau / 14).
+
+Sur téléphone couché, pendant une séance, les commandes de séance prennent la colonne de droite et le sélecteur est masqué ; le clavier reste actif. En ERG les vitesses n'ont pas d'effet.
+
 ## À faire
 
 - Vérifier le coût du plein écran sur un grand écran (4K, ratio de pixels 2) : `renderer.setPixelRatio` est limité à 2, `?quality=low` le ramène à 1.

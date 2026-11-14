@@ -5,6 +5,8 @@ import { WebBluetoothTrainer } from './sensors/web-bluetooth';
 import { webBluetoothAvailable } from './sensors/gatt-device';
 import { RideView } from './render/ride-view';
 import { GradeThrottle } from './sim/grade-throttle';
+import { gearedGradePct, trainerModelFor } from './sim/virtual-gears';
+import { setupGears } from './ui/gears';
 import { DEFAULT_RIDER } from './sim/physics';
 import { Ride } from './sim/ride';
 import { setupExport } from './export/wiring';
@@ -98,7 +100,8 @@ let hrMonitor: HeartRateMonitor | undefined;
 const POWER_STALE_MS = 3000;
 const rideBtn = $<HTMLButtonElement>('ride-toggle');
 const massInput = $<HTMLInputElement>('mass');
-const throttle = new GradeThrottle();
+/** Sans Cog : la pente du parcours, par pas de 0,5 %. Avec : la pente corrigée suit aussi la vitesse, d'où un pas plus fin. */
+let throttle = new GradeThrottle();
 /** ERG engagé : la consigne de puissance prime, et l'envoi de la pente du parcours est suspendu pour ne pas la remplacer. */
 let ergActive = false;
 let ride: Ride | undefined;
@@ -241,6 +244,9 @@ hub.on('measurement', (m) => {
 
 const fmtTime = (s: number) => formatDuration(Math.floor(s));
 
+/** Les protocoles portent la pente au centième de pourcent. */
+const round2 = (x: number) => Math.round(x * 100) / 100;
+
 function tickRide() {
   if (!ride) return;
   const now = performance.now();
@@ -256,9 +262,23 @@ function tickRide() {
     cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
   });
 
-  if (currentState === 'connected' && trainer?.capabilities.simulation && !ergActive && throttle.shouldSend(s.gradePct, now)) {
-    throttle.markSent(s.gradePct, now);
-    hub.setSimulation({ gradePct: s.gradePct, massKg: ride.rider.massKg }).catch((e) => {
+  // Zwift Cog : la pente envoyée est celle qui rend, avec le braquet réel, l'effort du braquet virtuel choisi.
+  const g = gears.state();
+  const model = g.enabled ? trainerModelFor(ride.rider) : undefined;
+  const sentGrade = model
+    ? round2(gearedGradePct({
+        gradePct: s.gradePct,
+        speedMs: s.speedKmh / 3.6,
+        virtualRatio: g.virtualRatio,
+        realRatio: g.realRatio,
+        cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? undefined : lastCadence.rpm,
+        rider: ride.rider,
+        trainer: model,
+      }))
+    : s.gradePct;
+  if (currentState === 'connected' && trainer?.capabilities.simulation && !ergActive && throttle.shouldSend(sentGrade, now)) {
+    throttle.markSent(sentGrade, now);
+    hub.setSimulation({ gradePct: sentGrade, massKg: ride.rider.massKg, ...model }).catch((e) => {
       log(`pente non envoyée : ${e instanceof Error ? e.message : e}`);
       setTimeout(() => throttle.reset(), 2000); // nouvel essai, sans marteler le trainer
     });
@@ -771,6 +791,25 @@ const router = setupRouter((v) => {
   else armAutoStart();
   if (v === 'seances') editor.sync();
 });
+
+const gears = setupGears({
+  prefs,
+  toggle: $<HTMLInputElement>('cog-toggle'),
+  ringRow: $('cog-ring-row'),
+  ring: $<HTMLInputElement>('cog-ring'),
+  shifter: $('ride-gears'),
+  up: $<HTMLButtonElement>('gear-up'),
+  down: $<HTMLButtonElement>('gear-down'),
+  out: $('gear-out'),
+  keysActive: () => router.current() === 'sortie' && !document.querySelector('dialog[open]'),
+  onChange: (s, why) => {
+    // Le changement doit se sentir tout de suite : la prochaine mise à jour de la sortie renvoie la pente sans attendre.
+    throttle = s.enabled ? new GradeThrottle(0.2, 500) : new GradeThrottle();
+    if (why === 'shift') log(`vitesse ${s.gear} (braquet ${s.virtualRatio.toFixed(2)})`);
+    else log(s.enabled ? `Zwift Cog : vitesses virtuelles actives, braquet réel ${s.realRatio.toFixed(2)}` : 'Zwift Cog : vitesses virtuelles coupées');
+  },
+});
+if (gears.state().enabled) throttle = new GradeThrottle(0.2, 500);
 
 const registry = new DeviceRegistry();
 const roleState: Record<DeviceRole, ConnectionState> = { trainer: 'disconnected', hr: 'disconnected' };

@@ -271,6 +271,17 @@
             <button id="rq-easier" type="button" aria-label="Intensité moins 5 %">−5 %</button>
           </div>
 
+          <!-- Zwift Cog : sélecteur de vitesse virtuelle, affiché quand l'option est activée dans le menu (ui/gears.ts). -->
+          <div id="ride-gears" class="ride-gears" role="group" aria-label="Vitesses virtuelles" hidden>
+            <button id="gear-up" type="button" aria-label="Vitesse plus dure">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+            </button>
+            <output id="gear-out" aria-live="polite">12</output>
+            <button id="gear-down" type="button" aria-label="Vitesse plus facile">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+          </div>
+
           <!-- Valeurs du coureur : elles se règlent dans la fiche de l'écran Appareils, ces champs en sont la source de vérité. -->
           <div hidden>
             <input id="mass" type="number" min="30" max="200" step="1" value="80" />
@@ -301,6 +312,17 @@
                 <h3 id="rm-ride-t">Sortie</h3>
                 <p class="note">Parcours « Colline », 6 km en boucle. La puissance mesurée fait avancer le modèle physique ; la pente du parcours est envoyée au trainer en mode SIM.</p>
                 <div class="row"><button id="ride-toggle" type="button" disabled>Démarrer la sortie</button></div>
+              </section>
+
+              <section class="rm-sec" aria-labelledby="rm-cog-t">
+                <h3 id="rm-cog-t">Zwift Cog</h3>
+                <label class="rm-switch"><span>Vitesses virtuelles <small>pignon unique : la pente envoyée au trainer simule le braquet</small></span><input id="cog-toggle" type="checkbox" role="switch" /></label>
+                <div id="cog-ring-row" class="row" hidden>
+                  <label for="cog-ring">Plateau utilisé</label>
+                  <input id="cog-ring" type="number" min="22" max="60" step="1" value="34" />
+                  <span>dents</span>
+                </div>
+                <p class="note">Flèches haut et bas, ou les boutons sur la vue, pour changer de vitesse. Sans effet en ERG.</p>
               </section>
 
               <section class="rm-sec" aria-labelledby="rm-wo-t">
