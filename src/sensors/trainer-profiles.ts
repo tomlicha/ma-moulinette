@@ -9,15 +9,21 @@
  */
 
 /** Protocoles de pilotage, du standard au propriétaire. */
-export type ControlProtocol = 'ftms' | 'wahoo' | 'fec';
+export type ControlProtocol = 'ftms' | 'wahoo' | 'fec' | 'zwift';
 
 export const PROTOCOL_LABEL: Record<ControlProtocol, string> = {
   ftms: 'FTMS',
   wahoo: 'Wahoo',
   fec: 'FE-C over BLE',
+  zwift: 'Zwift (Cog)',
 };
 
-export const ALL_PROTOCOLS: ControlProtocol[] = ['ftms', 'wahoo', 'fec'];
+/**
+ * Le protocole Zwift vient en dernier : rétro-ingénierie non essayée sur matériel, il n'est retenu de lui-même que si
+ * rien d'autre ne pilote le trainer. Pour qu'il passe devant (vitesses virtuelles gérées par le trainer), l'utilisateur
+ * le choisit comme protocole prioritaire sur l'écran Appareils.
+ */
+export const ALL_PROTOCOLS: ControlProtocol[] = ['ftms', 'wahoo', 'fec', 'zwift'];
 
 export type Brand = 'wahoo' | 'tacx' | 'elite' | 'autre';
 

@@ -4,9 +4,10 @@ import { G, resistanceForce, type RiderParams } from './physics';
  * Vitesses virtuelles pour un vélo monté avec un Zwift Cog : un seul pignon réel, donc un braquet réel fixe, et le
  * changement de vitesse est simulé en modulant la pente envoyée au trainer.
  *
- * Zwift règle le braquet par un service Bluetooth propriétaire, non publié ; on ne l'utilise pas. Ici le trainer reste
- * en mode SIM, piloté par FTMS, Wahoo ou FE-C : la méthode vaut pour tout trainer pilotable, pas seulement ceux que
- * Zwift déclare compatibles. Principe repris de SHIFTR (JuergenLeber/SHIFTR, VirtualShifting.md) : à cadence égale la
+ * Deux façons de faire. Avec le protocole Zwift (sensors/zwift.ts), choisi comme prioritaire sur l'écran Appareils, le
+ * trainer reçoit le braquet et fait le calcul lui-même. Sinon, ce module : le trainer reste en mode SIM, piloté par
+ * FTMS, Wahoo ou FE-C, et la méthode vaut pour tout trainer pilotable, pas seulement ceux que Zwift déclare
+ * compatibles. Principe repris de SHIFTR (JuergenLeber/SHIFTR, VirtualShifting.md) : à cadence égale la
  * puissance au pédalier doit être celle du vélo virtuel, donc la force demandée au trainer est celle du vélo virtuel
  * multipliée par le rapport braquet virtuel / braquet réel.
  *

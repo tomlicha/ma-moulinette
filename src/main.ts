@@ -142,8 +142,21 @@ const telemetry = setupTelemetry({
   }),
 });
 
+/** Menu de la sortie, rubrique Zwift Cog : qui applique le braquet, le trainer ou la pente corrigée. */
+function renderCogMode() {
+  $('cog-mode').textContent =
+    currentState !== 'connected'
+      ? ''
+      : trainer?.capabilities.virtualGears
+        ? 'Braquet géré par le trainer (protocole Zwift).'
+        : protocolSelect.value === 'zwift'
+          ? 'Ce trainer ne répond pas au protocole Zwift : braquet simulé par la pente envoyée.'
+          : 'Braquet simulé par la pente envoyée au trainer. Pour que le trainer le gère lui-même, choisis « Zwift » comme protocole de pilotage sur l’écran Appareils, puis reconnecte-le.';
+}
+
 function setState(s: ConnectionState, detail?: string) {
   currentState = s;
+  renderCogMode();
   exporter.onTrainerState(s);
   stateEl.dataset.s = s;
   stateEl.textContent = stateLabel(s);
@@ -210,7 +223,7 @@ function attach(t: TrainerAdapter) {
 hub.on('log', log);
 hub.on('raw', (src, data) => {
   // Les trames brutes servent à documenter chaque modèle de trainer ; on ne journalise pas tout le flux.
-  if (src !== 'Indoor Bike Data' && src !== 'Heart Rate' && src !== 'Cycling Power' && src !== 'FE-C') log(`${src} : ${hex(data)}`);
+  if (src !== 'Indoor Bike Data' && src !== 'Heart Rate' && src !== 'Cycling Power' && src !== 'FE-C' && src !== 'Zwift Data') log(`${src} : ${hex(data)}`);
 });
 /**
  * Démarrage au premier coup de pédale : sur l'écran Sortie, tant que rien n'a été lancé à la main, la première puissance
@@ -262,9 +275,11 @@ function tickRide() {
     cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
   });
 
-  // Zwift Cog : la pente envoyée est celle qui rend, avec le braquet réel, l'effort du braquet virtuel choisi.
+  // Zwift Cog. Protocole Zwift : le trainer reçoit la pente réelle et le braquet, et fait le calcul. Autres protocoles :
+  // la pente envoyée est celle qui rend, avec le braquet réel, l'effort du braquet virtuel choisi.
   const g = gears.state();
-  const model = g.enabled ? trainerModelFor(ride.rider) : undefined;
+  const native = g.enabled && !!trainer?.capabilities.virtualGears;
+  const model = g.enabled && !native ? trainerModelFor(ride.rider) : undefined;
   const sentGrade = model
     ? round2(gearedGradePct({
         gradePct: s.gradePct,
@@ -278,7 +293,7 @@ function tickRide() {
     : s.gradePct;
   if (currentState === 'connected' && trainer?.capabilities.simulation && !ergActive && throttle.shouldSend(sentGrade, now)) {
     throttle.markSent(sentGrade, now);
-    hub.setSimulation({ gradePct: sentGrade, massKg: ride.rider.massKg, ...model }).catch((e) => {
+    hub.setSimulation({ gradePct: sentGrade, massKg: ride.rider.massKg, ...model, ...(native ? { gearRatio: g.virtualRatio } : {}) }).catch((e) => {
       log(`pente non envoyée : ${e instanceof Error ? e.message : e}`);
       setTimeout(() => throttle.reset(), 2000); // nouvel essai, sans marteler le trainer
     });

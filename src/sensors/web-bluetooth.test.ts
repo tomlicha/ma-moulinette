@@ -551,3 +551,100 @@ describe('WebBluetoothTrainer, reprise FE-C', () => {
     expect(fec.write.writes.length).toBe(n);
   });
 });
+
+describe('WebBluetoothTrainer, protocole Zwift', () => {
+  const ZWIFT_SVC = '00000001-19ca-4651-86e5-fa29dcdd09d1';
+  const zchar = (n: number) => `0000000${n}-19ca-4651-86e5-fa29dcdd09d1`;
+  const RIDE_ON = [0x52, 0x69, 0x64, 0x65, 0x4f, 0x6e];
+
+  /** Trainer à Zwift Cog : répond « RideOn » sur la caractéristique d'indication ; `accepts` filtre la forme acceptée. */
+  function zwiftDevice(accepts: (frame: number[]) => boolean = () => true) {
+    const response = new FakeChar(zchar(4));
+    const control = new FakeChar(zchar(3), (data) => {
+      if (RIDE_ON.every((c, i) => data[i] === c) && accepts(data)) queueMicrotask(() => response.emit(...RIDE_ON, 0x02, 0x00));
+    });
+    const power = new FakeChar(uuid(0x2a63));
+    const ftms = ftmsDevice();
+    const device = new FakeDevice([
+      new FakeService(uuid(0x1818), [power]),
+      ...ftms.device.services,
+      new FakeService(ZWIFT_SVC, [new FakeChar(zchar(2)), control, response]),
+    ]);
+    return { device, control, ftmsCp: ftms.cp };
+  }
+
+  it("n'est pas retenu de lui-même quand un autre protocole pilote le trainer", async () => {
+    const { device, control } = zwiftDevice();
+    install(device);
+    const { t } = trainer();
+    await t.connect();
+    expect(t.identity?.protocol).toBe('ftms');
+    expect(t.capabilities.virtualGears).toBeUndefined();
+    expect(control.writes).toEqual([]);
+  });
+
+  it('choisi comme prioritaire : poignée de main, puis pente et braquet envoyés au trainer', async () => {
+    const { device, control, ftmsCp } = zwiftDevice();
+    install(device);
+    const { t } = trainer();
+    t.forcedProtocol = 'zwift';
+    await t.connect();
+    expect(t.identity?.protocol).toBe('zwift');
+    expect(t.capabilities).toMatchObject({ targetPower: true, simulation: true, virtualGears: true });
+    expect(control.writes).toEqual([[...RIDE_ON, 0x02, 0x01], [0x41, 0x08, 0x05], [0x00, 0x08, 0x00], [0x00, 0x08, 0x88, 0x04]]);
+
+    control.writes.length = 0;
+    await t.setSimulation({ gradePct: 0, massKg: 83, gearRatio: 2.4 });
+    await t.setSimulation({ gradePct: -1.5, massKg: 83, gearRatio: 2.4 });
+    await t.setSimulation({ gradePct: -1.5, massKg: 83, gearRatio: 2.61 });
+    expect(control.writes).toEqual([
+      // simulation : vent 0, pente 0, traînée 5100, roulement 400
+      [0x04, 0x22, 0x0a, 0x08, 0x00, 0x10, 0x00, 0x18, 0xec, 0x27, 0x20, 0x90, 0x03],
+      // physique : braquet 24000, vélo 800, cycliste 7500
+      [0x04, 0x2a, 0x0a, 0x10, 0xc0, 0xbb, 0x01, 0x20, 0xa0, 0x06, 0x28, 0xcc, 0x3a],
+      // même braquet : la pente seule (-150, soit 299 en zigzag)
+      [0x04, 0x22, 0x0b, 0x08, 0x00, 0x10, 0xab, 0x02, 0x18, 0xec, 0x27, 0x20, 0x90, 0x03],
+      // changement de vitesse : pente puis braquet 26100
+      [0x04, 0x22, 0x0b, 0x08, 0x00, 0x10, 0xab, 0x02, 0x18, 0xec, 0x27, 0x20, 0x90, 0x03],
+      [0x04, 0x2a, 0x0a, 0x10, 0xf4, 0xcb, 0x01, 0x20, 0xa0, 0x06, 0x28, 0xcc, 0x3a],
+    ]);
+    expect(ftmsCp.writes).toEqual([]); // FTMS n'est pas sollicité en parallèle
+  });
+
+  it('ERG par le champ de puissance cible ; au retour en simulation, braquet renvoyé', async () => {
+    const { device, control } = zwiftDevice();
+    install(device);
+    const { t } = trainer();
+    t.forcedProtocol = 'zwift';
+    await t.connect();
+    await t.setSimulation({ gradePct: 0, gearRatio: 2.4 });
+    control.writes.length = 0;
+    await t.setTargetPower(200);
+    await t.setSimulation({ gradePct: 0, gearRatio: 2.4 });
+    expect(control.writes[0]).toEqual([0x04, 0x18, 0xc8, 0x01]);
+    expect(control.writes.map((w) => w[1])).toEqual([0x18, 0x22, 0x2a]);
+  });
+
+  it('essaie la poignée de main courte si la longue reste sans réponse', async () => {
+    const { device, control } = zwiftDevice((frame) => frame.length === 6);
+    install(device);
+    const { t } = trainer();
+    t.forcedProtocol = 'zwift';
+    t.zwiftHandshakeTimeoutMs = 10;
+    await t.connect();
+    expect(t.identity?.protocol).toBe('zwift');
+    expect(control.writes.slice(0, 2)).toEqual([[...RIDE_ON, 0x02, 0x01], RIDE_ON]);
+  });
+
+  it('sans réponse à « RideOn », se replie sur un autre protocole', async () => {
+    const { device } = zwiftDevice(() => false);
+    install(device);
+    const { t, logs } = trainer();
+    t.forcedProtocol = 'zwift';
+    t.zwiftHandshakeTimeoutMs = 10;
+    await t.connect();
+    expect(t.identity?.protocol).toBe('ftms');
+    expect(logs.some((l) => l.includes('Zwift (Cog) inutilisable'))).toBe(true);
+    expect(logs.some((l) => l.includes('repli automatique'))).toBe(true);
+  });
+});

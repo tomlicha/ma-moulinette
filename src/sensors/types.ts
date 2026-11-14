@@ -20,6 +20,8 @@ export interface TrainerCapabilities {
   /** Mode SIM : pente simulée. */
   simulation: boolean;
   powerRange?: { min: number; max: number; step: number };
+  /** Le trainer applique lui-même un braquet virtuel (protocole Zwift) : on lui envoie la pente réelle et le braquet. */
+  virtualGears?: boolean;
 }
 
 export interface SimulationParams {
@@ -32,6 +34,8 @@ export interface SimulationParams {
   cw?: number;
   /** Masse cycliste + vélo en kg, pour les protocoles qui la portent (Wahoo). */
   massKg?: number;
+  /** Braquet virtuel (plateau / pignon), pour les trainers qui l'appliquent eux-mêmes ; ignoré par les autres. */
+  gearRatio?: number;
 }
 
 export interface SensorEvents {

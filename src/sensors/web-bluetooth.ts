@@ -57,6 +57,19 @@ import {
   type TrainerProfile,
 } from './trainer-profiles';
 import type { Measurement, SimulationParams, TrainerAdapter, TrainerCapabilities } from './types';
+import {
+  isZwiftRideOn,
+  ZWIFT_CONTROL_CHAR,
+  ZWIFT_DATA_CHAR,
+  ZWIFT_RESPONSE_CHAR,
+  ZWIFT_SERVICE,
+  ZWIFT_SERVICE_SHORT,
+  zwiftInitFrames,
+  zwiftPhysical,
+  zwiftRideOn,
+  zwiftSimulation,
+  zwiftTargetPower,
+} from './zwift';
 
 const RESPONSE_TIMEOUT_MS = 3000;
 /** Résultat FTMS « contrôle non accordé » : une autre application tient le trainer. */
@@ -90,6 +103,8 @@ export const TRAINER_SERVICES: BluetoothServiceUUID[] = [
   SERVICE.deviceInformation,
   WAHOO_SERVICE,
   FEC_SERVICE,
+  ZWIFT_SERVICE,
+  ZWIFT_SERVICE_SHORT,
 ];
 
 /** Accessoires qui portent un nom de trainer sans en être un. */
@@ -128,13 +143,15 @@ const DATA_ORDER: Record<ControlProtocol | 'aucun', DataSource[]> = {
   wahoo: ['cps', 'ftms', 'fec'],
   // Les clients de référence (GoldenCheetah, qdomyos-zwift) lisent les Tacx par Cycling Power, pas par les pages FE-C.
   fec: ['cps', 'fec', 'ftms'],
+  zwift: ['cps', 'ftms', 'fec'],
   aucun: ['ftms', 'cps', 'fec'],
 };
 
 /**
  * Home trainer via Web Bluetooth (Chrome, Edge, Android). Le trainer est identifié (nom, Device Information), puis
- * piloté par le premier protocole disponible dans l'ordre de son profil : FTMS, contrôle propriétaire Wahoo ou
- * FE-C over BLE (Tacx). Sans aucun des trois, il reste lisible via FTMS, Cycling Power ou FE-C.
+ * piloté par le premier protocole disponible dans l'ordre de son profil : FTMS, contrôle propriétaire Wahoo,
+ * FE-C over BLE (Tacx) ou protocole Zwift (trainers à Zwift Cog). Sans aucun des quatre, il reste lisible via FTMS,
+ * Cycling Power ou FE-C.
  */
 export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
   name = 'Web Bluetooth';
@@ -155,6 +172,11 @@ export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
   private hasControl = false;
   private wahooCp?: BluetoothRemoteGATTCharacteristic;
   private fecWrite?: BluetoothRemoteGATTCharacteristic;
+  private zwiftCp?: BluetoothRemoteGATTCharacteristic;
+  /** Résout l'attente de la réponse « RideOn » pendant la poignée de main Zwift. */
+  private zwiftRideOn?: () => void;
+  /** Attente de la réponse « RideOn » avant d'essayer l'autre forme, puis de renoncer au protocole Zwift. */
+  zwiftHandshakeTimeoutMs = 1500;
   /** Paramètres de simulation déjà écrits sur cette session (Wahoo, FE-C) ; inutile de les renvoyer à chaque pente. */
   private simKey?: string;
   /** Dernière consigne ERG ou SIM, rejouée après une reconnexion. */
@@ -219,6 +241,8 @@ export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
     this.controlPoint = undefined;
     this.wahooCp = undefined;
     this.fecWrite = undefined;
+    this.zwiftCp = undefined;
+    this.zwiftRideOn = undefined;
     this.simKey = undefined;
     this.lastCrank = undefined;
     this.lastCrankEventAt = 0;
@@ -312,6 +336,8 @@ export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
         return this.setupWahoo([find(WAHOO_SERVICE), find(SERVICE.cyclingPower)]);
       case 'fec':
         return this.setupFecControl(find(FEC_SERVICE));
+      case 'zwift':
+        return this.setupZwift(find(ZWIFT_SERVICE) ?? find(ZWIFT_SERVICE_SHORT));
     }
   }
 
@@ -474,6 +500,54 @@ export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
       if (last) void this.serial(() => this.writeWithRetry(this.fecWrite, last.frame)).catch(() => {});
     }, this.fecRefreshMs);
     return true;
+  }
+
+  /**
+   * Protocole Zwift (voir zwift.ts) : poignée de main « RideOn », puis les demandes d'information que font les clients
+   * de référence. Sans réponse à la poignée de main, le protocole est écarté et les autres sont essayés.
+   */
+  private async setupZwift(svc?: BluetoothRemoteGATTService): Promise<boolean> {
+    if (!svc) return false;
+    const cp = await svc.getCharacteristic(ZWIFT_CONTROL_CHAR);
+    const onFrame = (b: Uint8Array) => {
+      if (isZwiftRideOn(b)) this.zwiftRideOn?.();
+    };
+    await this.subscribe(await svc.getCharacteristic(ZWIFT_RESPONSE_CHAR), 'Zwift Response', onFrame);
+    // Les mesures passent par les services standard ; on s'abonne quand même, comme les clients de référence.
+    await svc
+      .getCharacteristic(ZWIFT_DATA_CHAR)
+      .then((c) => this.subscribe(c, 'Zwift Data', onFrame))
+      .catch((e) => this.emit('log', `Notifications Zwift non activées : ${errMsg(e)}`));
+
+    let answered = false;
+    for (const long of [true, false]) {
+      const reply = new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), this.zwiftHandshakeTimeoutMs);
+        this.zwiftRideOn = () => {
+          clearTimeout(timer);
+          resolve(true);
+        };
+      });
+      await this.serial(() => this.writeWithRetry(cp, zwiftRideOn(long)));
+      answered = await reply;
+      this.zwiftRideOn = undefined;
+      if (answered) break;
+    }
+    if (!answered) throw new Error('pas de réponse à « RideOn »');
+
+    for (const frame of zwiftInitFrames()) {
+      await this.serial(() => this.writeWithRetry(cp, frame)).catch((e) => this.emit('log', `Zwift : demande ${hex(frame[0]!)} non écrite (${errMsg(e)})`));
+    }
+    this.zwiftCp = cp;
+    this.capabilities = { targetPower: true, simulation: true, virtualGears: true };
+    return true;
+  }
+
+  private zwiftFrames(label: string, frames: Uint8Array<ArrayBuffer>[]): Promise<void> {
+    return this.serial(async () => {
+      for (const frame of frames) await this.writeWithRetry(this.zwiftCp, frame);
+      this.emit('log', `Zwift ${label} écrit`);
+    });
   }
 
   private async subscribeFec(svc: BluetoothRemoteGATTService) {
@@ -690,6 +764,10 @@ export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
 
   async setTargetPower(watts: number): Promise<void> {
     const apply = async () => {
+      if (this.zwiftCp) {
+        this.simKey = undefined; // au retour en simulation, braquet et masses sont renvoyés
+        return this.zwiftFrames(`ERG ${watts} W`, [zwiftTargetPower(watts)]);
+      }
       if (this.wahooCp) {
         this.simKey = undefined; // l'ERG Wahoo quitte le mode simulation : il faudra le reprogrammer
         return this.wahooFrames(`ERG ${watts} W`, [wahooTargetPower(watts)]);
@@ -706,6 +784,16 @@ export class WebBluetoothTrainer extends GattDevice implements TrainerAdapter {
     this.lastSim = p;
     const label = `SIM ${p.gradePct.toFixed(1)} %`;
     const apply = async () => {
+      if (this.zwiftCp) {
+        // La pente d'abord : d'après qdomyos-zwift, le braquet est ignoré tant qu'aucune pente n'a été reçue.
+        const ratio = p.gearRatio ?? 0;
+        const mass = p.massKg ?? 80;
+        const key = `${ratio}|${mass}`;
+        const physical = key === this.simKey ? [] : [zwiftPhysical(ratio, BIKE_KG, Math.max(30, mass - BIKE_KG))];
+        await this.zwiftFrames(ratio ? `${label}, braquet ${ratio.toFixed(2)}` : label, [zwiftSimulation(p), ...physical]);
+        this.simKey = key;
+        return;
+      }
       if (this.wahooCp) {
         const [mode, grade] = wahooSimulation(p);
         const key = `${p.massKg}|${p.crr}|${p.cw}`;

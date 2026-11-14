@@ -42,13 +42,17 @@ describe('identifyTrainer', () => {
   });
 
   it('préfère le contrôle propriétaire chez Wahoo, FTMS puis FE-C chez Tacx', () => {
-    expect(protocolOrder(identifyTrainer('KICKR 81B5'))).toEqual(['wahoo', 'ftms', 'fec']);
-    expect(protocolOrder(identifyTrainer('Tacx Neo 2T'))).toEqual(['ftms', 'fec', 'wahoo']);
-    expect(protocolOrder(identifyTrainer('SUITO 1'))).toEqual(['ftms', 'wahoo', 'fec']);
+    expect(protocolOrder(identifyTrainer('KICKR 81B5'))).toEqual(['wahoo', 'ftms', 'fec', 'zwift']);
+    expect(protocolOrder(identifyTrainer('Tacx Neo 2T'))).toEqual(['ftms', 'fec', 'wahoo', 'zwift']);
+    expect(protocolOrder(identifyTrainer('SUITO 1'))).toEqual(['ftms', 'wahoo', 'fec', 'zwift']);
   });
 
   it('place le protocole imposé en tête, sans doublon', () => {
-    expect(protocolOrder(identifyTrainer('KICKR 81B5'), 'ftms')).toEqual(['ftms', 'wahoo', 'fec']);
+    expect(protocolOrder(identifyTrainer('KICKR 81B5'), 'ftms')).toEqual(['ftms', 'wahoo', 'fec', 'zwift']);
+  });
+
+  it('place le protocole Zwift en tête quand il est choisi comme prioritaire', () => {
+    expect(protocolOrder(identifyTrainer('KICKR CORE 1234'), 'zwift')).toEqual(['zwift', 'wahoo', 'ftms', 'fec']);
   });
 
   it("conseille l'app de mise à jour de la marque", () => {

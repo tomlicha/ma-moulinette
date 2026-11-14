@@ -43,6 +43,8 @@ Naviguer vers un autre écran ferme le menu (le routeur appelle `rideMenu.close(
 
 Interrupteur « Vitesses virtuelles » et nombre de dents du plateau dans le menu, rubrique **Zwift Cog** (mémorisés). Activé, un sélecteur apparaît à droite de la vue, à mi-hauteur : plus dur, numéro de la vitesse (1 à 24), plus facile. Au clavier : flèches haut et bas, ou + et −. La vitesse de départ est celle dont le braquet est le plus proche du braquet réel (plateau / 14).
 
+Qui applique le braquet dépend du protocole de pilotage, choisi sur l'écran Appareils : avec « Zwift », le trainer lui-même ; avec les autres, la pente envoyée est corrigée. Une ligne de la rubrique dit lequel est en cours.
+
 Sur téléphone couché, pendant une séance, les commandes de séance prennent la colonne de droite et le sélecteur est masqué ; le clavier reste actif. En ERG les vitesses n'ont pas d'effet.
 
 ## À faire
