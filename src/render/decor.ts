@@ -212,7 +212,7 @@ export class Decor {
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly normal = new THREE.Vector3();
   private readonly scratch: RoadHit = { dist: Infinity, alt: 0, edge: -1, s: 0 };
-  private readonly water: WaterHit = { sd: Infinity, level: 0 };
+  private readonly water: WaterHit = { sd: Infinity, level: 0, beach: 0 };
   private readonly dummy = new THREE.Object3D();
   private readonly color = new THREE.Color();
   private readonly order: ChunkDecor[] = [];

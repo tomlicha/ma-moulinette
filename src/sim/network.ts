@@ -47,6 +47,8 @@ export interface WaterDef {
   level: number;
   /** Contour en plan, points (x, z) dans l'ordre, fermé du dernier au premier. */
   shore: [number, number][];
+  /** `canal` : un bief étroit aux berges raides et au tracé net, au lieu d'un lac à grève. */
+  kind?: 'canal';
 }
 
 /** Distance de (x, z) au contour `shore`, en m : négative dans l'eau, positive sur la terre. */
@@ -77,6 +79,8 @@ export interface CourseDef {
   id: string;
   name: string;
   description: string;
+  /** Lumière du parcours : plein jour par défaut, ou coucher de soleil. */
+  ambiance?: 'day' | 'sunset';
   /**
    * Routes de la boucle, dans l'ordre. Chacune se parcourt dans son sens de définition (départ → arrivée) et finit au
    * nœud où commence la suivante ; la dernière ramène au départ de la première. Le parcours part de la première.

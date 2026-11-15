@@ -1,11 +1,13 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bends, ramps } from '../sim/road-features';
 import { sign } from './places';
 import { forwardOf, ROAD_HALF, sideOf, type WorldLayout } from './world-layout';
 
 /**
  * Le mobilier du bord de route : des piquets réguliers qui donnent la vitesse à l'œil, une borne à chaque kilomètre,
- * et à chaque carrefour un poteau qui nomme les routes qui en partent.
+ * à chaque carrefour un poteau qui nomme les routes qui en partent, un panneau de pente au pied de chaque rampe et un
+ * parapet de pierre à l'extérieur des virages serrés.
  */
 
 /** Écart entre deux piquets, et entre deux bornes, en m. */
@@ -15,8 +17,27 @@ const STONE_EVERY_M = 1000;
 const JUNCTION_CLEAR_M = 22;
 /** Distance du poteau indicateur au centre du carrefour, en m. */
 const SIGNPOST_M = 16.5;
+/** Distance des piquets à l'axe de la route, en m. */
+const POST_LAT_M = ROAD_HALF + 1.5;
 
-const COLORS = { post: 0xf4f4f0, band: 0x20242c, stone: 0xf1efe6, cap: 0xf2c230, pole: 0x6e7480, panel: 0x1f3a5f };
+/** Parapet : distance à l'axe, pas entre deux blocs le long de l'axe, et débord avant et après le virage, en m. */
+const WALL_LAT_M = ROAD_HALF + 1.7;
+const WALL_STEP_M = 2.4;
+const WALL_LEAD_M = 20;
+/** Panneau de pente : distance à l'axe, en m. */
+const GRADE_SIGN_LAT_M = ROAD_HALF + 2.6;
+
+const COLORS = {
+  post: 0xf4f4f0,
+  band: 0x20242c,
+  stone: 0xf1efe6,
+  cap: 0xf2c230,
+  pole: 0x6e7480,
+  panel: 0x1f3a5f,
+  grade: 0x9c3b2a,
+  wall: 0xcbc4b4,
+  coping: 0xe8e2d4,
+};
 
 /** Fond des formes colorées en une seule géométrie : la couleur est portée par les sommets. */
 function colored(parts: [THREE.BufferGeometry, number][]): THREE.BufferGeometry {
@@ -43,9 +64,34 @@ function lot(geo: THREE.BufferGeometry, count: number, shadows: boolean): THREE.
   return m;
 }
 
+/** Un tronçon de parapet : de `from` à `to` sur la route, du côté `side` (+1 à gauche dans le sens de la route). */
+interface Wall {
+  from: number;
+  to: number;
+  side: 1 | -1;
+}
+
 export function buildRoadside(layout: WorldLayout): THREE.Group {
   const group = new THREE.Group();
   const dummy = new THREE.Object3D();
+  const edges = layout.edges;
+
+  // Parapets : à l'extérieur de chaque virage serré, là où l'on sortirait de la route. Une route qui tourne à droite a
+  // son extérieur à gauche.
+  const walls = new Map<string, Wall[]>();
+  for (const e of edges) {
+    walls.set(
+      e.id,
+      bends(e)
+        .map((b): Wall => ({
+          from: Math.max(JUNCTION_CLEAR_M, b.from - WALL_LEAD_M),
+          to: Math.min(e.lengthM - JUNCTION_CLEAR_M, b.to + WALL_LEAD_M),
+          side: b.turn,
+        }))
+        .filter((w) => w.to > w.from),
+    );
+  }
+  const walled = (id: string, s: number, side: number) => walls.get(id)!.some((w) => w.side === side && s >= w.from - 2 && s <= w.to + 2);
 
   // Piquets blancs à bande sombre, des deux côtés.
   const postGeo = colored([
@@ -57,7 +103,6 @@ export function buildRoadside(layout: WorldLayout): THREE.Group {
     [new THREE.BoxGeometry(0.5, 0.5, 0.3).translate(0, 0.25, 0), COLORS.stone],
     [new THREE.CylinderGeometry(0.25, 0.25, 0.3, 10, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(0, 0.5, 0), COLORS.cap],
   ]);
-  const edges = layout.edges;
   const posts = lot(postGeo, edges.reduce((n, e) => n + 2 * (Math.floor(e.lengthM / POST_EVERY_M) + 1), 0), false);
   const stones = lot(stoneGeo, edges.reduce((n, e) => n + Math.floor(e.lengthM / STONE_EVERY_M) + 1, 0), true);
   const put = (mesh: THREE.InstancedMesh, e: (typeof edges)[number], s: number, lat: number) => {
@@ -71,15 +116,71 @@ export function buildRoadside(layout: WorldLayout): THREE.Group {
   };
   for (const e of edges) {
     for (let s = JUNCTION_CLEAR_M; s <= e.lengthM - JUNCTION_CLEAR_M; s += POST_EVERY_M) {
-      put(posts, e, s, ROAD_HALF + 1.5);
-      put(posts, e, s, -(ROAD_HALF + 1.5));
+      // Le parapet remplace le piquet de son côté.
+      if (!walled(e.id, s, 1)) put(posts, e, s, POST_LAT_M);
+      if (!walled(e.id, s, -1)) put(posts, e, s, -POST_LAT_M);
     }
     for (let s = STONE_EVERY_M; s <= e.lengthM - JUNCTION_CLEAR_M; s += STONE_EVERY_M) put(stones, e, s + 12, -(ROAD_HALF + 2.1));
   }
   group.add(posts, stones);
 
-  // Poteaux indicateurs : dans le plus grand angle libre du carrefour, une flèche par route.
+  // Blocs du parapet : une pierre taillée et son couronnement plus clair, posés bout à bout avec un jour entre deux.
+  const blockGeo = colored([
+    [new THREE.BoxGeometry(2.05, 0.74, 0.46).translate(0, 0.25, 0), COLORS.wall],
+    [new THREE.BoxGeometry(2.15, 0.12, 0.56).translate(0, 0.68, 0), COLORS.coping],
+  ]);
+  const blockCount = [...walls.values()].reduce((n, list) => n + list.reduce((k, w) => k + Math.floor((w.to - w.from) / WALL_STEP_M) + 1, 0), 0);
+  const blocks = lot(blockGeo, blockCount, true);
+  const shade = new THREE.Color();
+  for (const e of edges) {
+    for (const w of walls.get(e.id)!) {
+      for (let s = w.from; s <= w.to; s += WALL_STEP_M) {
+        const p = e.pointAt(s);
+        const h = e.headingAt(s);
+        const side = sideOf(h);
+        const x = p.x + side.x * w.side * WALL_LAT_M;
+        const z = p.z + side.z * w.side * WALL_LAT_M;
+        // Posé sur le sol, sans jamais flotter au-dessus de la chaussée ni s'y enfoncer de plus d'une demi-hauteur.
+        const road = layout.y(e.altitudeAt(s));
+        dummy.position.set(x, Math.min(road, Math.max(road - 0.3, layout.groundY(x, z))) - 0.06, z);
+        dummy.rotation.set(0, -h, 0); // le long du bloc suit la route
+        dummy.updateMatrix();
+        const k = blocks.count++;
+        blocks.setMatrixAt(k, dummy.matrix);
+        // Chaque pierre a sa teinte : le mur ne se lit pas comme une bande unie.
+        blocks.setColorAt(k, shade.setScalar(0.88 + 0.14 * (((k * 2654435761) >>> 0) / 4294967296)));
+      }
+    }
+  }
+  if (blocks.count) group.add(blocks);
+
   const pole = new THREE.MeshStandardNodeMaterial({ color: COLORS.pole, roughness: 0.6 });
+
+  // Panneaux de pente : au pied de chaque rampe, à droite de celui qui monte. Le panneau donne la pente moyenne réelle
+  // (celle que sent le home-trainer) et la longueur de la rampe.
+  for (const e of edges) {
+    for (const r of ramps(e)) {
+      const up = r.gradePct > 0;
+      const s = Math.min(Math.max(up ? r.from : r.to, JUNCTION_CLEAR_M + 6), e.lengthM - JUNCTION_CLEAR_M - 6);
+      const p = e.pointAt(s);
+      const h = e.headingAt(s);
+      const side = sideOf(h);
+      const lat = (up ? -1 : 1) * GRADE_SIGN_LAT_M; // `sideOf` pointe à gauche de la route
+      const x = p.x + side.x * lat;
+      const z = p.z + side.z * lat;
+      const y = layout.y(e.altitudeAt(s));
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.84, 8).translate(0, 0.92, 0), pole);
+      mast.position.set(x, y - 0.1, z);
+      mast.castShadow = true;
+      const km = ((r.to - r.from) / 1000).toFixed(1).replace('.', ',');
+      const panel = sign([`${Math.round(Math.abs(r.gradePct))} %`, `sur ${km} km`], 1.5, 1.15, COLORS.grade);
+      panel.position.set(x, y + 2.3, z);
+      panel.rotation.y = Math.PI / 2 - h; // face à la route, lisible dans les deux sens
+      group.add(mast, panel);
+    }
+  }
+
+  // Poteaux indicateurs : dans le plus grand angle libre du carrefour, une flèche par route.
   for (const node of layout.network.nodes.values()) {
     const ways = layout.network.incident(node.id).map((e) => ({ e, h: e.from.id === node.id ? e.headingAt(0) : e.headingAt(e.lengthM) + Math.PI }));
     if (ways.length < 2) continue;

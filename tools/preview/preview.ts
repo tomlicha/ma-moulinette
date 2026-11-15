@@ -9,10 +9,12 @@
  * - `shot=ride` : vue de poursuite sur le réseau, à `d` m du départ (défaut 0). `route=col,descente` force les choix de
  *   carrefour dans l'ordre (identifiants de routes) ; `relief` règle l'exagération du relief (1 = réel, défaut 1,6).
  *   `course=rive` choisit le parcours (`col` par défaut). `shot=map` : le réseau vu du dessus (lignes de route), pour juger le tracé.
+ * - `mood=day|sunset` force l'ambiance (par défaut celle du parcours `course`).
  * - `quality=low` : profil bas du monde (par défaut le profil haut, comme l'application).
  * - `webgl` pour forcer le repli WebGL2 ; `shadows=0` pour couper les ombres (juger le modelé sans auto-ombrage).
  */
 import * as THREE from 'three/webgpu';
+import { ambianceFor, type Mood } from '../../src/render/ambiance';
 import { loadRiderAssets } from '../../src/render/assets';
 import type { Kit } from '../../src/render/region-material';
 import { createRenderer } from '../../src/render/renderer';
@@ -173,6 +175,8 @@ if (shot === 'marie' || shot === 'marie-chase' || shot === 'ride' || shot === 'm
     worldRider = { x: p.x, z: p.z };
   }
   world.prime(worldRider.x, worldRider.z);
+  // Ambiance du parcours choisi, ou celle de `mood=day|sunset`.
+  world.setAmbiance(ambianceFor((params.get('mood') as Mood | null) ?? COL_DES_ERABLES.course(params.get('course') ?? undefined)?.ambiance));
   world.sky.position.copy(camera.position); // comme `RideView.follow` : le ciel suit la caméra, sinon le plan lointain le coupe
   // `hide=0,1` masque des couches du monde (terrain, route, décor, clôture, arches, montagnes, nuages, fond) pour isoler un défaut.
   for (const k of (params.get('hide') ?? '').split(',').filter(Boolean)) {

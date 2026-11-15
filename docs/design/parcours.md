@@ -64,6 +64,10 @@ Deux lacs, décrits dans les données du parcours (`water` : un niveau et un con
 
 Le terrain se creuse dedans (fond à 4 m), sort de l'eau par une grève de sable, et tient une berge d'au moins 1,2 m au-dessus de la surface : un lac perché garde son bord. Entre une route et un lac, le talus descend de la chaussée à la ligne d'eau. Un relief haut au bord de l'eau y descend en pente douce (30 %), sans falaise. La surface est une grille plane réduite aux mailles qui touchent l'eau : claire près de la rive, sombre au large, teintée par le ciel aux angles rasants, avec des vaguelettes qui accrochent le soleil. `validateNetwork` refuse une route à moins de 18 m d'une rive, ou à moins de 1 m au-dessus d'un lac voisin.
 
+**Le canal** prolonge le lac de la Rive le long de la seconde moitié de la route du Canal, jusqu'au Village : trois biefs de 12 m de large, à 20 m de l'axe de la route, chacun plus bas que le précédent (0,9 m, −0,45 m, −1,1 m) comme entre deux écluses. Ce sont des plans d'eau comme les lacs, marqués `kind: 'canal'` : leur tracé reste net (pas d'ondulation de rive) et leur berge est raide (3 m au lieu des 14 m de grève). Les écluses elles-mêmes ne sont pas construites.
+
+Les lacs et le canal sont dessinés sur la carte des parcours (`npm run map`, [`network-map.ts`](../../src/sim/network-map.ts)), sous les routes.
+
 ### Lieux
 
 Chaque carrefour nommé porte un lieu (`place` dans les données), construit par [`src/render/places.ts`](../../src/render/places.ts) en formes simples à facettes, fondues en un maillage par lieu :
@@ -87,6 +91,11 @@ Un repère `grove` borde Le Col d'érables roux, orangés et dorés, du pied de 
 
 [`src/render/roadside.ts`](../../src/render/roadside.ts) : un piquet blanc à bande sombre tous les 50 m des deux côtés, une borne à tête jaune à chaque kilomètre, et à chaque carrefour un poteau dont les flèches nomment les routes qui en partent, avec leur longueur. Le décor sème en plus des touffes d'herbe et des fleurs dans les 40 m autour des routes, dessinées à moins de 90 m du cycliste : c'est ce qui défile au plus près et donne la vitesse. La chaussée a un grain (plaques larges et grain fin).
 
+Deux éléments se déduisent du tracé, par [`src/sim/road-features.ts`](../../src/sim/road-features.ts) :
+
+- **Panneaux de pente** : un panneau brique au pied de chaque rampe, à droite de celui qui monte, avec la pente moyenne réelle (celle du HUD et du home-trainer, pas la pente exagérée à l'image) et la longueur : « 7 % sur 4,9 km » au pied du Col. Une rampe est un tronçon d'au moins 250 m dont la pente lissée sur 100 m dépasse 4 % ; deux rampes de même sens séparées par moins de 300 m de replat n'en font qu'une. Le réseau en compte sept.
+- **Parapets** : des blocs de pierre à couronnement clair, bout à bout, à l'extérieur de chaque virage de moins de 60 m de rayon, 20 m avant et après. Ce sont les six virages serrés du Col ; le parapet y remplace les piquets de son côté. Pas encore de mur de soutènement côté amont.
+
 ### Ce qui bouge
 
 Les couronnes des arbres complets se balancent au vent, par vagues qui traversent le pays ; les nuages dérivent autour du centre du réseau ; de grandes ombres de nuages glissent sur le sol et la route (décoratives : elles ne suivent pas les nuages dessinés) ; l'eau ondule ; les ailes du moulin tournent. Tout se calcule dans la carte graphique, sauf les ailes et la dérive (une rotation par image).
@@ -102,6 +111,8 @@ Réglées le 14 novembre 2026 d'après la maquette « Col des Érables » (premi
 - **Arbres** : formes à facettes nettes (Tom les préfère aux formes lisses de la planche de style), avec un **ombrage peint** dans la couleur des sommets (bas et dessous plus sombres), et une **ombre de contact** au pied (disque sombre et flou, couché sur la pente). C'est ce qui ancre les arbres au sol au-delà des 80 m d'ombres portées. Aucun coût par image : pas d'occlusion ambiante calculée.
 - **Nuages** : ils ne reçoivent ni la lumière de la scène (le vert du sol les teintait) ni la brume (elle effacerait ceux de l'horizon) ; blancs dessus, gris-bleu dessous.
 
+**Une ambiance par parcours** ([`ambiance.ts`](../../src/render/ambiance.ts)) : un parcours peut porter `ambiance: 'sunset'` dans ses données. Le monde reste le même ; changent la direction, la couleur et la force du soleil, la lumière du ciel, les couleurs du ciel, de la brume et des nuages, et le reflet de l'eau. Le Col des Érables se roule en plein jour ; la **Rive du lac** au coucher du soleil, d'après sa maquette : soleil bas à l’ouest (17° de hauteur), ciel pêche à l'horizon et lilas au zénith, nuages roses, ombres longues, reflet doré sur le lac. L'ambiance suit le parcours choisi sur l'accueil sans rien reconstruire (`World.setAmbiance`). Dans l'aperçu, `mood=day|sunset` force l'une ou l'autre.
+
 ### Vues de référence
 
 `node tools/preview/shoot.mjs --ref <dossier>` prend douze vues du réseau (départ, vallée, col, épingle, sommet, descente, prés, canal, rive, village, moulin, érables) dans le profil haut, celui de l'application. À lancer avant et après tout changement graphique. La photo est prise quand la page a fini de construire sa scène, par le protocole DevTools de Chrome ; `quality=low` en requête ajoutée donne le profil bas, `CLIP=x,y,largeur,hauteur,échelle` agrandit un détail.
@@ -116,12 +127,11 @@ Réglées le 14 novembre 2026 d'après la maquette « Col des Érables » (premi
 ## Ce qui reste
 
 - Danseuse à partir de 8 % : l'animation du cycliste n'a pas de pose debout.
-- Panneaux de pente au pied des rampes (les panneaux de direction aux carrefours sont faits).
-- Carte du réseau (position, routes possibles) ; les lacs ne sont pas encore dessinés sur la carte des parcours.
-- Le canal lui-même : la route du Canal longe le lac sur sa première moitié, puis plus rien ; il manque un bief le long de sa seconde moitié.
-- Une ambiance par parcours (coucher de soleil sur la Rive du lac, comme la maquette), l'heure qui tourne, des oiseaux, d'autres cyclistes.
-- Murs de soutènement et parapets dans les épingles.
-- **Non vérifié en mouvement** : le décor n'a été jugé que sur des images fixes de la page d'aperçu. À regarder en roulant : le passage silhouette vers arbre complet à 260 m, les à-coups au chargement d'une forêt, le balancement des arbres et son ombre.
+- Carte du réseau pendant la sortie (position, routes possibles).
+- Les écluses entre les biefs du canal.
+- L'heure qui tourne pendant la sortie, des oiseaux, d'autres cyclistes.
+- Murs de soutènement côté amont dans les virages du Col.
+- **Non vérifié en mouvement** : le décor n'a été jugé que sur des images fixes de la page d'aperçu. À regarder en roulant : le passage silhouette vers arbre complet à 260 m, les à-coups au chargement d'une forêt, le balancement des arbres et son ombre, le changement d'ambiance quand on change de parcours sur l'accueil.
 - **Non mesuré** : la performance en WebGPU sur un vrai appareil (surtout téléphone), et l'invite de carrefour en mode compact sur un vrai téléphone (cibles 844 × 390 et 915 × 412).
 
 ## Validation mobile

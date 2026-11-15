@@ -187,7 +187,7 @@ interface Site {
  */
 function sites(layout: WorldLayout, node: NodeDef, n: number, min: number, max: number, gap: number, rand: () => number, taken: Site[] = []): Site[] {
   const hit: RoadHit = { dist: Infinity, alt: 0, edge: -1, s: 0 };
-  const water: WaterHit = { sd: Infinity, level: 0 };
+  const water: WaterHit = { sd: Infinity, level: 0, beach: 0 };
   const out: Site[] = [];
   for (let tries = 0; tries < 400 && out.length < n; tries++) {
     const a = rand() * Math.PI * 2;
@@ -206,7 +206,7 @@ function sites(layout: WorldLayout, node: NodeDef, n: number, min: number, max: 
 
 /** Le point de rive le plus proche du nœud et la direction du large, ou rien s'il n'y a pas d'eau à 220 m. */
 function shoreNear(layout: WorldLayout, node: NodeDef): { x: number; z: number; dirX: number; dirZ: number; level: number } | undefined {
-  const water: WaterHit = { sd: Infinity, level: 0 };
+  const water: WaterHit = { sd: Infinity, level: 0, beach: 0 };
   let best: { x: number; z: number; dirX: number; dirZ: number; level: number; r: number } | undefined;
   for (let i = 0; i < 48; i++) {
     const a = (i / 48) * Math.PI * 2;

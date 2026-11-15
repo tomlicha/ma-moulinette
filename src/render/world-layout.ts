@@ -42,8 +42,10 @@ const ROLL_PER_ALT = 0.3;
 export const WATER_REACH_M = 300;
 /** Profondeur du fond sous la surface, loin de la rive, en m (altitude réelle). */
 const BED_DEPTH_M = 4;
-/** Largeur de la grève, de la ligne d'eau au haut de la berge, et hauteur de ce haut de berge au-dessus de l'eau, en m. */
+/** Largeur de la grève d'un lac et de la berge d'un canal, de la ligne d'eau au haut de la berge, en m. */
 const BEACH_M = 14;
+const CANAL_BANK_M = 3;
+/** Hauteur du haut de berge au-dessus de l'eau, en m. */
 const BANK_M = 1.2;
 /** Le contour d'un lac ondule de cette amplitude autour de son tracé, en m. */
 const SHORE_WOBBLE_M = 5;
@@ -55,15 +57,17 @@ export interface WaterHit {
   sd: number;
   /** Altitude réelle de sa surface, en m. */
   level: number;
+  /** Largeur de sa grève ou de sa berge, en m. */
+  beach: number;
 }
 
 /**
  * Altitude du sol autour d'un lac : le fond dans l'eau, une grève qui sort de l'eau, puis une berge tenue au moins
  * `BANK_M` au-dessus de la surface (un lac perché garde ainsi son bord), qui rejoint le relief `far` à `WATER_REACH_M`.
  */
-function shoreAlt(far: number, sd: number, level: number): number {
+function shoreAlt(far: number, sd: number, level: number, beach: number): number {
   if (sd <= 0) return level + Math.max(-BED_DEPTH_M, -0.3 + 0.1 * sd);
-  const shore = level - 0.3 + (BANK_M + 0.3) * smoothstep(0, BEACH_M, sd);
+  const shore = level - 0.3 + (BANK_M + 0.3) * smoothstep(0, beach, sd);
   // Un relief haut au bord de l'eau y descend en pente douce, sur une distance à sa mesure : pas de falaise sur la rive.
   const held = Math.max(far, shore);
   const run = Math.min(WATER_REACH_M - 20, Math.max(60, (held - shore) / SHORE_SLOPE));
@@ -113,7 +117,7 @@ export class WorldLayout {
   private readonly cells = new Map<number, number[]>();
 
   private readonly waters: { def: WaterDef; minX: number; maxX: number; minZ: number; maxZ: number }[];
-  private readonly waterScratch: WaterHit = { sd: Infinity, level: 0 };
+  private readonly waterScratch: WaterHit = { sd: Infinity, level: 0, beach: 0 };
 
   private readonly macro: Float32Array;
   /** Distance à la route la plus proche, sur la même grille que `macro`, en m. */
@@ -340,14 +344,16 @@ export class WorldLayout {
    * Le lac le plus proche de (x, z) et la distance à sa rive. La rive ondule un peu autour du contour des données :
    * le terrain, la surface de l'eau, le décor et la couleur du sol lisent tous cette fonction.
    */
-  waterAt(x: number, z: number, out: WaterHit = { sd: Infinity, level: 0 }): WaterHit {
+  waterAt(x: number, z: number, out: WaterHit = { sd: Infinity, level: 0, beach: 0 }): WaterHit {
     out.sd = Infinity;
     for (const w of this.waters) {
       if (x < w.minX || x > w.maxX || z < w.minZ || z > w.maxZ) continue;
-      const sd = shoreDistance(w.def.shore, x, z) + SHORE_WOBBLE_M * fbm(x * 0.03, z * 0.03, 2);
+      const canal = w.def.kind === 'canal';
+      const sd = shoreDistance(w.def.shore, x, z) + (canal ? 0 : SHORE_WOBBLE_M * fbm(x * 0.03, z * 0.03, 2));
       if (sd < out.sd && sd < WATER_REACH_M) {
         out.sd = sd;
         out.level = w.def.level;
+        out.beach = canal ? CANAL_BANK_M : BEACH_M;
       }
     }
     return out;
@@ -361,7 +367,7 @@ export class WorldLayout {
     if (this.waters.length) {
       const water = this.waterAt(x, z, this.waterScratch);
       if (water.sd !== Infinity) {
-        far = shoreAlt(far, water.sd, water.level);
+        far = shoreAlt(far, water.sd, water.level, water.beach);
         // Entre une route et un lac, le talus descend de la chaussée à la ligne d'eau : la route ne pèse pas au-delà.
         if (hit.dist !== Infinity) reach = Math.min(ROAD_INFLUENCE_M, Math.max(ROAD_HALF + 3, hit.dist + water.sd));
       }

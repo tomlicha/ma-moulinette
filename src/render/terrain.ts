@@ -24,7 +24,7 @@ export const chunkKey = (i: number, j: number) => (i + 4096) * 8192 + (j + 4096)
 
 const scratch: RoadHit = { dist: Infinity, alt: 0, edge: -1, s: 0 };
 const tint = new THREE.Color();
-const water: WaterHit = { sd: Infinity, level: 0 };
+const water: WaterHit = { sd: Infinity, level: 0, beach: 0 };
 const litter: RoadHit = { dist: Infinity, alt: 0, edge: -1, s: 0 };
 
 /** Part de sol de forêt mêlée à la prairie sous un couvert complet. */
@@ -46,7 +46,7 @@ function groundColor(layout: WorldLayout, x: number, z: number, y: number, ny: n
   }
   // Autour d'un lac : une grève de sable, puis le fond sous la surface.
   const sd = layout.waterAt(x, z, water).sd;
-  if (sd < 16) tint.lerp(PALETTE.sand, 0.8 * (1 - smoothstep(4, 16, sd))).lerp(PALETTE.lakeBed, 1 - smoothstep(-6, 2, sd));
+  if (sd < 16) tint.lerp(PALETTE.sand, 0.8 * (1 - smoothstep(0.3 * water.beach, 1.15 * water.beach, sd))).lerp(PALETTE.lakeBed, 1 - smoothstep(-6, 2, sd));
   // Le sable du bas-côté est une bande posée sur la route (`world.ts`) : un bord net, qu'une maille de 4 m ne donnerait pas.
   out[k] = tint.r;
   out[k + 1] = tint.g;

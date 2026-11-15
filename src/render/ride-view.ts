@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { Journey } from '../sim/journey';
 import { createRenderer, type Backend } from './renderer';
+import { ambianceFor, type Mood } from './ambiance';
 import { loadRiderAssets, type RiderAssets } from './assets';
 import { Rider } from './rider';
 import { buildWorld, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
@@ -55,6 +56,7 @@ export class RideView {
   private readonly rider: Rider;
   private readonly sky: THREE.Mesh;
   private readonly world: World;
+  private mood: Mood = 'day';
   private readonly gates: IntervalGates;
   private readonly frameTimes: number[] = [];
   private readonly resizeObserver: ResizeObserver;
@@ -226,6 +228,12 @@ export class RideView {
     this.rider.group.rotateZ(this.roll * Math.sin(this.swayPhase));
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
+    // L'ambiance suit le parcours, qui peut changer sur l'accueil pendant que la vue tourne.
+    const mood = this.journey.course?.ambiance ?? 'day';
+    if (mood !== this.mood) {
+      this.mood = mood;
+      this.world.setAmbiance(ambianceFor(mood));
+    }
     this.world.update(dt, this.p);
     this.follow(dt);
     this.renderer.render(this.scene, this.camera);

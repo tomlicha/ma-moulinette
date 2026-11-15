@@ -29,6 +29,7 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       id: 'rive',
       name: 'Rive du lac',
       description: 'Un parcours régulier le long de l’eau, fait pour tenir une puissance.',
+      ambiance: 'sunset',
       guide: ['vallee', 'pres', 'canal'],
     },
   ],
@@ -69,6 +70,38 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       shore: [
         [-540, -2905], [-548, -2786], [-660, -2738], [-790, -2732], [-840, -2850], [-869, -2970], [-778, -3057],
         [-663, -3058], [-552, -3021],
+      ],
+    },
+    // Le canal : trois biefs de 12 m de large à droite de la route du Canal, à 20 m de son axe, du bout du lac au
+    // village. Chacun est plus bas que le précédent, comme entre deux écluses, et reste 1 m sous la chaussée.
+    {
+      id: 'canal-haut',
+      name: 'Canal',
+      kind: 'canal',
+      level: 0.9,
+      shore: [
+        [464, 1512], [433, 1447], [404, 1380], [376, 1313], [351, 1244], [327, 1176], [305, 1106], [316, 1103],
+        [338, 1172], [362, 1240], [387, 1308], [415, 1375], [444, 1442], [475, 1507],
+      ],
+    },
+    {
+      id: 'canal-milieu',
+      name: 'Canal',
+      kind: 'canal',
+      level: -0.45,
+      shore: [
+        [294, 1073], [275, 1005], [255, 937], [237, 869], [219, 801], [202, 732], [184, 663], [196, 661],
+        [213, 729], [231, 798], [248, 866], [267, 934], [286, 1002], [306, 1069],
+      ],
+    },
+    {
+      id: 'canal-bas',
+      name: 'Canal',
+      kind: 'canal',
+      level: -1.1,
+      shore: [
+        [176, 629], [159, 561], [143, 492], [126, 423], [110, 354], [93, 285], [76, 216], [88, 213],
+        [105, 282], [121, 351], [138, 420], [155, 489], [171, 558], [188, 627],
       ],
     },
   ],

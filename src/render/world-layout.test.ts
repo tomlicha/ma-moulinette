@@ -61,7 +61,7 @@ describe('WorldLayout', () => {
   });
 
   it('creuse les lacs sous leur surface et tient la berge au-dessus', () => {
-    for (const lake of COL_DES_ERABLES.water) {
+    for (const lake of COL_DES_ERABLES.water.filter((w) => w.kind !== 'canal')) {
       const cx = lake.shore.reduce((s, p) => s + p[0], 0) / lake.shore.length;
       const cz = lake.shore.reduce((s, p) => s + p[1], 0) / lake.shore.length;
       expect(layout.waterAt(cx, cz).sd, lake.id).toBeLessThan(-40);
@@ -78,6 +78,21 @@ describe('WorldLayout', () => {
         }
       }
     }
+  });
+
+  it('creuse les biefs du canal, plus bas d\u2019un bief au suivant', () => {
+    const reaches = COL_DES_ERABLES.water.filter((w) => w.kind === 'canal');
+    expect(reaches.length).toBe(3);
+    reaches.forEach((reach, i) => {
+      // Au milieu de la largeur : entre un point du bord intérieur et son vis-à-vis du bord extérieur.
+      const mid = reach.shore[3]!;
+      const far = reach.shore[reach.shore.length - 4]!;
+      const mx = (mid[0] + far[0]) / 2;
+      const mz = (mid[1] + far[1]) / 2;
+      expect(layout.waterAt(mx, mz).sd, reach.id).toBeLessThan(-3);
+      expect(layout.groundAlt(mx, mz), reach.id).toBeLessThan(reach.level);
+      if (i > 0) expect(reach.level).toBeLessThan(reaches[i - 1]!.level);
+    });
   });
 
   it("nearestRoad rend la route et l'abscisse du point le plus proche", () => {

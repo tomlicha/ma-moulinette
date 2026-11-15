@@ -12,6 +12,8 @@ const COLORS = {
   ink: '#14171A',
   muted: '#5B6470',
   road: '#B4B9C2',
+  water: '#BFE3F2',
+  shore: '#7DBBD8',
   roadCasing: '#FFFFFF',
   /** Un parcours par couleur, dans l'ordre du réseau ; au-delà on boucle. */
   courses: ['#C2410C', '#0F9F8F', '#6D4AFF', '#B8860B'],
@@ -239,6 +241,12 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
       out.push(`<line x1="${n1(a.x)}" y1="${n1(a.y)}" x2="${n1(c.x)}" y2="${n1(c.y)}"/>`);
     }
     out.push('</g>');
+  }
+
+  /* ---------- Lacs et canal ---------- */
+  for (const w of network.water) {
+    const d = w.shore.map((p, i) => `${i ? 'L' : 'M'}${n1(to(p[0], p[1]).x)} ${n1(to(p[0], p[1]).y)}`).join(' ');
+    out.push(`<path d="${d} Z" fill="${COLORS.water}" stroke="${COLORS.shore}" stroke-width="${n1(1.5 * lw)}" stroke-linejoin="round"/>`);
   }
 
   /* ---------- Routes hors parcours, puis parcours ---------- */

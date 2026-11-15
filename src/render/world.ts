@@ -3,6 +3,7 @@ import { SunLight } from 'three/addons/lights/SunLight.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { attribute, cameraPosition, color, float, mix, normalWorld, normalize, positionLocal, positionWorld, pow, sin, smoothstep as tslSmoothstep, time, transformNormalToView, vec3 } from 'three/tsl';
 import type { Edge } from '../sim/network';
+import { createTones, DAY, type Ambiance, type Tones } from './ambiance';
 import type { RiderAssets } from './assets';
 import { Decor, DECOR_HIGH, DECOR_LOW, type DecorOptions } from './decor';
 import { faceted, instanced, merge } from './geometry-utils';
@@ -28,6 +29,8 @@ export interface World {
   sun: SunLight;
   /** Construit d'un coup le décor autour de (x, z) : à l'ouverture de la vue. */
   prime(x: number, z: number): void;
+  /** Change la lumière, le ciel et la brume : l'ambiance du parcours choisi. */
+  setAmbiance(a: Ambiance): void;
   /**
    * Anime les éléments vivants du décor (Marie et sa roue) et peuple le terrain et le décor autour du cycliste.
    * Marie disparaît quand le cycliste en est loin.
@@ -278,12 +281,12 @@ const WATER_DEEP_M = 45;
  * Eau d'un lac : claire près de la rive, sombre au large, teintée par le ciel aux angles rasants, avec deux trains de
  * vaguelettes qui se croisent pour accrocher le soleil.
  */
-function waterMaterial(): THREE.MeshStandardNodeMaterial {
+function waterMaterial(tones: Tones): THREE.MeshStandardNodeMaterial {
   const mat = new THREE.MeshStandardNodeMaterial({ roughness: 0.2, metalness: 0 });
   const base = mix(color(PALETTE.waterShallow), color(PALETTE.waterDeep), attribute('depth', 'float'));
   // La surface est horizontale : l'angle du regard se lit sur sa seule composante verticale.
   const facing = normalize(cameraPosition.sub(positionWorld)).y.max(0);
-  mat.colorNode = mix(base, color(PALETTE.horizon), pow(float(1).sub(facing), 3).mul(0.6)) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
+  mat.colorNode = mix(base, tones.horizon, pow(float(1).sub(facing), 3).mul(0.6)) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
   const p = positionWorld;
   const dx = sin(p.x.mul(0.31).add(p.z.mul(0.17)).add(time.mul(1.1))).mul(0.045).add(sin(p.x.mul(-0.83).add(p.z.mul(0.49)).add(time.mul(1.7))).mul(0.03));
   const dz = sin(p.z.mul(0.27).sub(p.x.mul(0.21)).add(time.mul(0.9))).mul(0.045).add(sin(p.z.mul(0.91).add(p.x.mul(0.37)).add(time.mul(1.5))).mul(0.03));
@@ -295,10 +298,10 @@ function waterMaterial(): THREE.MeshStandardNodeMaterial {
  * Surface des lacs : une grille plane au niveau de chaque lac, réduite aux mailles qui touchent l'eau. Elle suit la
  * même rive que le terrain (`WorldLayout.waterAt`) et la déborde un peu, pour que son bord soit pris dans la berge.
  */
-function buildWater(layout: WorldLayout): THREE.Group {
+function buildWater(layout: WorldLayout, tones: Tones): THREE.Group {
   const out = new THREE.Group();
-  const hit: WaterHit = { sd: Infinity, level: 0 };
-  const mat = waterMaterial();
+  const hit: WaterHit = { sd: Infinity, level: 0, beach: 0 };
+  const mat = waterMaterial(tones);
   for (const lake of layout.lakes) {
     const x0 = Math.min(...lake.shore.map((q) => q[0])) - 3 * WATER_CELL_M;
     const z0 = Math.min(...lake.shore.map((q) => q[1])) - 3 * WATER_CELL_M;
@@ -348,17 +351,12 @@ function buildWater(layout: WorldLayout): THREE.Group {
 
 /* ---------- Horizon : montagnes, nuages et ciel ---------- */
 
-/** Direction du soleil vue du sol : à 45° de hauteur environ. */
-const SUN_DIRECTION = new THREE.Vector3(0.55, 0.78, 0.35).normalize();
 /** Exposant du dégradé du ciel : plus il est petit, plus le bleu du zénith descend vers l'horizon. */
 const SKY_CURVE = 0.5;
 /** Cosinus du rayon apparent du disque du soleil (2,2°, plus gros que le vrai : style des maquettes). */
 const SUN_DISC_COS = Math.cos((2.2 * Math.PI) / 180);
 /** Portée des ombres portées autour de la caméra, en m. */
 const SHADOW_RANGE_M = 80;
-/** Densité de la brume : 7 % à 2 km, un quart à 4 km, les deux tiers à 8 km. Elle détache les plans sans effacer les montagnes. */
-const FOG_DENSITY = 0.00013;
-
 /**
  * Rayon du pied des montagnes dans la direction `a` (rad), depuis le centre du réseau : un rectangle arrondi qui suit
  * la boîte du réseau à `FAR_MARGIN_M` près. Un cercle laisserait les montagnes deux fois plus loin sur les petits côtés.
@@ -443,7 +441,7 @@ function buildMountains(layout: WorldLayout, segments: number): THREE.Mesh {
  * posés derrière les montagnes, bas sur l'horizon. Ils ne reçoivent ni la lumière de la scène (le vert du sol les
  * teintait) ni la brume (elle effacerait ceux de l'horizon) : blancs dessus, gris-bleu dessous, d'après leur orientation.
  */
-function buildClouds(layout: WorldLayout, count: number): THREE.InstancedMesh {
+function buildClouds(layout: WorldLayout, count: number, tones: Tones): THREE.InstancedMesh {
   const rand = mulberry32(99);
   const puffs: [number, number, number, number][] = [
     [0, 0, 0, 1],
@@ -455,7 +453,7 @@ function buildClouds(layout: WorldLayout, count: number): THREE.InstancedMesh {
   const geo = merge(puffs.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 3).translate(x, y, z)));
   geo.scale(1, 0.62, 0.8);
   const mat = new THREE.MeshBasicNodeMaterial({ fog: false });
-  mat.colorNode = mix(color(PALETTE.cloudUnder), color(PALETTE.cloudTop), tslSmoothstep(-0.55, 0.45, normalWorld.y)) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
+  mat.colorNode = mix(tones.cloudUnder, tones.cloudTop, tslSmoothstep(-0.55, 0.45, normalWorld.y)) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
   const far = Math.round(count / 2);
   const clouds = new THREE.InstancedMesh(geo, mat, count + far);
   clouds.frustumCulled = false;
@@ -480,17 +478,17 @@ function buildClouds(layout: WorldLayout, count: number): THREE.InstancedMesh {
 }
 
 /**
- * Ciel calculé par pixel : dégradé de l'horizon au zénith, lueur large vers le soleil et disque du soleil.
- * `sunDir` : direction du soleil vue du sol, normalisée.
+ * Ciel calculé par pixel : dégradé de l'horizon au zénith, lueur large vers le soleil et disque du soleil. Ses
+ * couleurs et la direction du soleil viennent de l'ambiance (`tones`).
  */
-function buildSky(sunDir: THREE.Vector3): THREE.Mesh {
+function buildSky(tones: Tones): THREE.Mesh {
   const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: false });
   const dir = normalize(positionLocal);
-  const base = mix(color(PALETTE.horizon), color(PALETTE.sky), pow(dir.y.max(0), SKY_CURVE));
-  const toSun = dir.dot(vec3(sunDir.x, sunDir.y, sunDir.z)).max(0);
-  const halo = pow(toSun, 5).mul(0.16).add(pow(toSun, 90).mul(0.4));
+  const base = mix(tones.horizon, tones.zenith, pow(dir.y.max(0), SKY_CURVE));
+  const toSun = dir.dot(tones.sunDirection).max(0);
+  const halo = pow(toSun, 5).mul(tones.haloWide).add(pow(toSun, 90).mul(tones.haloTight));
   const disc = tslSmoothstep(SUN_DISC_COS, SUN_DISC_COS + 0.0003, toSun);
-  mat.colorNode = base.add(color(PALETTE.sunGlow).mul(halo.add(disc.mul(2.5)))) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
+  mat.colorNode = base.add(tones.glow.mul(halo.add(disc.mul(2.5)))) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
   const m = new THREE.Mesh(new THREE.SphereGeometry(6000, 32, 16), mat);
   m.renderOrder = -1;
   return m;
@@ -498,7 +496,8 @@ function buildSky(sunDir: THREE.Vector3): THREE.Mesh {
 
 export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH, assets?: RiderAssets): World {
   const group = new THREE.Group();
-  const clouds = buildClouds(layout, opts.clouds);
+  const tones = createTones(DAY);
+  const clouds = buildClouds(layout, opts.clouds, tones);
   const terrain = new Terrain(layout, opts.terrainRadiusM);
   const places = buildPlaces(layout);
   const decor = new Decor(layout, opts.decor, opts.decorRadiusM, SHADOW_RANGE_M, places.clearings);
@@ -520,22 +519,24 @@ export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldO
   );
   plane.position.set(layout.center.x, -3, layout.center.z);
   plane.receiveShadow = true;
-  group.add(plane, buildWater(layout), places.group, buildRoadside(layout));
+  group.add(plane, buildWater(layout, tones), places.group, buildRoadside(layout));
 
   // Soleil et ciel à parts presque égales : les faces à l'ombre restent colorées, comme sur les maquettes.
-  const sun = new SunLight(0xfff1dc, 2.7);
-  sun.position.copy(SUN_DIRECTION);
+  const sun = new SunLight(DAY.sunColor, DAY.sunIntensity);
+  sun.position.copy(DAY.sunDirection);
   sun.castShadow = true;
   sun.shadow.mapSize.set(opts.shadowMapSize, opts.shadowMapSize);
   // Ombres portées sur 80 m seulement : la première cascade s'arrête vers 22 m, ce qui garde l'ombre du cycliste
   // (au centre de l'écran) nette. Plus loin, les arbres tiennent au sol par leur ombre de contact (`decor.ts`).
   sun.shadow.camera.far = SHADOW_RANGE_M;
-  const fill = new THREE.HemisphereLight(0xcfe2ff, 0x9fc27a, 2.0);
+  const fill = new THREE.HemisphereLight(DAY.hemiSky, DAY.hemiGround, DAY.hemiIntensity);
 
-  const sky = buildSky(SUN_DIRECTION);
-  scene.background = PALETTE.horizon.clone();
+  const sky = buildSky(tones);
+  const backdrop = DAY.horizon.clone();
+  scene.background = backdrop;
   // Brume de la couleur de l'horizon : elle bleuit les plans lointains, qui se fondent dans le bas du ciel.
-  scene.fog = new THREE.FogExp2(PALETTE.horizon.getHex(), FOG_DENSITY);
+  const fog = new THREE.FogExp2(DAY.horizon.getHex(), DAY.fogDensity);
+  scene.fog = fog;
   const marieSpot = layout.network.landmarks.find((l) => l.kind === 'marie');
   const marie =
     assets && marieSpot ? buildMarie(layout, assets, layout.network.edges.get(marieSpot.edge)!, marieSpot.s) : undefined;
@@ -547,6 +548,18 @@ export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldO
     group,
     sky,
     sun,
+    setAmbiance(a) {
+      tones.apply(a);
+      sun.color.set(a.sunColor);
+      sun.intensity = a.sunIntensity;
+      sun.position.copy(a.sunDirection);
+      fill.color.set(a.hemiSky);
+      fill.groundColor.set(a.hemiGround);
+      fill.intensity = a.hemiIntensity;
+      fog.color.copy(a.horizon);
+      fog.density = a.fogDensity;
+      backdrop.copy(a.horizon);
+    },
     prime(x, z) {
       terrain.prime(x, z);
       decor.prime(x, z);
