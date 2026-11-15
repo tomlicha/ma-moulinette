@@ -12,6 +12,7 @@
  * - `mood=day|sunset` force l'ambiance (par défaut celle du parcours `course`).
  * - `quality=low` : profil bas du monde (par défaut le profil haut, comme l'application).
  * - `webgl` pour forcer le repli WebGL2 ; `shadows=0` pour couper les ombres (juger le modelé sans auto-ombrage).
+ * - `gate=z1..z6|free` pose la porte d'un changement de palier `ahead` m devant le cycliste (60 par défaut), comme en séance.
  * - `pale` : cuissard gris clair sur le premier coureur, pour juger le modelé du bassin, invisible en noir.
  */
 import * as THREE from 'three/webgpu';
@@ -24,6 +25,8 @@ import { buildWorld, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW } from '../../src/rende
 import { fovFor, LOOK_AHEAD_M, lookHeight } from '../../src/render/ride-feel';
 import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from '../../src/render/world-layout';
 import { COL_DES_ERABLES } from '../../src/sim/courses/col-des-erables';
+import { IntervalGates } from '../../src/render/interval-gate';
+import type { Zone } from '../../src/workout/profile';
 import { Journey } from '../../src/sim/journey';
 
 const params = new URLSearchParams(location.search);
@@ -174,6 +177,12 @@ if (shot === 'marie' || shot === 'marie-chase' || shot === 'ride' || shot === 'm
     camera.position.set(p.x - f.x * back, p.y + num('camup', 1.85), p.z - f.z * back);
     camera.lookAt(p.x + f.x * LOOK_AHEAD_M, lookHeight(p.y, aheadY), p.z + f.z * LOOK_AHEAD_M);
     worldRider = { x: p.x, z: p.z };
+    if (params.has('gate')) {
+      const gates = new IntervalGates(journey, layout);
+      gates.set({ key: 1, zone: params.get('gate') as Zone, aheadM: num('ahead', 60) });
+      gates.update(2, d); // deux secondes de fondu : la porte est pleinement visible
+      scene.add(gates.group);
+    }
   }
   world.prime(worldRider.x, worldRider.z);
   // Ambiance du parcours choisi, ou celle de `mood=day|sunset`.
