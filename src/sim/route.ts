@@ -1,10 +1,12 @@
+import type { Course } from './course';
+
 export interface RouteSegment {
   lengthM: number;
   gradePct: number;
 }
 
 /** Parcours bouclé défini par segments de pente constante. Le dénivelé net doit être nul pour que la boucle soit continue. */
-export class Route {
+export class Route implements Course {
   readonly lengthM: number;
   private readonly starts: number[] = [];
   private readonly alts: number[] = [];

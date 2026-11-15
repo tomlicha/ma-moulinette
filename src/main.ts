@@ -11,7 +11,8 @@ import { DEFAULT_RIDER } from './sim/physics';
 import { Ride } from './sim/ride';
 import { setupExport } from './export/wiring';
 import { setupTelemetry } from './telemetry/wiring';
-import { DEMO_ROUTE } from './sim/route';
+import { COL_DES_ERABLES } from './sim/courses/col-des-erables';
+import { Journey } from './sim/journey';
 import type { ConnectionState, TrainerAdapter } from './sensors/types';
 import { ErgFollower } from './workout/erg-follower';
 import { STEP_LABEL, type Workout } from './workout/model';
@@ -33,6 +34,9 @@ import { setupRecap } from './ui/recap';
 import { summarize } from './ui/recap-model';
 import { createRadar } from './ui/radar';
 import { setupHomeBackground } from './ui/home-background';
+import { HOME_SCENES } from './ui/home-scenes';
+import { setupCoursePicker } from './ui/course-picker';
+import { setupCourseMap } from './ui/course-map';
 import { controlModes } from './ui/radar-model';
 import { ClimbCounter, PowerAverage } from './ui/hud-model';
 import type { RideSnapshot } from './sim/ride';
@@ -104,6 +108,8 @@ const massInput = $<HTMLInputElement>('mass');
 let throttle = new GradeThrottle();
 /** ERG engagé : la consigne de puissance prime, et l'envoi de la pente du parcours est suspendu pour ne pas la remplacer. */
 let ergActive = false;
+/** Le trajet de la page : la simulation, la vue 3D et le HUD le partagent ; il repart du village à chaque sortie. */
+const journey = new Journey(COL_DES_ERABLES);
 let ride: Ride | undefined;
 let rideTimer: ReturnType<typeof setInterval> | undefined;
 let lastTick = 0;
@@ -310,7 +316,8 @@ function setErgActive(on: boolean) {
 function startRide() {
   autoStart = false;
   const massKg = Number(massInput.value) || DEFAULT_RIDER.massKg;
-  ride = new Ride(DEMO_ROUTE, { ...DEFAULT_RIDER, massKg });
+  journey.setCourse(coursePicker.selected()); // la sortie repart du départ du parcours choisi, sans choix de carrefour en mémoire
+  ride = new Ride(journey, { ...DEFAULT_RIDER, massKg });
   lastRide = ride.snapshot();
   climb.reset();
   throttle.reset();
@@ -462,7 +469,50 @@ const homeSelect = $<HTMLSelectElement>('home-wo-select');
 const homeWoStart = $<HTMLButtonElement>('home-wo-start');
 const homeRideBtn = $<HTMLButtonElement>('home-ride');
 // Fond de l'accueil : trois scènes qui se relaient toutes les minutes.
-setupHomeBackground($('home-scenes'), $('home-title'), $('home-desc'));
+// L'accueil montre le parcours retenu (nom, description, scène qui lui ressemble, sans rotation). On le choisit dans le menu
+// que « Rouler » ouvre (`course-dialog`) : la carte de l'accueil n'a pas la place d'un sélecteur.
+const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'Rive du lac' };
+const courseScenes = COL_DES_ERABLES.courses.map((c) => HOME_SCENES.find((s) => s.name === COURSE_SCENE[c.id]) ?? HOME_SCENES[0]!);
+const homeBackground = setupHomeBackground($('home-scenes'), undefined, undefined, courseScenes, Infinity);
+// Carte du parcours : miniature dans le menu, agrandie dans sa propre boîte. Créée avant le menu, qui l'appelle d'emblée.
+const courseMap = setupCourseMap(COL_DES_ERABLES, {
+  thumb: $<HTMLButtonElement>('course-map'),
+  dialog: $<HTMLDialogElement>('map-dialog'),
+  title: $('map-title'),
+  description: $('map-desc'),
+  plan: $('map-plan'),
+  profile: $('map-profile'),
+  close: $<HTMLButtonElement>('map-close'),
+});
+// Le HUD n'existe pas encore quand le menu se crée (il appelle `onSelect` d'emblée) : on ne le touche qu'ensuite.
+let courseUiReady = false;
+const coursePicker = setupCoursePicker({
+  root: $('course-options'),
+  network: COL_DES_ERABLES,
+  store: prefs,
+  storeKey: 'zwift2.course',
+  onSelect: (course) => {
+    $('home-title').textContent = course.name;
+    $('home-desc').textContent = course.description;
+    homeBackground.show(COL_DES_ERABLES.courses.indexOf(course));
+    courseMap.show(course);
+    if (!ride) {
+      journey.setCourse(course.id);
+      if (courseUiReady) hud.refreshRoute();
+    }
+  },
+});
+courseUiReady = true;
+const courseDialog = $<HTMLDialogElement>('course-dialog');
+$('course-cancel').addEventListener('click', () => courseDialog.close());
+courseDialog.addEventListener('click', (e) => {
+  if (e.target === courseDialog) courseDialog.close(); // un clic sur le fond ferme, comme Échap
+});
+$('course-go').addEventListener('click', () => {
+  courseDialog.close();
+  router.go('sortie');
+  startRide();
+});
 // L'écran Séances a le même fond, sans titre ni description.
 setupHomeBackground($('sea-scenes'));
 // Et l'écran Appareils.
@@ -698,9 +748,14 @@ homeWoStart.addEventListener('click', () => {
   router.go('sortie');
   startWorkout();
 });
+// « Rouler » : une sortie déjà en cours se reprend ; sinon on choisit le parcours, puis « Partir » lance la sortie.
 homeRideBtn.addEventListener('click', () => {
-  router.go('sortie');
-  if (!ride) startRide();
+  if (ride) {
+    router.go('sortie');
+    return;
+  }
+  courseDialog.showModal();
+  $<HTMLButtonElement>('course-go').focus();
 });
 massInput.addEventListener('change', () => {
   try {
@@ -976,7 +1031,7 @@ const exporter = setupExport({
   hub,
   button: $<HTMLButtonElement>('export-fit'),
   stravaButton: $<HTMLButtonElement>('export-strava'),
-  routeName: DEMO_ROUTE.name,
+  routeName: journey.name,
   log,
   // Arrêt puis 5 s de pédalage après la fin : le récapitulatif s'efface de lui-même (docs/design/recap.md).
   onResumed: () => {
@@ -998,8 +1053,8 @@ function offerRecap(done?: { workout: Workout; ftpW: number }) {
   recap.show({
     summary: summarize(rec, { ftpW, ...(done ? { workout: done.workout } : {}) }),
     eyebrow: done ? 'Séance terminée' : 'Sortie terminée',
-    title: done?.workout.name ?? DEMO_ROUTE.name,
-    place: DEMO_ROUTE.name,
+    title: done?.workout.name ?? journey.name,
+    place: journey.name,
     startMs: rec.startMs,
     defaultName: exporter.defaultName(),
     strava: exporter.strava(),
@@ -1019,7 +1074,7 @@ if (webBluetoothAvailable()) {
 const params = new URLSearchParams(location.search);
 
 // HUD posé sur la vue 3D (docs/design/hud.md). En qualité réduite, panneaux sans flou.
-const hud = new RideHud($('hud'), DEMO_ROUTE, { flat: params.get('quality') === 'low' });
+const hud = new RideHud($('hud'), journey, { flat: params.get('quality') === 'low' });
 const fresh = (at: number) => performance.now() - at <= POWER_STALE_MS;
 function renderHud() {
   if (router.current() !== 'sortie') return;
@@ -1036,12 +1091,29 @@ function renderHud() {
     control: ergActive ? 'erg' : ride && trainer?.capabilities.simulation ? 'sim' : undefined,
     trainerConnected: roleState.trainer === 'connected',
     heartRateConnected: roleState.hr === 'connected',
+    ...(ride && lastRide ? { junction: journey.pendingJunction(lastRide.distanceM) } : {}),
   });
 }
 setInterval(renderHud, 250);
-RideView.create($<HTMLCanvasElement>('view'), DEMO_ROUTE, {
+// Choix au carrefour : touche du HUD, ou flèches gauche et droite pour glisser la sélection d'une route à l'autre.
+hud.onChoose = (i) => {
+  if (journey.choose(i)) renderHud();
+};
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || router.current() !== 'sortie' || document.querySelector('dialog[open]')) return;
+  const t = e.target;
+  if (t instanceof HTMLElement && t.closest('input, select, textarea, [contenteditable]')) return;
+  const by = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+  const p = by && ride && lastRide ? journey.pendingJunction(lastRide.distanceM) : undefined;
+  if (!by || !p) return;
+  e.preventDefault();
+  if (journey.choose(Math.min(p.options.length - 1, Math.max(0, p.selected + by)))) renderHud();
+});
+RideView.create($<HTMLCanvasElement>('view'), journey, {
   forceWebGL: params.get('renderer') === 'webgl2',
   quality: params.get('quality') === 'low' ? 'low' : 'high',
+  // `?relief=1` : relief réel ; `?relief=2` : plus marqué. Par défaut 1,6 : un 6 % se voit comme un 10 %.
+  ...(Number.isFinite(Number(params.get('relief'))) && params.get('relief') ? { relief: Math.min(3, Math.max(1, Number(params.get('relief')))) } : {}),
 })
   .then((v) => {
     view = v;
@@ -1064,7 +1136,7 @@ if (import.meta.env.DEV && params.has('recap')) {
   const sample = SAMPLE_WORKOUTS.find((s) => s.id === 'sweet-spot')!;
   void import('./ui/recap-demo').then((m) => {
     router.go('sortie');
-    m.showRecapDemo($('recap').parentElement!, params.get('recap') ?? '', parseWorkout(sample.fileName, sample.text), readFtp(), DEMO_ROUTE.name);
+    m.showRecapDemo($('recap').parentElement!, params.get('recap') ?? '', parseWorkout(sample.fileName, sample.text), readFtp(), journey.name);
   });
 }
 

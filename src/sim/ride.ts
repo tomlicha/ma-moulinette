@@ -1,5 +1,5 @@
 import { DEFAULT_RIDER, step, type RiderParams } from './physics';
-import type { Route } from './route';
+import type { Course } from './course';
 
 /**
  * Pas de simulation fixe : le résultat ne dépend pas de la cadence d'appel de `advance`.
@@ -28,7 +28,7 @@ export interface RideSnapshot {
   elapsedS: number;
 }
 
-/** Sortie virtuelle : intègre la puissance mesurée le long d'un parcours. */
+/** Sortie virtuelle : intègre la puissance mesurée le long d'un parcours (boucle, ou trajet sur un réseau routier). */
 export class Ride {
   private v = 0;
   private dist = 0;
@@ -37,7 +37,7 @@ export class Ride {
   private accMs = 0;
 
   constructor(
-    readonly route: Route,
+    readonly route: Course,
     readonly rider: RiderParams = DEFAULT_RIDER,
   ) {}
 
@@ -45,6 +45,7 @@ export class Ride {
   advance(dtS: number, powerW: number): RideSnapshot {
     this.accMs += Math.min(Math.max(0, Math.round(dtS * 1000)), MAX_CATCHUP_MS);
     while (this.accMs >= STEP_MS) {
+      this.route.update?.(this.dist); // un trajet valide ici ses carrefours, avant que la pente en dépende
       const grade = this.route.gradeAt(this.dist);
       this.idleSteps = powerW <= IDLE_POWER_W ? this.idleSteps + 1 : 0;
       const idle = this.idleSteps * STEP_S >= IDLE_DELAY_S && grade > DESCENT_GRADE_PCT;

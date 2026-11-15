@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { COL_DES_ERABLES } from '../sim/courses/col-des-erables';
+import { Journey } from '../sim/journey';
 import { DEMO_ROUTE, Route } from '../sim/route';
 import type { StepKind, WorkoutStep } from '../workout/model';
 import {
   ClimbCounter,
   findSeries,
   fmt1,
+  junctionLabel,
   nextSummitM,
   PowerAverage,
+  profileWindow,
   repetitionAt,
-  routeProfile,
   signed,
-  summitsOf,
+  turnArrow,
   upcoming,
   zoneLabel,
 } from './hud-model';
@@ -45,10 +48,6 @@ describe('ClimbCounter', () => {
 });
 
 describe('sommets', () => {
-  it('trouve le haut de la montée du parcours de démonstration', () => {
-    expect(summitsOf(DEMO_ROUTE)).toEqual([3000]);
-  });
-
   it('compte jusqu’au prochain sommet, tour suivant compris', () => {
     expect(nextSummitM(DEMO_ROUTE, 400)).toBe(2600);
     expect(nextSummitM(DEMO_ROUTE, 3500)).toBe(5500);
@@ -58,15 +57,54 @@ describe('sommets', () => {
   it('ne trouve rien sur un parcours plat', () => {
     expect(nextSummitM(new Route('Plat', [{ lengthM: 1000, gradePct: 0 }]), 10)).toBeUndefined();
   });
+
+  it('ignore une bosse de moins de 8 m', () => {
+    const bosse = new Route('Bosse', [
+      { lengthM: 100, gradePct: 0 },
+      { lengthM: 100, gradePct: 5 },
+      { lengthM: 100, gradePct: -5 },
+      { lengthM: 20000, gradePct: 0 },
+    ]);
+    expect(nextSummitM(bosse, 0)).toBeUndefined(); // 5 m de montée
+  });
+
+  it('trouve le sommet du Col sur un trajet réel', () => {
+    const j = new Journey(COL_DES_ERABLES);
+    // On prend le Col au Moulin : le trajet par défaut serait tout droit.
+    for (let d = 0; d <= 2300; d += 10) {
+      j.update(d);
+      const p = j.pendingJunction(d);
+      if (p) j.choose(p.options.findIndex((o) => o.edgeId === 'col'));
+    }
+    const toSummit = nextSummitM(j, 2300, 9000)!;
+    const there = j.altitudeAt(2300 + toSummit);
+    expect(there).toBeGreaterThan(365);
+    expect(toSummit).toBeGreaterThan(3000);
+  });
 });
 
-describe('routeProfile', () => {
-  it('place le sommet en haut et le départ en bas du repère', () => {
-    const p = routeProfile(DEMO_ROUTE, 600, 34);
-    expect(p.x(3000)).toBe(300);
-    expect(p.y(DEMO_ROUTE.altitudeAt(3000))).toBeCloseTo(3);
-    expect(p.y(DEMO_ROUTE.altitudeAt(0))).toBeCloseTo(31);
+describe('profileWindow', () => {
+  it('place le cycliste à 400 m du bord gauche et le sommet en haut du repère', () => {
+    const p = profileWindow(DEMO_ROUTE, 2600, 600, 34, 3000, 400);
+    expect(p.startM).toBe(2200);
+    expect(p.endM).toBe(5200);
+    expect(p.x(2600)).toBeCloseTo(80); // 400 m sur 3 000 m, dans 600 px
+    expect(p.y(100)).toBeCloseTo(3);
+    expect(p.y(40)).toBeCloseTo(31);
     expect(p.area.endsWith('Z')).toBe(true);
+  });
+
+  it('ne recule pas avant le départ', () => {
+    const p = profileWindow(DEMO_ROUTE, 100, 600, 34);
+    expect(p.startM).toBe(0);
+    expect(p.x(100)).toBeCloseTo(20); // 100 m sur 3 000 m
+  });
+
+  it('suit le relief en glissant : même forme, un peu plus loin', () => {
+    const a = profileWindow(DEMO_ROUTE, 1500, 600, 34);
+    const b = profileWindow(DEMO_ROUTE, 1520, 600, 34);
+    expect(b.startM - a.startM).toBe(20);
+    expect(a.line).not.toBe(b.line);
   });
 });
 
@@ -163,5 +201,25 @@ describe('upcoming', () => {
     expect(items).toHaveLength(4);
     expect(rest).toBe(3);
     expect(upcoming(steps, [], 7, 260)).toEqual({ items: [], rest: 0 });
+  });
+});
+
+describe('junctionLabel', () => {
+  const opt = { edgeId: 'col', forward: true, onCourse: true, name: 'Le Col', lengthM: 6370, avgGradePct: 5.6, climbM: 357.4, turnDeg: -70, turn: 'left' as const };
+
+  it('donne la flèche, le nom et le résumé de la route', () => {
+    expect(junctionLabel(opt)).toEqual({ arrow: '←', name: 'Le Col', meta: '6,4 km · +5,6 % · +357 m' });
+  });
+
+  it('une flèche par direction, et pas de montée sur une descente', () => {
+    expect(junctionLabel({ ...opt, turnDeg: 80, turn: 'right' }).arrow).toBe('→');
+    expect(junctionLabel({ ...opt, turnDeg: 3, turn: 'straight' }).arrow).toBe('↑');
+    expect(junctionLabel({ ...opt, avgGradePct: -3.2, climbM: 4 }).meta).toBe('6,4 km · −3,2 %');
+  });
+});
+
+describe('turnArrow', () => {
+  it('distingue le biais, l’angle droit et l’épingle de chaque côté', () => {
+    expect([-130, -70, -40, 0, 40, 70, 130].map(turnArrow)).toEqual(['↙', '←', '↖', '↑', '↗', '→', '↘']);
   });
 });

@@ -4,7 +4,8 @@ import { BIKE_NODE } from './asset-contract';
 import type { RiderAssets } from './assets';
 import { RegionMaterial } from './region-material';
 import { aimBasis, DEFAULT_BODY as BODY, offset, SKELETON, sub, twoBone, v3, type Basis, type Joint, type V3 } from './rider-pose';
-import { ROAD_HALF, type WorldPath } from './world-path';
+import type { Edge } from '../sim/network';
+import { ROAD_HALF, sideOf, type WorldLayout } from './world-layout';
 
 /**
  * Marie, le même avatar que le cycliste, accroupie au bord de la route derrière son vélo retourné sur la selle et le
@@ -19,9 +20,7 @@ import { ROAD_HALF, type WorldPath } from './world-path';
 const SHOULDER_GAP_M = 2.0;
 /** Distance entre Marie et le plan du vélo, en m. */
 const STANCE_M = 0.72;
-/** Distance à laquelle Marie est assise sur le parcours (sur la montée, loin de la clôture). */
-export const MARIE_DISTANCE_M = 1850;
-/** Au-delà de cette distance le long de la route, Marie n'est ni dessinée ni animée. */
+/** Au-delà de cette distance au cycliste, Marie n'est ni dessinée ni animée. */
 const VISIBLE_RANGE_M = 400;
 
 const DEG = Math.PI / 180;
@@ -107,13 +106,16 @@ function crouchPose(hub: V3, wiggle: number): Pose {
 export interface Marie {
   group: THREE.Group;
   /**
-   * Fait tourner la roue arrière et balance Marie au rythme de son geste. Avec `riderDistM`, Marie disparaît (et ne coûte
+   * Fait tourner la roue arrière et balance Marie au rythme de son geste. Avec `rider`, Marie disparaît (et ne coûte
    * plus rien) quand le coureur en est loin : avatar et vélo pèsent plus de 500 000 triangles.
    */
-  update(dtS: number, riderDistM?: number): void;
+  update(dtS: number, rider?: { x: number; z: number }): void;
+  /** Position de Marie dans le monde, pour les vues de test. */
+  readonly position: THREE.Vector3;
 }
 
-export function buildMarie(path: WorldPath, assets: RiderAssets, d = MARIE_DISTANCE_M): Marie {
+/** Marie au bord de `edge`, à l'abscisse `s`, du côté droit de la route dans son sens de définition. */
+export function buildMarie(layout: WorldLayout, assets: RiderAssets, edge: Edge, s: number): Marie {
   const root = new THREE.Group();
   const kit = new RegionMaterial(); // la palette du cycliste
   const paint = (o: THREE.Object3D) =>
@@ -185,24 +187,24 @@ export function buildMarie(path: WorldPath, assets: RiderAssets, d = MARIE_DISTA
 
   /* ---------- Pose dans le monde ---------- */
   const lat = -(ROAD_HALF + SHOULDER_GAP_M);
-  const p = path.point(d);
-  const s = path.side(d);
-  const grade = (path.point(d + 1).y - path.point(d - 1).y) / 2;
+  const p = edge.pointAt(s);
+  const side = sideOf(edge.headingAt(s)); // la gauche : le côté de la route, vu de Marie
+  // Pente à l'image : le relief est exagéré, Marie suit le sol tel qu'il est dessiné.
+  const grade = layout.relief * ((edge.altitudeAt(s + 1) - edge.altitudeAt(s - 1)) / 2);
   root.rotation.order = 'YXZ';
-  // +x local → vers la route (+s), z local → sens de la marche ; l'ensemble suit la pente.
-  root.rotation.y = Math.atan2(-s.z, s.x);
+  // +x local → vers la route (+side), z local → sens de la marche ; l'ensemble suit la pente.
+  root.rotation.y = Math.atan2(-side.z, side.x);
   root.rotation.x = -Math.atan(grade);
-  root.position.set(p.x + s.x * lat, path.groundHeight(d, lat), p.z + s.z * lat);
+  const x = p.x + side.x * lat;
+  const z = p.z + side.z * lat;
+  root.position.set(x, layout.groundY(x, z), z);
 
   let t = 0;
   return {
     group: root,
-    update(dtS: number, riderDistM?: number) {
-      if (riderDistM !== undefined) {
-        const lap = path.route.lengthM;
-        const delta = (((riderDistM - d) % lap) + lap + lap / 2) % lap - lap / 2;
-        root.visible = Math.abs(delta) < VISIBLE_RANGE_M;
-      }
+    position: root.position,
+    update(dtS: number, rider?: { x: number; z: number }) {
+      if (rider) root.visible = Math.hypot(rider.x - x, rider.z - z) < VISIBLE_RANGE_M;
       if (!root.visible) return;
       t += dtS;
       rearWheel.rotation.x -= dtS * 2.4;

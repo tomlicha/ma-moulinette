@@ -2,7 +2,8 @@ import * as THREE from 'three/webgpu';
 import { float, mix, uniform, uv } from 'three/tsl';
 import type { IntervalGate } from '../workout/gate';
 import type { Zone } from '../workout/profile';
-import { ROAD_HALF, type WorldPath } from './world-path';
+import type { Journey } from '../sim/journey';
+import { ROAD_HALF, type WorldLayout } from './world-layout';
 
 /** Couleurs des zones, les mêmes que celles du HUD (`--hz1` à `--hz6` dans ui/hud.css) ; palier libre en blanc. */
 const ZONE_COLOR: Record<Zone, number> = {
@@ -66,12 +67,12 @@ class GateMesh {
     this.group.visible = a > 0.001;
   }
 
-  /** Pose la porte en travers de la route à la distance `d`, face au sens de la marche. */
-  place(path: WorldPath, d: number, p: THREE.Vector3, f: THREE.Vector3) {
-    path.point(d, p);
-    path.forward(d, f);
-    this.group.position.copy(p);
-    this.group.lookAt(p.x + f.x, p.y, p.z + f.z);
+  /** Pose la porte en travers de la route à la distance `d` du trajet, face au sens de la marche. */
+  place(journey: Journey, layout: WorldLayout, d: number) {
+    const pt = journey.pointAt(d);
+    const y = layout.y(pt.y);
+    this.group.position.set(pt.x, y, pt.z);
+    this.group.lookAt(pt.x + Math.cos(pt.heading), y, pt.z + Math.sin(pt.heading));
   }
 }
 
@@ -93,10 +94,8 @@ export class IntervalGates {
   readonly group = new THREE.Group();
   private readonly slots: Slot[];
   private target?: IntervalGate;
-  private readonly p = new THREE.Vector3();
-  private readonly f = new THREE.Vector3();
 
-  constructor(private readonly path: WorldPath) {
+  constructor(private readonly journey: Journey, private readonly layout: WorldLayout) {
     this.slots = [0, 1].map(() => ({ mesh: new GateMesh(), key: -1, dist: 0, alpha: 0, leaving: false }));
     for (const s of this.slots) this.group.add(s.mesh.group);
   }
@@ -129,7 +128,7 @@ export class IntervalGates {
         if (s.alpha === 0) s.key = -1;
       }
       s.mesh.setFade(s.key < 0 ? 0 : s.alpha);
-      if (s.key >= 0) s.mesh.place(this.path, s.dist, this.p, this.f);
+      if (s.key >= 0) s.mesh.place(this.journey, this.layout, s.dist);
     }
   }
 }

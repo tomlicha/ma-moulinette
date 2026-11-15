@@ -9,6 +9,7 @@
     "deploy:app": "npm run build && npx wrangler deploy -c wrangler.app.toml",
     "test": "vitest run",
     "assets": "node tools/assets/build.ts",
+    "map": "node tools/map/build.mjs",
     "logs:serve": "node tools/log-server.ts"
   },
   "devDependencies": {

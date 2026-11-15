@@ -1,212 +1,149 @@
 import * as THREE from 'three/webgpu';
 import { SunLight } from 'three/addons/lights/SunLight.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { attribute, cameraPosition, color, float, mix, normalWorld, normalize, positionLocal, positionWorld, pow, sin, smoothstep as tslSmoothstep, time, transformNormalToView, vec3 } from 'three/tsl';
+import type { Edge } from '../sim/network';
 import type { RiderAssets } from './assets';
+import { Decor, DECOR_HIGH, DECOR_LOW, type DecorOptions } from './decor';
+import { faceted, instanced, merge } from './geometry-utils';
 import { buildMarie } from './marie';
 import { fbm, mulberry32, smoothstep, valueNoise } from './noise';
-import { ROAD_HALF, TERRAIN_HALF, type WorldPath } from './world-path';
+import { PALETTE } from './palette';
+import { buildPlaces } from './places';
+import { buildRoadside } from './roadside';
+import { asphaltGrain, cloudShade } from './shade';
+import { Terrain } from './terrain';
+import { forestCover } from './vegetation';
+import { FAR_MARGIN_M, ROAD_HALF, sideOf, type WaterHit, type WorldLayout } from './world-layout';
 
 /**
- * Monde « Col des Érables » d'après la planche de style : prairie verte, sapins à étages et feuillus en bulles,
- * rochers et nuages arrondis, clôture en bois, montagnes enneigées à l'horizon, route grise à ligne jaune.
+ * Portée de la caméra, en m : les montagnes et les nuages du côté opposé du réseau sont à plus de 15 km. La précision
+ * de profondeur dépend du plan proche, pas de celui-ci.
  */
-const PALETTE = {
-  sky: new THREE.Color(0x3f86d0),
-  horizon: new THREE.Color(0xd6e9f6),
-  grassDark: new THREE.Color(0x5e9842),
-  grassLight: new THREE.Color(0x8cc456),
-  sand: new THREE.Color(0xd9cb98),
-  fir: new THREE.Color(0x3c8f5f),
-  leaf: new THREE.Color(0x5fae3e),
-  trunk: new THREE.Color(0x6b4a2e),
-  rock: new THREE.Color(0xb7bcc4),
-  road: new THREE.Color(0x4c505b),
-  centerLine: new THREE.Color(0xf2cf3a),
-  edgeLine: new THREE.Color(0xf4f4f0),
-  wood: new THREE.Color(0xb3864e),
-  gantry: new THREE.Color(0x0e1726),
-  accent: '#5BE3C9',
-  mountainGrass: new THREE.Color(0x77ad55),
-  mountainRock: new THREE.Color(0x9aa69a),
-  snow: new THREE.Color(0xf3f6f9),
-};
+export const CAMERA_FAR_M = 20000;
 
 export interface World {
   group: THREE.Group;
   sky: THREE.Mesh;
   sun: SunLight;
-  /** Anime les éléments vivants du décor (Marie et sa roue). */
-  update(dtS: number, riderDistM?: number): void;
+  /** Construit d'un coup le décor autour de (x, z) : à l'ouverture de la vue. */
+  prime(x: number, z: number): void;
+  /**
+   * Anime les éléments vivants du décor (Marie et sa roue) et peuple le terrain et le décor autour du cycliste.
+   * Marie disparaît quand le cycliste en est loin.
+   */
+  update(dtS: number, rider?: { x: number; z: number }): void;
+  /** Ce qui est construit en ce moment, pour les mesures. */
+  stats(): { chunks: number; decorInstances: number; coarseNearRoad: number };
 }
 
 export interface WorldOptions {
-  /** Nombre d'arbres instanciés (sapins et feuillus). */
-  trees: number;
-  /** Nombre de rochers. */
-  rocks: number;
+  decor: DecorOptions;
+  /** Rayon de relief et de décor construits autour du cycliste, en m. */
+  terrainRadiusM: number;
+  decorRadiusM: number;
   /** Nombre de nuages. */
   clouds: number;
-  /** Découpage de l'anneau de montagnes autour de la boucle. */
+  /** Découpage de l'anneau de montagnes autour du réseau. */
   mountainSegments: number;
   /** Définition de chaque cascade d'ombre. */
   shadowMapSize: number;
 }
 
-export const WORLD_HIGH: WorldOptions = { trees: 2200, rocks: 520, clouds: 60, mountainSegments: 256, shadowMapSize: 2048 };
-export const WORLD_LOW: WorldOptions = { trees: 700, rocks: 160, clouds: 30, mountainSegments: 128, shadowMapSize: 1024 };
+export const WORLD_HIGH: WorldOptions = {
+  decor: DECOR_HIGH,
+  terrainRadiusM: 1200,
+  decorRadiusM: 800,
+  clouds: 60,
+  mountainSegments: 256,
+  shadowMapSize: 2048,
+};
+export const WORLD_LOW: WorldOptions = {
+  decor: DECOR_LOW,
+  terrainRadiusM: 800,
+  decorRadiusM: 480,
+  clouds: 30,
+  mountainSegments: 192,
+  shadowMapSize: 1024,
+};
 
-/* ---------- Outils de géométrie ---------- */
+/* ---------- Routes ---------- */
 
-/** Bruit déterministe d'un sommet : les sommets confondus d'un maillage non indexé bougent ensemble. */
-function vertexNoise(x: number, y: number, z: number, seed: number): number {
-  let h = Math.imul(Math.round(x * 1000), 374761393) ^ Math.imul(Math.round(y * 1000), 668265263);
-  h = (h ^ Math.imul(Math.round(z * 1000), 2246822519) ^ seed) >>> 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return (((h ^ (h >>> 16)) >>> 0) / 4294967296) * 2 - 1;
-}
+/** Une route est tenue à l'écart des bouts : pas de tirets ni de lignes dans la zone d'un carrefour, en m. */
+const JUNCTION_CLEAR_M = 12;
+/** Largeur du bas-côté sableux, mesurée depuis l'axe de la route, en m. */
+const SHOULDER_OUT_M = 4.5;
+/** Rayon de la plaque d'asphalte posée à chaque carrefour, en m. */
+const JUNCTION_RADIUS_M = 12;
 
-/** Bosselle une forme autour de son centre (`amount` : écart relatif du rayon), facettes nettes. */
-function lumpy(geo: THREE.BufferGeometry, amount: number, seed: number): THREE.BufferGeometry {
-  const g = geo.index ? geo.toNonIndexed() : geo;
-  const pos = g.getAttribute('position');
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const k = 1 + amount * vertexNoise(x, y, z, seed);
-    pos.setXYZ(i, x * k, y * k, z * k);
-  }
-  g.computeVertexNormals();
-  return g;
-}
+type Keep = (e: Edge, i: number, s0: number, s1: number) => boolean;
 
-/** Facettes nettes (style des maquettes) : sommets non partagés, normales de face. */
-function faceted(geo: THREE.BufferGeometry): THREE.BufferGeometry {
-  const g = geo.index ? geo.toNonIndexed() : geo;
-  g.deleteAttribute('normal');
-  g.computeVertexNormals();
-  return g;
-}
-
-function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const clean = parts.map((p) => {
-    const g = p.index ? p.toNonIndexed() : p;
-    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
-    return g;
-  });
-  return mergeGeometries(clean)!;
-}
-
-/** Bande de largeur variable le long de la route, de `latA` à `latB`, découpée en pas de `stepM`. */
-function ribbon(
-  path: WorldPath,
-  latA: number,
-  latB: number,
-  lift: number,
-  stepM: number,
-  keep: (i: number) => boolean = () => true,
-): THREE.BufferGeometry {
-  const n = Math.round(path.route.lengthM / stepM);
-  const pos: number[] = [];
-  const idx: number[] = [];
-  const p = new THREE.Vector3();
-  const s = new THREE.Vector3();
-  for (let i = 0; i < n; i++) {
-    if (!keep(i)) continue;
-    const base = pos.length / 3;
-    for (const d of [i * stepM, (i + 1) * stepM]) {
-      path.point(d, p);
-      path.side(d, s);
-      pos.push(p.x + s.x * latA, p.y + lift, p.z + s.z * latA, p.x + s.x * latB, p.y + lift, p.z + s.z * latB);
+/**
+ * Bande de largeur variable le long de chaque route, de `latA` à `latB` (positif = à gauche), en pas de `stepM`.
+ * Un seul maillage pour toutes les routes : quelques appels de dessin pour tout le réseau.
+ */
+function ribbon(layout: WorldLayout, latA: number, latB: number, lift: number, stepM: number, keep: Keep = () => true): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const e of layout.edges) {
+    const n = Math.max(1, Math.round(e.lengthM / stepM));
+    const pos: number[] = [];
+    const idx: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const s0 = (i * e.lengthM) / n;
+      const s1 = ((i + 1) * e.lengthM) / n;
+      if (!keep(e, i, s0, s1)) continue;
+      const base = pos.length / 3;
+      for (const s of [s0, s1]) {
+        const p = e.pointAt(s);
+        const side = sideOf(e.headingAt(s));
+        const y = layout.y(e.altitudeAt(s)) + lift;
+        pos.push(p.x + side.x * latA, y, p.z + side.z * latA, p.x + side.x * latB, y, p.z + side.z * latB);
+      }
+      idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
     }
-    idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
+    if (!idx.length) continue;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    parts.push(g);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
+  return mergeGeometries(parts)!;
 }
 
-/** Instances de `geo`, ombres portées et reçues, couleur par instance. */
-function instanced(geo: THREE.BufferGeometry, count: number, opts: { color?: THREE.Color; roughness?: number; shadows?: boolean } = {}) {
-  const m = new THREE.InstancedMesh(
-    geo,
-    new THREE.MeshStandardNodeMaterial({ color: opts.color ?? 0xffffff, roughness: opts.roughness ?? 0.9 }),
-    count,
-  );
-  m.castShadow = opts.shadows ?? true;
-  m.receiveShadow = true;
-  m.frustumCulled = false; // les instances couvrent toute la boucle : la sphère englobante de base ne vaut rien
-  return m;
-}
-
-/* ---------- Sol et route ---------- */
-
-function buildTerrain(path: WorldPath): THREE.Mesh {
-  const stepM = 6;
-  const cols = Math.round(path.route.lengthM / stepM);
-  // Rangées serrées près de la route : le bas-côté sableux a un bord net.
-  const lats = [-TERRAIN_HALF, -300, -200, -120, -70, -40, -22, -12, -6.8, -4.7, 0, 4.7, 6.8, 12, 22, 40, 70, 120, 200, 300, TERRAIN_HALF];
-  const rows = lats.length;
-  const pos = new Float32Array(cols * rows * 3);
-  const col = new Float32Array(cols * rows * 3);
-  const idx: number[] = [];
-  const p = new THREE.Vector3();
-  const s = new THREE.Vector3();
-  const c = new THREE.Color();
-  for (let i = 0; i < cols; i++) {
-    const d = i * stepM;
-    path.point(d, p);
-    path.side(d, s);
-    for (let j = 0; j < rows; j++) {
-      const lat = lats[j]!;
-      const k = (i * rows + j) * 3;
-      const x = p.x + s.x * lat;
-      const z = p.z + s.z * lat;
-      pos[k] = x;
-      pos[k + 1] = path.groundHeight(d, lat);
-      pos[k + 2] = z;
-      c.copy(PALETTE.grassDark).lerp(PALETTE.grassLight, 0.5 + 0.5 * fbm(x * 0.008, z * 0.008));
-      c.lerp(PALETTE.sand, 1 - smoothstep(4.7, 6.8, Math.abs(lat)));
-      col[k] = c.r;
-      col[k + 1] = c.g;
-      col[k + 2] = c.b;
-    }
-  }
-  for (let i = 0; i < cols; i++) {
-    const i2 = (i + 1) % cols;
-    for (let j = 0; j < rows - 1; j++) {
-      const a = i * rows + j;
-      const b = i2 * rows + j;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: 1 }));
-  m.receiveShadow = true;
-  return m;
-}
-
-function buildRoad(path: WorldPath): THREE.Group {
+function buildRoad(layout: WorldLayout): THREE.Group {
   const out = new THREE.Group();
-  const asphalt = new THREE.Mesh(
-    ribbon(path, -ROAD_HALF, ROAD_HALF, 0.04, 4),
-    new THREE.MeshStandardNodeMaterial({ color: PALETTE.road, roughness: 0.92 }),
-  );
+  const asphaltMat = new THREE.MeshStandardNodeMaterial({ roughness: 0.92 });
+  asphaltMat.colorNode = color(PALETTE.road).mul(asphaltGrain()).mul(cloudShade()) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
+  const asphalt = new THREE.Mesh(ribbon(layout, -ROAD_HALF, ROAD_HALF, 0.04, 4), asphaltMat);
   asphalt.receiveShadow = true;
   out.add(asphalt);
 
-  // Ligne centrale jaune en tirets (3 m peints, 6 m de vide), bords blancs continus.
+  // Bas-côté sableux : une bande de chaque côté, posée sous la chaussée, qui donne un bord net au gazon.
+  const sandMat = new THREE.MeshStandardNodeMaterial({ roughness: 1 });
+  sandMat.colorNode = color(PALETTE.sand).mul(cloudShade()) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
+  for (const [a, b] of [[-SHOULDER_OUT_M, -ROAD_HALF + 0.2], [ROAD_HALF - 0.2, SHOULDER_OUT_M]] as const) {
+    const shoulder = new THREE.Mesh(ribbon(layout, a, b, 0.025, 4), sandMat);
+    shoulder.receiveShadow = true;
+    out.add(shoulder);
+  }
+
+  // Plaque d'asphalte à chaque carrefour : elle couvre l'angle entre deux routes qui ne se prolongent pas.
+  const discs: THREE.BufferGeometry[] = [];
+  for (const n of layout.network.nodes.values()) {
+    discs.push(new THREE.CircleGeometry(JUNCTION_RADIUS_M, 28).rotateX(-Math.PI / 2).translate(n.x, layout.y(n.altitude) + 0.035, n.z));
+  }
+  const junctions = new THREE.Mesh(merge(discs), asphaltMat);
+  junctions.receiveShadow = true;
+  out.add(junctions);
+
+  // Ligne centrale jaune en tirets (3 m peints, 6 m de vide), bords blancs continus, hors de la zone des carrefours.
   const yellow = new THREE.MeshStandardNodeMaterial({ color: PALETTE.centerLine, roughness: 0.7 });
   const white = new THREE.MeshStandardNodeMaterial({ color: PALETTE.edgeLine, roughness: 0.75 });
-  const dashes = new THREE.Mesh(ribbon(path, -0.08, 0.08, 0.06, 3, (i) => i % 3 === 0), yellow);
-  const edgeL = new THREE.Mesh(ribbon(path, -ROAD_HALF + 0.25, -ROAD_HALF + 0.4, 0.06, 4), white);
-  const edgeR = new THREE.Mesh(ribbon(path, ROAD_HALF - 0.4, ROAD_HALF - 0.25, 0.06, 4), white);
+  const inside: Keep = (e, _i, s0, s1) => s0 > JUNCTION_CLEAR_M && s1 < e.lengthM - JUNCTION_CLEAR_M;
+  const dashes = new THREE.Mesh(ribbon(layout, -0.08, 0.08, 0.06, 3, (e, i, s0, s1) => i % 3 === 0 && inside(e, i, s0, s1)), yellow);
+  const edgeL = new THREE.Mesh(ribbon(layout, -ROAD_HALF + 0.25, -ROAD_HALF + 0.4, 0.06, 4, inside), white);
+  const edgeR = new THREE.Mesh(ribbon(layout, ROAD_HALF - 0.4, ROAD_HALF - 0.25, 0.06, 4, inside), white);
   for (const m of [dashes, edgeL, edgeR]) {
     m.receiveShadow = true;
     out.add(m);
@@ -214,148 +151,34 @@ function buildRoad(path: WorldPath): THREE.Group {
   return out;
 }
 
-/* ---------- Arbres ---------- */
-
-/** Sapin à étages : trois cônes empilés sur un tronc court (environ 6,5 m à l'échelle 1). */
-function firGeometry() {
-  const tiers: [number, number, number][] = [
-    [1.75, 2.5, 0.75], // rayon, hauteur, base
-    [1.35, 2.2, 2.05],
-    [0.95, 2.0, 3.35],
-  ];
-  const crown = merge(tiers.map(([r, h, y]) => new THREE.ConeGeometry(r, h, 10, 1).translate(0, y + h / 2, 0)));
-  const trunk = new THREE.CylinderGeometry(0.15, 0.2, 1.0, 7).translate(0, 0.45, 0);
-  return { crown: faceted(crown), trunk: faceted(trunk) };
-}
-
-/** Feuillu en bulles : une grosse boule et trois plus petites, bosselées, sur un tronc fin (environ 6 m). */
-function leafyGeometry() {
-  const blobs: [number, number, number, number][] = [
-    [0, 3.9, 0, 1.95],
-    [1.15, 3.35, 0.55, 1.25],
-    [-0.9, 3.45, -0.75, 1.2],
-    [0.2, 4.95, -0.5, 1.15],
-  ];
-  const crown = merge(blobs.map(([x, y, z, r], i) => lumpy(new THREE.IcosahedronGeometry(r, 1), 0.08, 11 + i).translate(x, y, z)));
-  const trunk = new THREE.CylinderGeometry(0.16, 0.24, 2.6, 7).translate(0, 1.3, 0);
-  return { crown, trunk: faceted(trunk) };
-}
-
-function buildTrees(path: WorldPath, count: number): THREE.Group {
-  const rand = mulberry32(1234);
-  const fir = firGeometry();
-  const leafy = leafyGeometry();
-  const nFir = Math.round(count * 0.55);
-  const nLeafy = count - nFir;
-  const firCrowns = instanced(fir.crown, nFir, { roughness: 0.85 });
-  const firTrunks = instanced(fir.trunk, nFir, { color: PALETTE.trunk, roughness: 1 });
-  const leafCrowns = instanced(leafy.crown, nLeafy, { roughness: 0.85 });
-  const leafTrunks = instanced(leafy.trunk, nLeafy, { color: PALETTE.trunk, roughness: 1 });
-
-  const dummy = new THREE.Object3D();
-  const p = new THREE.Vector3();
-  const s = new THREE.Vector3();
-  const color = new THREE.Color();
-  let iFir = 0;
-  let iLeafy = 0;
-  for (let i = 0; i < count; i++) {
-    const d = rand() * path.route.lengthM;
-    const sign = rand() < 0.5 ? -1 : 1;
-    const lat = sign * (ROAD_HALF + 7 + rand() * rand() * (TERRAIN_HALF - 40));
-    path.point(d, p);
-    path.side(d, s);
-    const scale = 0.75 + rand() * 0.8;
-    dummy.position.set(p.x + s.x * lat, path.groundHeight(d, lat) - 0.1, p.z + s.z * lat);
-    dummy.rotation.y = rand() * Math.PI * 2;
-    // Les sapins dominent en altitude et loin de la route, les feuillus près d'elle.
-    const isFir = (iFir < nFir && rand() < 0.35 + 0.4 * smoothstep(15, 160, Math.abs(lat))) || iLeafy >= nLeafy;
-    if (isFir) {
-      dummy.scale.set(scale, scale * (0.9 + rand() * 0.35), scale);
-      dummy.updateMatrix();
-      firCrowns.setMatrixAt(iFir, dummy.matrix);
-      firTrunks.setMatrixAt(iFir, dummy.matrix);
-      color.copy(PALETTE.fir).offsetHSL((rand() - 0.5) * 0.03, (rand() - 0.5) * 0.12, (rand() - 0.4) * 0.1);
-      firCrowns.setColorAt(iFir++, color);
-    } else {
-      dummy.scale.set(scale, scale * (0.85 + rand() * 0.3), scale);
-      dummy.updateMatrix();
-      leafCrowns.setMatrixAt(iLeafy, dummy.matrix);
-      leafTrunks.setMatrixAt(iLeafy, dummy.matrix);
-      color.copy(PALETTE.leaf).offsetHSL((rand() - 0.5) * 0.05, (rand() - 0.5) * 0.15, (rand() - 0.45) * 0.14);
-      leafCrowns.setColorAt(iLeafy++, color);
-    }
-  }
-  firCrowns.count = firTrunks.count = iFir;
-  leafCrowns.count = leafTrunks.count = iLeafy;
-  const g = new THREE.Group();
-  g.add(firTrunks, firCrowns, leafTrunks, leafCrowns);
-  return g;
-}
-
-/* ---------- Rochers ---------- */
-
-/** Rochers arrondis, souvent par deux ou trois, surtout près de la route. */
-function buildRocks(path: WorldPath, count: number): THREE.InstancedMesh {
-  const rand = mulberry32(777);
-  const geo = lumpy(new THREE.IcosahedronGeometry(1, 1), 0.16, 5);
-  const rocks = instanced(geo, count, { roughness: 0.95 });
-  const dummy = new THREE.Object3D();
-  const p = new THREE.Vector3();
-  const s = new THREE.Vector3();
-  const color = new THREE.Color();
-  let i = 0;
-  while (i < count) {
-    const d = rand() * path.route.lengthM;
-    const sign = rand() < 0.5 ? -1 : 1;
-    const lat0 = sign * (ROAD_HALF + 4 + rand() * rand() * 140);
-    const group = 1 + Math.floor(rand() * 3);
-    const big = 0.4 + rand() * rand() * 1.4;
-    for (let k = 0; k < group && i < count; k++) {
-      const dd = d + (k ? (rand() - 0.5) * 2.5 * big : 0);
-      const lat = lat0 + (k ? (rand() - 0.5) * 2.5 * big : 0);
-      path.point(dd, p);
-      path.side(dd, s);
-      const r = big * (k ? 0.45 + rand() * 0.35 : 1);
-      dummy.position.set(p.x + s.x * lat, path.groundHeight(dd, lat) - r * 0.25, p.z + s.z * lat);
-      dummy.rotation.set(rand() * 0.4, rand() * Math.PI * 2, rand() * 0.4);
-      dummy.scale.set(r * (1.1 + rand() * 0.4), r * (0.55 + rand() * 0.25), r * (0.9 + rand() * 0.3));
-      dummy.updateMatrix();
-      rocks.setMatrixAt(i, dummy.matrix);
-      color.copy(PALETTE.rock).offsetHSL(0, 0, (rand() - 0.5) * 0.1);
-      rocks.setColorAt(i++, color);
-    }
-  }
-  return rocks;
-}
-
 /* ---------- Clôture ---------- */
 
 /** Clôture en bois sur le bord droit, par tronçons : piquets tous les 2,6 m et deux lisses. */
-function buildFence(path: WorldPath): THREE.Group {
-  const lengthM = path.route.lengthM;
-  const stretches = [
-    [0.03 * lengthM, 0.27 * lengthM],
-    [0.55 * lengthM, 0.72 * lengthM],
-  ] as const;
-  const lat = -(ROAD_HALF + 2.3); // côté négatif : à droite dans le sens de la marche
+function buildFence(layout: WorldLayout): THREE.Group {
+  const lat = -(ROAD_HALF + 2.3); // côté négatif : à droite dans le sens de définition de la route
   const step = 2.6;
-  const posts: THREE.Vector3[][] = stretches.map(([a, b]) => {
+  const posts: THREE.Vector3[][] = [];
+  for (const l of layout.network.landmarks) {
+    if (l.kind !== 'fence') continue;
+    const e = layout.network.edges.get(l.edge)!;
     const out: THREE.Vector3[] = [];
-    const p = new THREE.Vector3();
-    const s = new THREE.Vector3();
-    for (let d = a; d <= b; d += step) {
-      path.point(d, p);
-      path.side(d, s);
-      out.push(new THREE.Vector3(p.x + s.x * lat, path.groundHeight(d, lat), p.z + s.z * lat));
+    for (let s = l.from; s <= l.to; s += step) {
+      const p = e.pointAt(s);
+      const side = sideOf(e.headingAt(s));
+      const x = p.x + side.x * lat;
+      const z = p.z + side.z * lat;
+      out.push(new THREE.Vector3(x, layout.groundY(x, z), z));
     }
-    return out;
-  });
+    posts.push(out);
+  }
+  const g = new THREE.Group();
   const nPosts = posts.reduce((n, l) => n + l.length, 0);
-  const nRails = posts.reduce((n, l) => n + 2 * (l.length - 1), 0);
+  if (!nPosts) return g;
+  const nRails = posts.reduce((n, l) => n + 2 * Math.max(0, l.length - 1), 0);
   const postGeo = faceted(new THREE.CylinderGeometry(0.075, 0.085, 1.25, 7).translate(0, 0.55, 0));
   const railGeo = new THREE.BoxGeometry(0.07, 0.11, 1); // le long de z, longueur 1 (étirée par instance)
   const postMesh = instanced(postGeo, nPosts, { color: PALETTE.wood, roughness: 0.9 });
-  const railMesh = instanced(railGeo, nRails, { color: PALETTE.wood, roughness: 0.9 });
+  const railMesh = instanced(railGeo, Math.max(1, nRails), { color: PALETTE.wood, roughness: 0.9 });
   const dummy = new THREE.Object3D();
   const mid = new THREE.Vector3();
   let ip = 0;
@@ -379,7 +202,7 @@ function buildFence(path: WorldPath): THREE.Group {
       }
     });
   }
-  const g = new THREE.Group();
+  railMesh.count = ir;
   g.add(postMesh, railMesh);
   return g;
 }
@@ -407,8 +230,8 @@ function bannerTexture(text: string): THREE.CanvasTexture | undefined {
   return tex;
 }
 
-/** Portique au-dessus de la route à la distance `d`, avec une banderole lisible des deux côtés. */
-function buildArch(path: WorldPath, d: number, text: string): THREE.Group {
+/** Portique au-dessus de la route à l'abscisse `s`, avec une banderole lisible des deux côtés. */
+function buildArch(layout: WorldLayout, edge: Edge, s: number, text: string): THREE.Group {
   const g = new THREE.Group();
   const navy = new THREE.MeshStandardNodeMaterial({ color: PALETTE.gantry, roughness: 0.6 });
   const span = ROAD_HALF + 0.9;
@@ -426,39 +249,142 @@ function buildArch(path: WorldPath, d: number, text: string): THREE.Group {
   banner.castShadow = true;
   g.add(banner);
 
-  const p = path.point(d);
-  const f = path.forward(d);
-  g.position.set(p.x, p.y, p.z);
-  g.lookAt(p.x + f.x, p.y, p.z + f.z);
+  const p = edge.pointAt(s);
+  const h = edge.headingAt(s);
+  const y = layout.y(edge.altitudeAt(s));
+  g.position.set(p.x, y, p.z);
+  g.lookAt(p.x + Math.cos(h), y, p.z + Math.sin(h));
   return g;
 }
 
-/** Arches du parcours : le départ, puis le pied de chaque montée, avec sa longueur et sa pente. */
-function buildArches(path: WorldPath): THREE.Group {
+function buildArches(layout: WorldLayout): THREE.Group {
   const g = new THREE.Group();
-  g.add(buildArch(path, 12, 'COL DES ÉRABLES'));
-  let start = 0;
-  for (const seg of path.route.segments) {
-    if (seg.gradePct >= 3) {
-      const km = (seg.lengthM / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-      g.add(buildArch(path, start + 8, `MONTÉE · ${km} km à ${seg.gradePct.toLocaleString('fr-FR')} %`));
-    }
-    start += seg.lengthM;
+  for (const l of layout.network.landmarks) {
+    if (l.kind === 'arch') g.add(buildArch(layout, layout.network.edges.get(l.edge)!, l.s, l.text));
   }
   return g;
 }
 
-/* ---------- Horizon : montagnes et nuages ---------- */
+/* ---------- Lacs ---------- */
+
+/** Maille de la surface d'un lac, en m. */
+const WATER_CELL_M = 10;
+/** La surface déborde de la rive de cette distance : son bord se perd dans la berge, en m. */
+const WATER_OVERLAP_M = 12;
+/** Distance à la rive à laquelle l'eau prend sa couleur du large, en m. */
+const WATER_DEEP_M = 45;
 
 /**
- * Anneau de collines puis de montagnes enneigées autour de la boucle, à facettes nettes. Il ferme l'horizon que
- * le relief proche (limité à `TERRAIN_HALF` de la route) laisserait plat.
+ * Eau d'un lac : claire près de la rive, sombre au large, teintée par le ciel aux angles rasants, avec deux trains de
+ * vaguelettes qui se croisent pour accrocher le soleil.
  */
-function buildMountains(path: WorldPath, segments: number): THREE.Mesh {
-  // Les montagnes commencent bien au-delà du relief proche : vues de la route, elles ferment l'horizon sans écraser la vue.
-  const r0 = path.radius + TERRAIN_HALF + 280;
-  const r1 = r0 + 2300;
-  const rings = 22;
+function waterMaterial(): THREE.MeshStandardNodeMaterial {
+  const mat = new THREE.MeshStandardNodeMaterial({ roughness: 0.2, metalness: 0 });
+  const base = mix(color(PALETTE.waterShallow), color(PALETTE.waterDeep), attribute('depth', 'float'));
+  // La surface est horizontale : l'angle du regard se lit sur sa seule composante verticale.
+  const facing = normalize(cameraPosition.sub(positionWorld)).y.max(0);
+  mat.colorNode = mix(base, color(PALETTE.horizon), pow(float(1).sub(facing), 3).mul(0.6)) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
+  const p = positionWorld;
+  const dx = sin(p.x.mul(0.31).add(p.z.mul(0.17)).add(time.mul(1.1))).mul(0.045).add(sin(p.x.mul(-0.83).add(p.z.mul(0.49)).add(time.mul(1.7))).mul(0.03));
+  const dz = sin(p.z.mul(0.27).sub(p.x.mul(0.21)).add(time.mul(0.9))).mul(0.045).add(sin(p.z.mul(0.91).add(p.x.mul(0.37)).add(time.mul(1.5))).mul(0.03));
+  mat.normalNode = transformNormalToView(normalize(vec3(dx, 1, dz))) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['normalNode']>;
+  return mat;
+}
+
+/**
+ * Surface des lacs : une grille plane au niveau de chaque lac, réduite aux mailles qui touchent l'eau. Elle suit la
+ * même rive que le terrain (`WorldLayout.waterAt`) et la déborde un peu, pour que son bord soit pris dans la berge.
+ */
+function buildWater(layout: WorldLayout): THREE.Group {
+  const out = new THREE.Group();
+  const hit: WaterHit = { sd: Infinity, level: 0 };
+  const mat = waterMaterial();
+  for (const lake of layout.lakes) {
+    const x0 = Math.min(...lake.shore.map((q) => q[0])) - 3 * WATER_CELL_M;
+    const z0 = Math.min(...lake.shore.map((q) => q[1])) - 3 * WATER_CELL_M;
+    const nx = Math.ceil((Math.max(...lake.shore.map((q) => q[0])) + 3 * WATER_CELL_M - x0) / WATER_CELL_M);
+    const nz = Math.ceil((Math.max(...lake.shore.map((q) => q[1])) + 3 * WATER_CELL_M - z0) / WATER_CELL_M);
+    const cols = nx + 1;
+    const sd = new Float32Array(cols * (nz + 1));
+    for (let b = 0; b <= nz; b++) for (let a = 0; a <= nx; a++) sd[b * cols + a] = layout.waterAt(x0 + a * WATER_CELL_M, z0 + b * WATER_CELL_M, hit).sd;
+
+    const y = layout.y(lake.level);
+    const slot = new Int32Array(cols * (nz + 1)).fill(-1);
+    const pos: number[] = [];
+    const depth: number[] = [];
+    const idx: number[] = [];
+    const vertex = (a: number, b: number) => {
+      const k = b * cols + a;
+      if (slot[k]! < 0) {
+        slot[k] = pos.length / 3;
+        pos.push(x0 + a * WATER_CELL_M, y, z0 + b * WATER_CELL_M);
+        depth.push(Math.min(1, Math.max(0, -sd[k]! / WATER_DEEP_M)));
+      }
+      return slot[k]!;
+    };
+    for (let b = 0; b < nz; b++) {
+      for (let a = 0; a < nx; a++) {
+        const k = b * cols + a;
+        if (Math.min(sd[k]!, sd[k + 1]!, sd[k + cols]!, sd[k + cols + 1]!) > WATER_OVERLAP_M) continue;
+        const v00 = vertex(a, b);
+        const v10 = vertex(a + 1, b);
+        const v01 = vertex(a, b + 1);
+        const v11 = vertex(a + 1, b + 1);
+        idx.push(v00, v01, v10, v10, v01, v11); // faces vers le haut
+      }
+    }
+    if (!idx.length) continue;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.receiveShadow = true;
+    out.add(mesh);
+  }
+  return out;
+}
+
+/* ---------- Horizon : montagnes, nuages et ciel ---------- */
+
+/** Direction du soleil vue du sol : à 45° de hauteur environ. */
+const SUN_DIRECTION = new THREE.Vector3(0.55, 0.78, 0.35).normalize();
+/** Exposant du dégradé du ciel : plus il est petit, plus le bleu du zénith descend vers l'horizon. */
+const SKY_CURVE = 0.5;
+/** Cosinus du rayon apparent du disque du soleil (2,2°, plus gros que le vrai : style des maquettes). */
+const SUN_DISC_COS = Math.cos((2.2 * Math.PI) / 180);
+/** Portée des ombres portées autour de la caméra, en m. */
+const SHADOW_RANGE_M = 80;
+/** Densité de la brume : 7 % à 2 km, un quart à 4 km, les deux tiers à 8 km. Elle détache les plans sans effacer les montagnes. */
+const FOG_DENSITY = 0.00013;
+
+/**
+ * Rayon du pied des montagnes dans la direction `a` (rad), depuis le centre du réseau : un rectangle arrondi qui suit
+ * la boîte du réseau à `FAR_MARGIN_M` près. Un cercle laisserait les montagnes deux fois plus loin sur les petits côtés.
+ */
+function horizonRadius(layout: WorldLayout, a: number): number {
+  const b = layout.bounds;
+  const hx = (b.maxX - b.minX) / 2 + FAR_MARGIN_M + 150;
+  const hz = (b.maxZ - b.minZ) / 2 + FAR_MARGIN_M + 150;
+  return Math.pow(Math.pow(Math.abs(Math.cos(a)) / hx, 4) + Math.pow(Math.abs(Math.sin(a)) / hz, 4), -0.25);
+}
+
+/** Dérive des nuages autour du centre du réseau, en rad/s : 8 m/s à 3 km du centre. */
+const CLOUD_DRIFT_RAD_S = 0.0027;
+/** Profondeur de la chaîne, du pied aux derniers sommets, en m. */
+const MOUNTAIN_DEPTH_M = 3200;
+/** Altitude de la limite des neiges sur la chaîne, en m. */
+const SNOW_LINE_M = 880;
+
+/**
+ * Chaîne de montagnes autour du réseau, à facettes nettes, en deux plans : des contreforts boisés, puis des sommets
+ * découpés et enneigés. Elle ferme l'horizon que le relief proche (qui retombe à plat à `FAR_MARGIN_M` des routes)
+ * laisserait plat.
+ */
+function buildMountains(layout: WorldLayout, segments: number): THREE.Mesh {
+  const { x: cx, z: cz } = layout.center;
+  const rings = 26;
   const pos = new Float32Array(segments * (rings + 1) * 3);
   const col = new Float32Array(segments * (rings + 1) * 3);
   const c = new THREE.Color();
@@ -467,22 +393,29 @@ function buildMountains(path: WorldPath, segments: number): THREE.Mesh {
     const a = (i / segments) * Math.PI * 2;
     const ca = Math.cos(a);
     const sa = Math.sin(a);
-    const peak = 400 + 520 * smoothstep(-0.6, 0.35, fbm(ca * 2.2 + 7, sa * 2.2 + 3, 4));
-    const foot = 70 + 60 * fbm(ca * 5 + 1, sa * 5 + 9, 3);
+    const r0 = horizonRadius(layout, a);
+    // Grands massifs (basse fréquence) découpés en sommets et en cols (haute fréquence, en crêtes).
+    const massif = 620 + 900 * smoothstep(-0.5, 0.4, fbm(ca * 2.2 + 7, sa * 2.2 + 3, 4));
+    const crest = 0.55 + 0.65 * Math.pow(1 - Math.abs(fbm(ca * 9 + 2, sa * 9 + 5, 2)), 2);
+    const peak = massif * crest;
+    const foot = 230 + 190 * (0.5 + 0.5 * fbm(ca * 5 + 1, sa * 5 + 9, 3));
+    // La ligne de crête n'est pas un cercle : elle avance et recule d'un massif à l'autre.
+    const crestAt = 0.26 + 0.1 * fbm(ca * 3 + 11, sa * 3 + 4, 2);
     for (let j = 0; j <= rings; j++) {
       const t = j / rings;
-      const r = r0 + (r1 - r0) * t;
-      const x = r * ca;
-      const z = r * sa;
-      const detail = 0.85 + 0.3 * fbm(x * 0.006, z * 0.006, 3);
-      const h = (foot * bump(t, -0.05, 0.42) + peak * bump(t, 0.22, 1)) * detail;
+      const r = r0 + MOUNTAIN_DEPTH_M * t;
+      const x = cx + r * ca;
+      const z = cz + r * sa;
+      const detail = 0.82 + 0.36 * fbm(x * 0.004, z * 0.004, 3);
+      const h = (foot * bump(t, -0.05, 0.46) + peak * bump(t, crestAt, 1)) * detail;
       const k = (i * (rings + 1) + j) * 3;
       pos[k] = x;
       pos[k + 1] = h - 2;
       pos[k + 2] = z;
-      const snowLine = 300 + 45 * valueNoise(x * 0.01, z * 0.01);
-      c.copy(PALETTE.mountainGrass).lerp(PALETTE.mountainRock, smoothstep(0.45 * snowLine, 0.85 * snowLine, h));
-      c.lerp(PALETTE.snow, smoothstep(snowLine - 20, snowLine + 20, h));
+      const snowLine = SNOW_LINE_M + 90 * valueNoise(x * 0.004, z * 0.004);
+      c.copy(PALETTE.mountainGrass).lerp(PALETTE.forestFloor, 0.75 * forestCover(x, z) * (1 - smoothstep(280, 520, h)));
+      c.lerp(PALETTE.mountainRock, smoothstep(0.42 * snowLine, 0.8 * snowLine, h));
+      c.lerp(PALETTE.snow, smoothstep(snowLine - 40, snowLine + 40, h));
       col.set([c.r, c.g, c.b], k);
     }
   }
@@ -501,11 +434,16 @@ function buildMountains(path: WorldPath, segments: number): THREE.Mesh {
   g.setIndex(idx);
   const m = new THREE.Mesh(faceted(g), new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: 1 }));
   m.receiveShadow = false;
+  m.frustumCulled = false;
   return m;
 }
 
-/** Nuages : grappes de boules lisses aplaties, blanches, au-dessus de l'horizon. */
-function buildClouds(path: WorldPath, count: number): THREE.InstancedMesh {
+/**
+ * Nuages : grappes de boules lisses aplaties. `count` nuages moyens au-dessus du pays, et moitié autant de gros cumulus
+ * posés derrière les montagnes, bas sur l'horizon. Ils ne reçoivent ni la lumière de la scène (le vert du sol les
+ * teintait) ni la brume (elle effacerait ceux de l'horizon) : blancs dessus, gris-bleu dessous, d'après leur orientation.
+ */
+function buildClouds(layout: WorldLayout, count: number): THREE.InstancedMesh {
   const rand = mulberry32(99);
   const puffs: [number, number, number, number][] = [
     [0, 0, 0, 1],
@@ -516,82 +454,113 @@ function buildClouds(path: WorldPath, count: number): THREE.InstancedMesh {
   ];
   const geo = merge(puffs.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 3).translate(x, y, z)));
   geo.scale(1, 0.62, 0.8);
-  const clouds = new THREE.InstancedMesh(
-    geo,
-    new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 1, emissive: new THREE.Color(0xc8d8e8), emissiveIntensity: 0.55 }),
-    count,
-  );
+  const mat = new THREE.MeshBasicNodeMaterial({ fog: false });
+  mat.colorNode = mix(color(PALETTE.cloudUnder), color(PALETTE.cloudTop), tslSmoothstep(-0.55, 0.45, normalWorld.y)) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
+  const far = Math.round(count / 2);
+  const clouds = new THREE.InstancedMesh(geo, mat, count + far);
   clouds.frustumCulled = false;
   const dummy = new THREE.Object3D();
-  for (let i = 0; i < count; i++) {
+  const top = layout.y(layout.edges.reduce((m, e) => Math.max(m, e.to.altitude, e.from.altitude), 0));
+  for (let i = 0; i < count + far; i++) {
     const a = rand() * Math.PI * 2;
-    const r = path.radius * (0.2 + rand() * 2.3);
-    const size = 40 + rand() * 50;
-    dummy.position.set(r * Math.cos(a), 150 + rand() * 160, r * Math.sin(a));
+    const horizon = i >= count;
+    // Les cumulus de l'horizon sont derrière la ligne de crête : ils dépassent des cols et des sommets bas.
+    const r = horizon ? horizonRadius(layout, a) + 2600 + rand() * 2800 : layout.radius * (0.1 + rand() * 1.6);
+    const size = horizon ? 220 + rand() * 260 : 40 + rand() * 50;
+    const y = horizon ? 750 + rand() * 650 : top + 180 + rand() * 260;
+    dummy.position.set(r * Math.cos(a), y, r * Math.sin(a));
     dummy.rotation.set(0, rand() * Math.PI * 2, 0);
-    dummy.scale.set(size, size * (0.8 + rand() * 0.4), size);
+    dummy.scale.set(size, size * (horizon ? 0.6 + rand() * 0.25 : 0.8 + rand() * 0.4), size);
     dummy.updateMatrix();
     clouds.setMatrixAt(i, dummy.matrix);
   }
+  // Les positions sont comptées depuis le centre du réseau : tourner l'ensemble fait dériver les nuages.
+  clouds.position.set(layout.center.x, 0, layout.center.z);
   return clouds;
 }
 
-function buildSky(): THREE.Mesh {
-  const geo = new THREE.SphereGeometry(6000, 24, 16);
-  const pos = geo.getAttribute('position');
-  const col = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const t = Math.pow(Math.max(0, pos.getY(i) / 6000), 0.3);
-    c.copy(PALETTE.horizon).lerp(PALETTE.sky, t);
-    col.set([c.r, c.g, c.b], i * 3);
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const m = new THREE.Mesh(
-    geo,
-    new THREE.MeshBasicNodeMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }),
-  );
+/**
+ * Ciel calculé par pixel : dégradé de l'horizon au zénith, lueur large vers le soleil et disque du soleil.
+ * `sunDir` : direction du soleil vue du sol, normalisée.
+ */
+function buildSky(sunDir: THREE.Vector3): THREE.Mesh {
+  const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, fog: false, depthWrite: false });
+  const dir = normalize(positionLocal);
+  const base = mix(color(PALETTE.horizon), color(PALETTE.sky), pow(dir.y.max(0), SKY_CURVE));
+  const toSun = dir.dot(vec3(sunDir.x, sunDir.y, sunDir.z)).max(0);
+  const halo = pow(toSun, 5).mul(0.16).add(pow(toSun, 90).mul(0.4));
+  const disc = tslSmoothstep(SUN_DISC_COS, SUN_DISC_COS + 0.0003, toSun);
+  mat.colorNode = base.add(color(PALETTE.sunGlow).mul(halo.add(disc.mul(2.5)))) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(6000, 32, 16), mat);
   m.renderOrder = -1;
   return m;
 }
 
-export function buildWorld(path: WorldPath, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH, assets?: RiderAssets): World {
+export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH, assets?: RiderAssets): World {
   const group = new THREE.Group();
+  const clouds = buildClouds(layout, opts.clouds);
+  const terrain = new Terrain(layout, opts.terrainRadiusM);
+  const places = buildPlaces(layout);
+  const decor = new Decor(layout, opts.decor, opts.decorRadiusM, SHADOW_RANGE_M, places.clearings);
   group.add(
-    buildTerrain(path),
-    buildRoad(path),
-    buildTrees(path, opts.trees),
-    buildRocks(path, opts.rocks),
-    buildFence(path),
-    buildArches(path),
-    buildMountains(path, opts.mountainSegments),
-    buildClouds(path, opts.clouds),
+    terrain.group,
+    buildRoad(layout),
+    decor.group,
+    buildFence(layout),
+    buildArches(layout),
+    buildMountains(layout, opts.mountainSegments),
+    clouds,
   );
 
-  // Sol de fond : une grille de cellules de 100 m. Un plan de deux grands triangles perd en précision de profondeur
-  // et finit par masquer la route posée 19 cm au-dessus.
+  // Sol de fond sous tout : une grille de cellules de 100 m, posée sous le relief lointain (qui ne descend jamais sous zéro).
+  const size = 2 * (layout.radius + FAR_MARGIN_M + 4000);
   const plane = new THREE.Mesh(
-    new THREE.PlaneGeometry(9000, 9000, 90, 90).rotateX(-Math.PI / 2),
+    new THREE.PlaneGeometry(size, size, Math.round(size / 100), Math.round(size / 100)).rotateX(-Math.PI / 2),
     new THREE.MeshStandardNodeMaterial({ color: PALETTE.grassDark, roughness: 1 }),
   );
-  plane.position.y = -0.15;
+  plane.position.set(layout.center.x, -3, layout.center.z);
   plane.receiveShadow = true;
-  group.add(plane);
+  group.add(plane, buildWater(layout), places.group, buildRoadside(layout));
 
-  const sun = new SunLight(0xfff3e0, 3.2);
-  sun.position.set(0.55, 0.85, 0.35);
+  // Soleil et ciel à parts presque égales : les faces à l'ombre restent colorées, comme sur les maquettes.
+  const sun = new SunLight(0xfff1dc, 2.7);
+  sun.position.copy(SUN_DIRECTION);
   sun.castShadow = true;
   sun.shadow.mapSize.set(opts.shadowMapSize, opts.shadowMapSize);
-  sun.shadow.camera.far = 140; // ombres nettes près de la caméra, rien à payer au loin
-  const fill = new THREE.HemisphereLight(0xcfe4ff, 0x7aa35a, 1.2);
+  // Ombres portées sur 80 m seulement : la première cascade s'arrête vers 22 m, ce qui garde l'ombre du cycliste
+  // (au centre de l'écran) nette. Plus loin, les arbres tiennent au sol par leur ombre de contact (`decor.ts`).
+  sun.shadow.camera.far = SHADOW_RANGE_M;
+  const fill = new THREE.HemisphereLight(0xcfe2ff, 0x9fc27a, 2.0);
 
-  const sky = buildSky();
+  const sky = buildSky(SUN_DIRECTION);
   scene.background = PALETTE.horizon.clone();
-  // Brume légère : elle bleuit les montagnes sans les effacer.
-  scene.fog = new THREE.Fog(PALETTE.horizon.getHex(), 1500, 11000);
-  const marie = assets ? buildMarie(path, assets) : undefined;
+  // Brume de la couleur de l'horizon : elle bleuit les plans lointains, qui se fondent dans le bas du ciel.
+  scene.fog = new THREE.FogExp2(PALETTE.horizon.getHex(), FOG_DENSITY);
+  const marieSpot = layout.network.landmarks.find((l) => l.kind === 'marie');
+  const marie =
+    assets && marieSpot ? buildMarie(layout, assets, layout.network.edges.get(marieSpot.edge)!, marieSpot.s) : undefined;
   if (marie) group.add(marie.group);
 
   scene.add(group, sky, sun, fill);
-  return { group, sky, sun, update: (dtS, riderDistM) => marie?.update(dtS, riderDistM) };
+  let lastRider: { x: number; z: number } | undefined;
+  return {
+    group,
+    sky,
+    sun,
+    prime(x, z) {
+      terrain.prime(x, z);
+      decor.prime(x, z);
+    },
+    update(dtS, rider) {
+      if (rider) lastRider = { x: rider.x, z: rider.z };
+      if (rider) {
+        terrain.update(rider.x, rider.z);
+        decor.update(rider.x, rider.z);
+      }
+      marie?.update(dtS, rider);
+      clouds.rotation.y += dtS * CLOUD_DRIFT_RAD_S;
+      places.update(dtS);
+    },
+    stats: () => ({ chunks: terrain.chunkCount, decorInstances: decor.instanceCount, coarseNearRoad: lastRider ? terrain.coarseNear(lastRider.x, lastRider.z, 300) : 0 }),
+  };
 }

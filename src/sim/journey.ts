@@ -1,0 +1,320 @@
+import type { Course } from './course';
+import type { CourseDef, Edge, RoadNetwork } from './network';
+
+/** Distance à laquelle un carrefour est annoncé, en m. */
+export const ANNOUNCE_M = 250;
+/**
+ * Distance avant le nœud où le choix se verrouille, en m. Plus grande que la demi-fenêtre de lissage de la pente (25 m) :
+ * la pente envoyée au trainer ne voit jamais une route encore indécise.
+ */
+export const LOCK_M = 40;
+/** Rayon de l'arc qui arrondit le coin d'un carrefour, en m : de part et d'autre du nœud. */
+export const CORNER_M = 12;
+/** En dessous de cet écart de cap, une route compte comme « tout droit », en degrés. */
+const STRAIGHT_DEG = 25;
+
+export type Turn = 'left' | 'straight' | 'right';
+
+export interface JunctionOption {
+  edgeId: string;
+  /** Vrai si la route se parcourt dans son sens de définition (départ → arrivée). */
+  forward: boolean;
+  name: string;
+  lengthM: number;
+  /** Vrai si c'est la route que le parcours propose ensuite. */
+  onCourse: boolean;
+  /** Pente moyenne dans le sens de marche, en %. */
+  avgGradePct: number;
+  /** Total des montées dans le sens de marche, en m. */
+  climbM: number;
+  /** Écart de cap : positif vers la droite, en degrés. */
+  turnDeg: number;
+  turn: Turn;
+}
+
+export interface PendingJunction {
+  nodeId: string;
+  /** Distance du trajet où se trouve le nœud, en m. */
+  atM: number;
+  /** Distance restante jusqu'au nœud, en m. */
+  distanceM: number;
+  /** Options de la gauche vers la droite. */
+  options: JunctionOption[];
+  /** Option retenue : le choix du cycliste, sinon le tout droit. */
+  selected: number;
+}
+
+export interface JourneyPoint {
+  x: number;
+  y: number;
+  z: number;
+  /** Cap en rad (`atan2(dz, dx)`), positif vers la droite. */
+  heading: number;
+  edgeId: string;
+}
+
+interface Leg {
+  edge: Edge;
+  forward: boolean;
+  startM: number;
+  lengthM: number;
+}
+
+const wrapPi = (a: number) => {
+  let x = (a + Math.PI) % (2 * Math.PI);
+  if (x < 0) x += 2 * Math.PI;
+  return x - Math.PI;
+};
+
+/**
+ * Trajet du cycliste sur le réseau : une suite de routes mises bout à bout, vue par la simulation comme un parcours
+ * à distance monotone. Les routes déjà validées sont figées. Au-delà, le trajet se prolonge par le choix en cours,
+ * sinon tout droit, sans rien valider à la place du cycliste.
+ */
+export class Journey implements Course {
+  private readonly committed: Leg[] = [];
+  private tentative: Leg[] = [];
+  private choice: number | undefined;
+
+  private courseDef: CourseDef | undefined;
+
+  /** `courseId` : le parcours à suivre (le premier du réseau par défaut) ; un réseau sans parcours va tout droit. */
+  constructor(readonly network: RoadNetwork, courseId?: string) {
+    this.courseDef = network.course(courseId);
+    this.reset();
+  }
+
+  /** Le parcours suivi, s'il y en a un. */
+  get course(): CourseDef | undefined {
+    return this.courseDef;
+  }
+
+  /** Nom du parcours suivi, sinon du réseau. */
+  get name(): string {
+    return this.courseDef?.name ?? this.network.name;
+  }
+
+  /** Change de parcours et repart du départ : à n'appeler qu'entre deux sorties. */
+  setCourse(courseId: string | undefined): void {
+    this.courseDef = this.network.course(courseId);
+    this.reset();
+  }
+
+  /** Remet le trajet au départ du réseau, sans aucun choix de carrefour : une nouvelle sortie. */
+  reset(): void {
+    const start = this.courseDef ? { edge: this.courseDef.guide[0]!, forward: true } : this.network.start;
+    const first = this.network.edges.get(start.edge)!;
+    this.committed.length = 0;
+    this.committed.push({ edge: first, forward: start.forward, startM: 0, lengthM: first.lengthM });
+    this.tentative = [];
+    this.choice = undefined;
+  }
+
+  /** Fin de la partie validée, en m. */
+  get committedEndM(): number {
+    const last = this.committed[this.committed.length - 1]!;
+    return last.startM + last.lengthM;
+  }
+
+  /** Valide les routes dont le verrou est passé. À appeler avec la distance du cycliste. */
+  update(distanceM: number): void {
+    while (distanceM >= this.committedEndM - LOCK_M) {
+      const last = this.committed[this.committed.length - 1]!;
+      const options = this.optionsAfter(last);
+      const index = this.choice ?? defaultIndex(options);
+      this.committed.push(this.legFor(options[index]!, last.startM + last.lengthM));
+      this.choice = undefined;
+      this.tentative = [];
+    }
+  }
+
+  /** Le prochain carrefour, s'il est annoncé et pas encore verrouillé. */
+  pendingJunction(distanceM: number): PendingJunction | undefined {
+    const atM = this.committedEndM;
+    if (atM - distanceM > ANNOUNCE_M || atM - distanceM <= LOCK_M) return undefined;
+    const last = this.committed[this.committed.length - 1]!;
+    const options = this.optionsAfter(last);
+    return {
+      nodeId: this.endNodeId(last),
+      atM,
+      distanceM: atM - distanceM,
+      options,
+      selected: this.choice ?? defaultIndex(options),
+    };
+  }
+
+  /** Retient l'option `index` du prochain carrefour. Renvoie faux si elle n'existe pas. */
+  choose(index: number): boolean {
+    const options = this.optionsAfter(this.committed[this.committed.length - 1]!);
+    if (!Number.isInteger(index) || index < 0 || index >= options.length) return false;
+    this.choice = index;
+    this.tentative = [];
+    return true;
+  }
+
+  altitudeAt(distanceM: number): number {
+    const d = Math.max(0, distanceM);
+    const leg = this.legAt(d);
+    return leg.edge.altitudeAt(this.edgeS(leg, d));
+  }
+
+  /** Pente lissée sur 2 × `halfWindowM`, sans reculer avant le départ. */
+  gradeAt(distanceM: number, halfWindowM = 25): number {
+    const lo = Math.max(0, distanceM - halfWindowM);
+    const hi = Math.max(lo + 1, distanceM + halfWindowM);
+    return ((this.altitudeAt(hi) - this.altitudeAt(lo)) / (hi - lo)) * 100;
+  }
+
+  /**
+   * Position, altitude et cap à la distance `distanceM`. À moins de `CORNER_M` d'un carrefour, la trajectoire est un arc
+   * (courbe de Bézier) qui coupe le coin entre les deux routes : le cycliste tourne, il ne pivote pas sur un angle. L'altitude
+   * et la distance n'en sont pas touchées (les bouts de route sont plats).
+   */
+  pointAt(distanceM: number): JourneyPoint {
+    const d = Math.max(0, distanceM);
+    const leg = this.legAt(d);
+    const toStart = d - leg.startM;
+    const toEnd = leg.startM + leg.lengthM - d;
+    // Le nœud qu'on vient de passer, ou celui qu'on approche : `boundary` est sa distance sur le trajet.
+    let boundary: number | undefined;
+    if (leg.startM > 0 && toStart < CORNER_M) boundary = leg.startM;
+    else if (toEnd < CORNER_M) boundary = leg.startM + leg.lengthM;
+    if (boundary === undefined) return this.rawPoint(d);
+
+    const a = this.rawPoint(boundary - CORNER_M);
+    const c = this.rawPoint(boundary);
+    const b = this.rawPoint(boundary + CORNER_M);
+    const t = (d - (boundary - CORNER_M)) / (2 * CORNER_M);
+    const u = 1 - t;
+    const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
+    const z = u * u * a.z + 2 * u * t * c.z + t * t * b.z;
+    const dx = 2 * u * (c.x - a.x) + 2 * t * (b.x - c.x);
+    const dz = 2 * u * (c.z - a.z) + 2 * t * (b.z - c.z);
+    return { x, z, y: leg.edge.altitudeAt(this.edgeS(leg, d)), heading: Math.atan2(dz, dx), edgeId: leg.edge.id };
+  }
+
+  /** Point sur la route elle-même, sans arrondir les coins. */
+  private rawPoint(distanceM: number): JourneyPoint {
+    const d = Math.max(0, distanceM);
+    const leg = this.legAt(d);
+    const s = this.edgeS(leg, d);
+    const p = leg.edge.pointAt(s);
+    const heading = leg.edge.headingAt(s) + (leg.forward ? 0 : Math.PI);
+    return { x: p.x, y: leg.edge.altitudeAt(s), z: p.z, heading: wrapPi(heading), edgeId: leg.edge.id };
+  }
+
+  /** Nom de la route sous le cycliste. */
+  edgeNameAt(distanceM: number): string {
+    return this.legAt(Math.max(0, distanceM)).edge.name;
+  }
+
+  private edgeS(leg: Leg, d: number): number {
+    const local = d - leg.startM;
+    return leg.forward ? local : leg.lengthM - local;
+  }
+
+  private endNodeId(leg: Leg): string {
+    return leg.forward ? leg.edge.to.id : leg.edge.from.id;
+  }
+
+  private legFor(option: JunctionOption, startM: number): Leg {
+    const edge = this.network.edges.get(option.edgeId)!;
+    return { edge, forward: option.forward, startM, lengthM: edge.lengthM };
+  }
+
+  /** Les routes qui partent du nœud où finit `leg`, de la gauche vers la droite, demi-tour exclu. */
+  private optionsAfter(leg: Leg): JunctionOption[] {
+    const nodeId = this.endNodeId(leg);
+    const inHeading = leg.forward ? leg.edge.headingAt(leg.edge.lengthM) : leg.edge.headingAt(0) + Math.PI;
+    const options: JunctionOption[] = [];
+    const onCourse = this.guideNextAfter(leg);
+    for (const edge of this.network.incident(nodeId)) {
+      if (edge === leg.edge) continue;
+      const forward = edge.from.id === nodeId;
+      const outHeading = forward ? edge.headingAt(0) : edge.headingAt(edge.lengthM) + Math.PI;
+      const turnDeg = (wrapPi(outHeading - inHeading) * 180) / Math.PI;
+      options.push({
+        edgeId: edge.id,
+        forward,
+        name: edge.name,
+        lengthM: edge.lengthM,
+        onCourse: forward && edge.id === onCourse,
+        avgGradePct: ((forward ? edge.to.altitude - edge.from.altitude : edge.from.altitude - edge.to.altitude) / edge.lengthM) * 100,
+        climbM: climbOf(edge, forward),
+        turnDeg,
+        turn: Math.abs(turnDeg) < STRAIGHT_DEG ? 'straight' : turnDeg > 0 ? 'right' : 'left',
+      });
+    }
+    if (options.length === 0) {
+      // Ne devrait pas arriver (le réseau n'a pas de cul-de-sac) : demi-tour plutôt que de bloquer la simulation.
+      options.push({
+        edgeId: leg.edge.id,
+        forward: !leg.forward,
+        name: leg.edge.name,
+        lengthM: leg.edge.lengthM,
+        onCourse: false,
+        avgGradePct: 0,
+        climbM: 0,
+        turnDeg: 180,
+        turn: 'right',
+      });
+    }
+    return options.sort((a, b) => a.turnDeg - b.turnDeg || (a.edgeId < b.edgeId ? -1 : 1));
+  }
+
+  /** La route que le parcours propose après `leg`, si on la suit dans son sens ; sinon `undefined`. */
+  private guideNextAfter(leg: Leg): string | undefined {
+    const guide = this.courseDef?.guide;
+    if (!guide || !leg.forward) return undefined;
+    const i = guide.indexOf(leg.edge.id);
+    return i < 0 ? undefined : guide[(i + 1) % guide.length];
+  }
+
+  /** La route sous la distance `d` : d'abord les routes validées, puis le prolongement par défaut. */
+  private legAt(d: number): Leg {
+    const end = this.committedEndM;
+    if (d < end) return findLeg(this.committed, d);
+    while (this.tentativeEndM() <= d) {
+      const last = this.tentative[this.tentative.length - 1] ?? this.committed[this.committed.length - 1]!;
+      const options = this.optionsAfter(last);
+      // Seul le prochain carrefour tient compte du choix en cours ; les suivants prennent le tout droit.
+      const index = this.tentative.length === 0 && this.choice !== undefined ? this.choice : defaultIndex(options);
+      this.tentative.push(this.legFor(options[index]!, last.startM + last.lengthM));
+    }
+    return findLeg(this.tentative, d);
+  }
+
+  private tentativeEndM(): number {
+    const last = this.tentative[this.tentative.length - 1];
+    return last ? last.startM + last.lengthM : this.committedEndM;
+  }
+}
+
+function findLeg(legs: Leg[], d: number): Leg {
+  let lo = 0;
+  let hi = legs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (legs[mid]!.startM <= d) lo = mid;
+    else hi = mid - 1;
+  }
+  return legs[lo]!;
+}
+
+/** La route du parcours si elle est proposée ; sinon l'option la plus droite (à égalité, la première de gauche à droite). */
+function defaultIndex(options: JunctionOption[]): number {
+  const course = options.findIndex((o) => o.onCourse);
+  if (course >= 0) return course;
+  let best = 0;
+  for (let i = 1; i < options.length; i++) if (Math.abs(options[i]!.turnDeg) < Math.abs(options[best]!.turnDeg)) best = i;
+  return best;
+}
+
+/** Somme des montées sur la route, dans le sens de marche, échantillonnée tous les 20 m. */
+function climbOf(edge: Edge, forward: boolean): number {
+  const pts = edge.sample(20).map((p) => p.altitude);
+  if (!forward) pts.reverse();
+  let up = 0;
+  for (let i = 1; i < pts.length; i++) up += Math.max(0, pts[i]! - pts[i - 1]!);
+  return up;
+}

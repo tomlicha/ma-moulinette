@@ -65,7 +65,7 @@ button.radar-core:focus-visible { outline: 3px solid var(--r-ink); outline-offse
 .radar-tag[data-role='trainer'] { right: var(--t-right); top: var(--t-top); }
 .radar-tag[data-role='hr'] { left: var(--h-left); top: var(--h-top); }
 .radar-tag .r { font-size: 14px; font-weight: 700; }
-.radar-tag .n { font-size: 11px; color: var(--r-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radar-tag .n { font-size: 12px; color: var(--r-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .radar-tag .s { display: none; font-size: 12px; font-weight: 600; color: var(--r-ok); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .radar--large .radar-tag .r { font-size: 16px; }
 .radar--large .radar-tag .n { font-size: 13px; }
@@ -123,6 +123,19 @@ main:has([data-view='accueil']:not([hidden])) { max-width: none; padding: 0; }
 .home-hero-body, a.home-radar, .home-workout { grid-row: 3; }
 .home-hero-body { grid-column: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 4px; padding: 20px 24px; border-radius: var(--radius-card); background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); backdrop-filter: blur(14px) saturate(1.2); }
 .home h2.home-title { margin: 0; font-family: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-weight: 700; line-height: .95; font-size: clamp(2.8rem, 5.4vw, 5rem); color: var(--fg); }
+.map-dialog { border: 0; padding: 0; background: transparent; max-width: none; color: var(--fg); font-family: Barlow, system-ui, sans-serif; }
+.map-dialog::backdrop { background: rgb(20 23 26 / .5); backdrop-filter: blur(4px); }
+.map-card { width: min(1000px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 18px 22px; border-radius: var(--radius-card); background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .3); color-scheme: light; }
+.map-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.map-head h2 { margin: 0; font: 700 2.2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.map-head p { margin: 4px 0 0; color: var(--muted); }
+.map-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 22px; min-height: 0; overflow: auto; }
+.map-plan svg { display: block; width: auto; max-width: none; background: #F7F4EC; border-radius: 12px; }
+.map-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.map-side h3 { margin: 0; font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.map-side svg { width: 100%; height: auto; }
+.map-note { margin: 6px 0 0; font-size: .9rem; line-height: 1.4; color: var(--muted); }
+@media (max-width: 760px) { .map-body { grid-template-columns: 1fr; } }
 .home-hero-body p { margin: 4px 0 14px; font-size: 1.05rem; line-height: 1.35; color: #434C57; }
 button.home-ride, button.dev-go-btn { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 32px 0 24px; border-radius: 18px; font-family: Barlow, system-ui, sans-serif; font-size: 1.35rem; font-weight: 700; box-shadow: 0 8px 20px rgb(194 65 12 / .35); }
 
@@ -275,23 +288,29 @@ button.rider-chip:hover { background: #FBF6EF; }
 .trainer-help label { display: grid; gap: 4px; margin-top: 8px; }
 .trainer-help select { width: 100%; }
 
+/* Zones sûres : déjà retirées par `body` (style.css) ; ici seulement la marge de 16 px, sinon l'encoche est comptée deux fois. */
 /* Téléphone en paysage : l'accueil garde ses trois cartes sur une ligne, la navigation flottante en dessous. */
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
-  .home { height: 100dvh; min-height: 0; padding: 10px max(16px, env(safe-area-inset-left)) 66px; gap: 8px 14px; grid-template-columns: minmax(0, 1fr) 200px 190px; }
+  /* En bas : la hauteur de la barre de navigation (52 px) et sa marge, qui suit la zone sûre de l'iPhone, plus 6 px d'air. */
+  .home { height: 100dvh; min-height: 0; padding: 10px 16px calc(58px + max(14px, env(safe-area-inset-bottom))); gap: 8px 14px; grid-template-columns: minmax(0, 1fr) 200px 190px; }
   .home-brand { height: 40px; padding: 0 14px 0 10px; font-size: 1.4rem; }
+  .logo-la { font-size: .55em; } /* « MA » du logo : 12 px, pas 10 */
   .home-hero-body { padding: 14px 18px; }
+  .map-card { padding: 12px 16px; gap: 8px; }
+  .map-head h2 { font-size: 1.7rem; }
   .home h2.home-title { font-size: clamp(2.2rem, 11vh, 3.4rem); }
   .home-hero-body p { font-size: .95rem; margin: 2px 0 10px; }
   button.home-ride { height: 48px; padding: 0 24px 0 18px; font-size: 1.2rem; }
-  .home-kicker { font-size: .72rem; }
+  .home-kicker { font-size: .75rem; }
   .home-workout { padding: 12px; gap: 5px; }
-  .home-workout select { height: 40px; padding: 0 8px; font-size: .9rem; }
+  .home-workout select { height: 44px; padding: 0 8px; font-size: .9rem; }
+  .home-workout a { display: inline-flex; align-items: center; min-height: 44px; }
   .home-workout-meta { display: none; }
   .home-workout .wo-profile { height: 34px; }
   .home-workout .row button { height: 44px; font-size: .95rem; }
   .home-workout .row a { font-size: .85rem; }
   /* Appareils : titre, résumé du coureur et bouton sur une ligne, capteurs dessous ; la page défile si besoin (aide, notes). */
-  .dev { min-height: 100dvh; padding: 10px max(16px, env(safe-area-inset-left)) 72px; gap: 6px 12px; grid-template-columns: minmax(0, 1fr) 96px; }
+  .dev { min-height: 100dvh; padding: 10px 16px 72px; gap: 6px 12px; grid-template-columns: minmax(0, 1fr) 96px; }
   .dev-hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; padding: 8px 14px; gap: 4px 14px; }
   .dev-hero-txt { display: contents; }
   .dev-hero-txt .home-kicker, .dev-lede { display: none; }
@@ -331,4 +350,51 @@ button.rider-chip:hover { background: #FBF6EF; }
   .rider-zones { grid-template-columns: 1fr 1fr; gap: 3px 16px; }
   .wheel-card { --wh: 160px; padding: 12px 16px; gap: 8px; }
   .rider-zones li { font-size: .85rem; }
+}
+
+/*
+ * Choix du parcours : une boîte de dialogue ouverte par « Rouler ». Elle prend la place dont elle a besoin au lieu de la
+ * demander à la carte de l'accueil : deux grandes touches (nom, longueur, montée, profil), la carte du réseau, « Partir ».
+ */
+.course-dialog { border: 0; padding: 0; background: transparent; max-width: none; color: var(--fg); font-family: Barlow, system-ui, sans-serif; }
+.course-dialog::backdrop { background: rgb(20 23 26 / .5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.course-card { width: min(780px, calc(100vw - 32px)); max-height: calc(100dvh - 16px); box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border-radius: var(--radius-card); background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .3); color-scheme: light; }
+.course-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.course-head h2 { margin: 0; font: 700 2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.course-body { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 14px; min-height: 0; }
+.course-options { display: flex; flex-direction: column; gap: 8px; }
+button.course-opt {
+  display: grid; grid-template-columns: minmax(0, 1fr) 150px; grid-template-rows: auto auto auto; align-items: center; column-gap: 12px; row-gap: 1px;
+  min-height: 76px; padding: 8px 14px; text-align: left; border-radius: 14px; background: #fff; color: var(--fg); border: 2px solid var(--btn-line); box-shadow: none;
+}
+button.course-opt .nm { font-weight: 700; font-size: 1.1rem; line-height: 1.15; }
+button.course-opt .meta { font-weight: 600; font-size: .9rem; color: var(--accent); }
+button.course-opt .desc { font-weight: 500; font-size: .85rem; line-height: 1.25; color: var(--muted); }
+button.course-opt .spark { grid-column: 2; grid-row: 1 / 4; display: block; height: 52px; }
+button.course-opt .spark svg { display: block; width: 100%; height: 100%; }
+button.course-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, #fff); }
+button.course-opt:focus-visible, button.course-map:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button.course-map { width: 100%; height: 100%; min-height: 150px; padding: 4px; display: flex; border-radius: 14px; background: #F7F4EC; color: var(--fg); border: 1px solid var(--btn-line); box-shadow: none; cursor: zoom-in; }
+button.course-map svg { display: block; width: 100%; height: 100%; }
+.course-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.course-foot button { min-height: 44px; }
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .course-card { padding: 10px 16px; gap: 6px; }
+  .course-head h2 { font-size: 1.6rem; }
+  .course-body { grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; }
+  button.course-opt { min-height: 66px; padding: 5px 12px; }
+  button.course-opt .nm { font-size: 1rem; }
+  button.course-opt .desc { font-size: .8rem; }
+  button.course-opt .spark { height: 44px; }
+}
+
+/*
+ * Écran court (Safari sur iPhone en paysage, barres visibles : 360 px de haut et moins). Les cartes « Monde » et « Séance »
+ * fixent la hauteur de la rangée, et trop hautes elles font déborder les cartes sur la barre de navigation. On laisse de côté
+ * ce que d'autres écrans affichent déjà : la description du parcours (le menu de choix) et l'aperçu du profil de la séance
+ * choisie (l'éditeur).
+ */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 360px) {
+  .home-hero-body p { display: none; }
+  .home-workout .wo-profile { display: none; }
 }

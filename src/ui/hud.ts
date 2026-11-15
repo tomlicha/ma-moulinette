@@ -4,7 +4,8 @@ import '@fontsource/barlow/700.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './hud.css';
-import type { Route } from '../sim/route';
+import type { Course } from '../sim/course';
+import type { PendingJunction } from '../sim/journey';
 import type { RideSnapshot } from '../sim/ride';
 import { STEP_LABEL, type Workout } from '../workout/model';
 import { profileShapes } from '../workout/profile';
@@ -14,9 +15,10 @@ import { formatDuration } from './duration';
 import {
   findSeries,
   fmt1,
+  junctionLabel,
   nextSummitM,
+  profileWindow,
   repetitionAt,
-  routeProfile,
   signed,
   upcoming,
   zoneLabel,
@@ -41,6 +43,8 @@ export interface HudInput {
   control?: 'erg' | 'sim';
   trainerConnected: boolean;
   heartRateConnected: boolean;
+  /** Carrefour annoncé devant le cycliste, s'il y en a un. */
+  junction?: PendingJunction;
 }
 
 /** Repère de mise en page du HUD : tout est placé en pixels de cette scène, puis mis à l'échelle de la vue. */
@@ -61,6 +65,12 @@ const UP_ITEMS_COMPACT_TALL = 3;
 const UP_ITEMS_COMPACT = 2;
 const COMPACT_TALL_PX = 380;
 /** Téléphone couché : même condition que les feuilles de style des autres écrans. */
+/** Côté de l'écran où se trouve l'encoche d'un téléphone couché : tourné dans le sens antihoraire (90°), elle est à gauche ; à 270°, à droite. */
+function notchSide(): 'left' | 'right' | '' {
+  const angle = screen.orientation?.angle ?? (window as { orientation?: number }).orientation ?? 0;
+  return angle === 90 ? 'left' : angle === 270 || angle === -90 ? 'right' : '';
+}
+
 const PHONE_QUERY = '(pointer: coarse) and (orientation: landscape) and (max-height: 600px)';
 /** Échelle plancher de la scène sur téléphone : les libellés de 16 px y font 12 px réels. */
 const COMPACT_SCALE = 0.75;
@@ -140,6 +150,7 @@ const TEMPLATE = `
   </section>
 
   <section class="hud-p hud-message" data-h="message" role="status" hidden></section>
+  <section class="hud-p hud-junction" data-h="junction" role="group" aria-label="Carrefour" hidden></section>
 </div>`;
 
 const svgEl = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>, parent?: Element) => {
@@ -186,13 +197,21 @@ export class RideHud {
   private readonly mark: HTMLElement;
   private readonly band: HTMLElement;
   private readonly route: {
-    x: (d: number) => number;
-    y: (alt: number) => number;
+    relief: SVGPathElement;
+    done: SVGPathElement;
+    line: SVGPathElement;
     clip: SVGRectElement;
     summit: SVGLineElement;
     cursor: SVGLineElement;
     dot: SVGCircleElement;
+    /** Fenêtre dessinée, et le pas de 4 m auquel elle l'a été : on ne la redessine que quand le cycliste avance d'un pas. */
+    win?: ReturnType<typeof profileWindow>;
+    step: number;
+    toSummit?: number;
   };
+  /** Appelée quand le cycliste choisit une route au carrefour (touche du HUD) : `index` dans `PendingJunction.options`. */
+  onChoose?: (index: number) => void;
+  private junctionKey = '';
   private wo?: { key: string; shapes: SVGPathElement[]; cursor: SVGLineElement };
   private series?: { workout: Workout; list: Series[] };
   private upKey = '';
@@ -200,7 +219,7 @@ export class RideHud {
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly routeDef: Route,
+    private readonly routeDef: Course,
     opts: { flat?: boolean } = {},
   ) {
     root.classList.add('hud');
@@ -209,8 +228,8 @@ export class RideHud {
     root.innerHTML = TEMPLATE;
     root.querySelectorAll<HTMLElement>('[data-h]').forEach((n) => this.nodes.set(n.dataset.h!, n));
 
-    this.text('routeName', `${routeDef.name} · boucle de ${fmt1(routeDef.lengthM / 1000).replace(',0', '')} km`);
-    this.text('routeInfo', `${routeDef.name} · ${fmt1(routeDef.lengthM / 1000).replace(',0', '')} km en boucle`);
+    this.text('routeName', routeDef.name);
+    this.text('routeInfo', routeDef.name);
 
     // Barre de zones : un segment par zone, largeur proportionnelle à sa plage de FTP.
     const zbar = this.node('zbar');
@@ -228,22 +247,21 @@ export class RideHud {
     this.mark = Object.assign(document.createElement('div'), { className: 'mark' });
     zbar.append(segs, this.band, this.mark);
 
-    // Profil du parcours, dessiné une fois ; seule la position avance.
+    // Profil des prochains kilomètres du parcours : une fenêtre qui glisse avec le cycliste (`drawRoute`).
     const svg = this.node('routeSvg');
-    const p = routeProfile(routeDef, ROUTE_W, ROUTE_H);
     const clipId = `hud-route-${Math.random().toString(36).slice(2, 8)}`;
     const clip = svgEl('rect', { x: 0, y: 0, width: 0, height: ROUTE_H }, svgEl('clipPath', { id: clipId }, svgEl('defs', {}, svg)));
-    svgEl('path', { d: p.area, class: 'relief' }, svg);
-    svgEl('path', { d: p.area, class: 'relief-done', 'clip-path': `url(#${clipId})` }, svg);
-    svgEl('path', { d: p.line, class: 'relief-line' }, svg);
     this.route = {
-      x: p.x,
-      y: p.y,
+      relief: svgEl('path', { d: '', class: 'relief' }, svg),
+      done: svgEl('path', { d: '', class: 'relief-done', 'clip-path': `url(#${clipId})` }, svg),
+      line: svgEl('path', { d: '', class: 'relief-line' }, svg),
       clip,
       summit: svgEl('line', { y1: 0, y2: ROUTE_H, class: 'summit' }, svg),
       cursor: svgEl('line', { y1: 0, y2: ROUTE_H, class: 'cursor' }, svg),
       dot: svgEl('circle', { r: 5, class: 'dot' }, svg),
+      step: -1,
     };
+    this.drawRoute(0);
 
     // Le HUD est mis en page dans une scène de 1280 × 720 : on l'ajuste à la fenêtre (le plus grand 16:9 qui y tient) et on la centre.
     // Téléphone couché : la hauteur manque. La scène ne descend pas sous COMPACT_SCALE, quitte à déborder de la fenêtre ;
@@ -254,6 +272,8 @@ export class RideHud {
       const h = root.clientHeight;
       const compact = phone.matches;
       root.classList.toggle('compact', compact);
+      // Seul le côté de l'encoche a besoin de la zone sûre : de l'autre côté, les panneaux et boutons vont au bord (hud.css, sortie.css).
+      document.documentElement.dataset.notch = compact ? notchSide() : '';
       this.upMax = !compact ? UP_ITEMS : h >= COMPACT_TALL_PX ? UP_ITEMS_COMPACT_TALL : UP_ITEMS_COMPACT;
       const s = Math.max(Math.min(w / REF_W, h / REF_H), compact ? COMPACT_SCALE : 0);
       root.style.setProperty('--hud-s', String(s));
@@ -262,9 +282,13 @@ export class RideHud {
       // Marges autour de la scène centrée, en pixels de scène : les panneaux s'en servent pour se caler sur les bords de la fenêtre.
       root.style.setProperty('--hud-ox', `${(w / s - REF_W) / 2}px`);
       root.style.setProperty('--hud-oy', `${(h / s - REF_H) / 2}px`);
+      // Boîte du HUD asymétrique (zone sûre d'un seul côté) : le bloc central et le message restent au milieu de l'écran, au-dessus du cycliste.
+      const box = root.getBoundingClientRect();
+      root.style.setProperty('--hud-cx', `${compact ? (box.left + w / 2 - innerWidth / 2) / s : 0}px`);
     };
     new ResizeObserver(fit).observe(root);
     phone.addEventListener('change', fit);
+    screen.orientation?.addEventListener('change', fit);
     fit();
   }
 
@@ -292,17 +316,9 @@ export class RideHud {
       this.text('dist', fmt1(s.distanceM / 1000));
       this.text('climb', `+${Math.round(i.ride.climbM)}`);
       this.text('grade', signed(s.gradePct, 1));
-      const toSummit = nextSummitM(this.routeDef, s.distanceM);
-      this.text('summit', toSummit === undefined ? '' : `sommet dans ${fmt1(toSummit / 1000)} km`);
-      const pos = s.distanceM % this.routeDef.lengthM;
-      const x = this.route.x(pos);
-      this.route.clip.setAttribute('width', String(x));
-      this.line(this.route.cursor, x);
-      this.route.dot.setAttribute('cx', String(x));
-      this.route.dot.setAttribute('cy', String(this.route.y(this.routeDef.altitudeAt(s.distanceM))));
-      if (toSummit === undefined) this.route.summit.style.display = 'none';
-      else this.line(this.route.summit, this.route.x((s.distanceM + toSummit) % this.routeDef.lengthM));
+      this.drawRoute(s.distanceM);
     }
+    this.updateJunction(i.junction);
     this.text('message', i.workout ? (i.message ?? '') : '');
     this.node('message').hidden = !i.workout || !i.message;
     this.text('control', i.control === 'erg' ? 'ERG' : i.control === 'sim' ? 'SIM' : '');
@@ -314,17 +330,94 @@ export class RideHud {
     if (i.workout) this.updateWorkout(i.workout, p);
   }
 
+  /**
+   * Panneau du carrefour : une grosse touche par route (flèche, nom, longueur, pente, montée), la route retenue en
+   * surbrillance. Les touches se reconstruisent seulement quand le carrefour change ; ensuite on ne met à jour que
+   * la distance et la sélection.
+   */
+  private updateJunction(j: PendingJunction | undefined) {
+    const panel = this.node('junction');
+    panel.hidden = !j;
+    if (!j) {
+      this.junctionKey = '';
+      return;
+    }
+    const key = `${j.nodeId}:${j.options.map((o) => o.edgeId).join(',')}`;
+    if (key !== this.junctionKey) {
+      this.junctionKey = key;
+      panel.replaceChildren();
+      const head = document.createElement('div');
+      head.className = 'hud-junction-head';
+      const title = Object.assign(document.createElement('span'), { textContent: 'Carrefour' });
+      const dist = document.createElement('span');
+      dist.dataset.role = 'dist';
+      const hint = Object.assign(document.createElement('span'), { className: 'hud-junction-hint', textContent: '← → pour choisir' });
+      head.append(title, dist, hint);
+      const row = document.createElement('div');
+      row.className = 'hud-junction-opts';
+      j.options.forEach((o, idx) => {
+        const l = junctionLabel(o);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'hud-junction-opt';
+        b.dataset.i = String(idx);
+        b.append(
+          Object.assign(document.createElement('span'), { className: 'arrow', textContent: l.arrow }),
+          Object.assign(document.createElement('span'), { className: 'nm', textContent: l.name }),
+          Object.assign(document.createElement('span'), { className: 'meta', textContent: l.meta }),
+        );
+        b.addEventListener('click', () => this.onChoose?.(idx));
+        row.append(b);
+      });
+      panel.append(head, row);
+    }
+    panel.querySelector<HTMLElement>('[data-role="dist"]')!.textContent = `dans ${Math.max(0, Math.round(j.distanceM / 10) * 10)} m`;
+    panel.querySelectorAll<HTMLElement>('.hud-junction-opt').forEach((b) => {
+      const on = Number(b.dataset.i) === j.selected;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  }
+
   /** Sortie pas encore démarrée : tirets et position au départ du parcours. */
   private resetRide() {
     for (const k of ['time', 'dist', 'climb', 'grade']) this.text(k, '–');
-    const toSummit = nextSummitM(this.routeDef, 0);
-    this.text('summit', toSummit === undefined ? '' : `sommet dans ${fmt1(toSummit / 1000)} km`);
-    this.route.clip.setAttribute('width', '0');
-    this.line(this.route.cursor, 0);
-    this.route.dot.setAttribute('cx', '0');
-    this.route.dot.setAttribute('cy', String(this.route.y(this.routeDef.altitudeAt(0))));
-    if (toSummit === undefined) this.route.summit.style.display = 'none';
-    else this.line(this.route.summit, this.route.x(toSummit));
+    this.drawRoute(0);
+  }
+
+  /** Le parcours a changé (entre deux sorties) : nouveau nom, profil à redessiner. */
+  refreshRoute() {
+    this.text('routeName', this.routeDef.name);
+    this.text('routeInfo', this.routeDef.name);
+    this.route.step = -1;
+  }
+
+  /**
+   * Dessine le profil d'altitude de la fenêtre autour de `distanceM` (400 m derrière, 2,6 km devant), le prochain sommet,
+   * et place le cycliste. La fenêtre se redessine tous les 4 m : le relief glisse sous un curseur qui reste en place.
+   */
+  private drawRoute(distanceM: number) {
+    const r = this.route;
+    const step = Math.floor(distanceM / 4);
+    if (step !== r.step || !r.win) {
+      r.step = step;
+      const win = profileWindow(this.routeDef, distanceM, ROUTE_W, ROUTE_H);
+      r.win = win;
+      r.relief.setAttribute('d', win.area);
+      r.done.setAttribute('d', win.area);
+      r.line.setAttribute('d', win.line);
+      r.toSummit = nextSummitM(this.routeDef, distanceM);
+      this.text('summit', r.toSummit === undefined ? '' : `sommet dans ${fmt1(r.toSummit / 1000)} km`);
+    }
+    const win = r.win;
+    const x = win.x(distanceM);
+    r.clip.setAttribute('width', String(x));
+    this.line(r.cursor, x);
+    r.dot.setAttribute('cx', String(x));
+    r.dot.setAttribute('cy', String(win.y(this.routeDef.altitudeAt(distanceM))));
+    const at = r.toSummit === undefined ? undefined : distanceM + r.toSummit;
+    if (at === undefined || at > win.endM) r.summit.style.display = 'none';
+    else this.line(r.summit, win.x(at));
   }
 
   private updateWorkout({ workout, state: s, ftpW, intensity = 1 }: NonNullable<HudInput['workout']>, p: number | undefined) {

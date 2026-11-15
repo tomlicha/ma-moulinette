@@ -8,7 +8,8 @@ export const nextScene = (current: number, count: number) => (current + 1) % cou
 /**
  * Fond de l'accueil : les scènes sont empilées et fondues l'une dans l'autre (le style est dans home.css).
  * Le titre et la description suivent l'image affichée quand ils sont fournis (l'écran Séances n'en a pas).
- * Retourne une fonction qui arrête le roulement.
+ * Retourne une fonction qui arrête le roulement ; elle porte aussi `show(i)` pour afficher une scène donnée.
+ * Avec `everyMs` infini, aucune rotation : le fond ne change que par `show` (accueil, où il suit le parcours choisi).
  */
 export function setupHomeBackground(
   container: HTMLElement,
@@ -16,7 +17,7 @@ export function setupHomeBackground(
   description?: HTMLElement,
   scenes: HomeScene[] = HOME_SCENES,
   everyMs = SCENE_ROTATION_MS,
-): () => void {
+): (() => void) & { show: (i: number) => void } {
   const layers = scenes.map((s) => {
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('class', 'home-scene');
@@ -35,6 +36,7 @@ export function setupHomeBackground(
     current = i;
   };
   show(current);
-  const timer = setInterval(() => show(nextScene(current, scenes.length)), everyMs);
-  return () => clearInterval(timer);
+  // Un délai infini est lu comme 0 par `setInterval` : on ne programme alors rien.
+  const timer = Number.isFinite(everyMs) ? setInterval(() => show(nextScene(current, scenes.length)), everyMs) : undefined;
+  return Object.assign(() => clearInterval(timer), { show });
 }

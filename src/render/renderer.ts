@@ -25,8 +25,12 @@ export async function createRenderer(canvas: HTMLCanvasElement, forceWebGL = fal
   });
   await renderer.init();
   renderer.library.addLight(SunLightNode, SunLight); // ombres en cascades
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  // Rendu neutre : les couleurs de la palette arrivent à l'écran telles quelles (ACES les assombrit et les ternit).
+  renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.shadowMap.enabled = true;
+  // Filtre PCF simple : la variante douce tire ses échantillons au hasard et donne une ombre granuleuse sans
+  // anticrénelage temporel.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   const backend: Backend = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? 'webgpu' : 'webgl2';
   return { renderer, backend };
 }

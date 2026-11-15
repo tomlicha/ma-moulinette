@@ -29,13 +29,13 @@ Le HUD est mis en page dans une scène fixe de **1280 × 720 px**, puis ajustée
 |---|---|---|---|
 | Gauche | coin haut gauche de la fenêtre, à 24 px ; l 250 | haut gauche | Sortie libre : nom du parcours, temps, distance, dénivelé positif. Séance : palier (type, n° / total, ou « rép. 3 / 10 » dans une série), compte à rebours, barre de progression, temps fait / durée, cadence visée, puis la liste « À suivre » (voir plus bas). |
 | Centre | x 340, à 24 px du haut de la fenêtre ; l 600 | haut centre | Puissance 3 s (76 px), séparateur, puis trois colonnes à 38 px : FC, cadence, vitesse (sortie libre) ou cible, FC, cadence (séance). Barre de zones. Ligne du bas : pastille de zone et % de la FTP, ou en séance pastille de zone, ERG, écart, plage cible ± 5 %. |
-| Bas | x 64, à 24 px du bas de la fenêtre ; l 1152, h 90 | bas centre | Sortie libre : pente, profil du tour avec position, prochain sommet en pointillé, mode SIM ou ERG, état du trainer et de la ceinture. Séance : nom, temps fait / total, palier suivant, profil de la séance avec curseur, paliers passés atténués. |
+| Bas | x 64, à 24 px du bas de la fenêtre ; l 1152, h 90 | bas centre | Sortie libre : pente, profil des prochains kilomètres (400 m derrière le cycliste, 2,6 km devant, glissant avec lui) avec le prochain sommet en pointillé, mode SIM ou ERG, état du trainer et de la ceinture. Séance : nom, temps fait / total, palier suivant, profil de la séance avec curseur, paliers passés atténués. |
 | Message | x 340, sous le panneau central ; l 600 | haut centre | Message de la séance en cours (consigne du fichier), sous le panneau central ; absent sans message. |
 | Haut droit | libre | | Bouton du menu de la sortie ; réservé en dessous à la liste du groupe (multijoueur). Le compteur de rendu (`view-stats`), masqué par défaut, s'y affiche si on le demande dans le menu. |
 
 États :
 
-- **Sortie libre**, y compris avant le départ : les trois panneaux, version sortie. Avant le départ, le parcours et la pente sont en « – », le profil montre le départ et le premier sommet ; le HUD ne change donc pas de forme au démarrage.
+- **Sortie libre**, y compris avant le départ : les trois panneaux, version sortie. Avant le départ, le parcours et la pente sont en « – », le profil montre le départ et les premiers kilomètres ; le HUD ne change donc pas de forme au démarrage.
 - **Séance** : les trois panneaux, version séance ; la vitesse sort du bloc central pour laisser la place à la cible.
 
 **Porte du palier suivant** (dans la scène 3D, pas dans le HUD) : en séance, 30 s avant chaque changement de palier, une arche enjambe la route devant le cycliste, de la couleur de la zone du palier qui commence (`--hz1` … `--hz6`, blanc devant un palier libre). La séance avançant au temps, la porte est posée là où le cycliste sera à sa vitesse du moment (au moins 2 m/s, au plus 400 m devant) et se recale en douceur ; il la franchit au début du palier, puis elle s'efface. Rien sur le dernier palier ni en pause. Logique dans `workout/gate.ts`, rendu dans `render/interval-gate.ts`.
@@ -53,14 +53,16 @@ Le HUD est le seul affichage des mesures : il n'y a plus de cartes sous la vue (
 
 ## Téléphone
 
-L'application est en **paysage uniquement** : pas de version portrait du HUD. Sur un téléphone couché (`(pointer: coarse) and (orientation: landscape) and (max-height: 600px)`, la même condition que les autres écrans), `hud.ts` pose la classe `compact` sur le HUD et la scène ne descend pas sous l'échelle **0,75** : elle déborde alors de la fenêtre, et les panneaux, calés sur les bords, sont à 100 % (`--hud-k: 1`, `--hud-m: 20px`). **Rien sous 16 px de scène**, soit 12 px réels.
+L'application est en **paysage uniquement** : pas de version portrait du HUD. Sur un téléphone couché (`(pointer: coarse) and (orientation: landscape) and (max-height: 600px)`, la même condition que les autres écrans), `hud.ts` pose la classe `compact` sur le HUD et la scène ne descend pas sous l'échelle **0,75** : elle déborde alors de la fenêtre, et les panneaux, calés sur les bords, sont à 100 % (`--hud-k: 1`, `--hud-m: 8px`). **Rien sous 16 px de scène**, soit 12 px réels.
 
 | Panneau | Version téléphone |
 |---|---|
-| Gauche | l 256. En séance, la ligne « fait / durée » et le décompte « + 31 · fin dans » disparaissent ; la cadence visée reste. Liste « À suivre » à **3 éléments** si la vue fait au moins 380 px de haut, **2** en dessous (un iPhone dont Safari garde ses barres). |
+| Gauche | l 256. Sortie libre : le même encart que sur ordinateur (nom du parcours, « Sortie libre », temps, distance, dénivelé), dans le coin, **presque contre le bord gauche de l'écran** (marge de 4 px de scène, soit 3 px réels, coins arrondis conservés ; côté encoche, la zone sûre garde la distance) ; seul l'écran court (≤ 360 px de haut) retire le nom et « Sortie libre ». En séance, la ligne « fait / durée » et le décompte « + 31 · fin dans » disparaissent ; la cadence visée reste. Liste « À suivre » à **3 éléments** si la vue fait au moins 380 px de haut, **2** en dessous (un iPhone dont Safari garde ses barres). |
 | Centre | l 268, centré. Rangée 1 : la puissance (58 px, sans son libellé) et à sa droite la zone réduite à son numéro (« Z4 »), ERG, l'écart, la plage (ou le % de la FTP en sortie libre). Rangée 2 : les trois mesures à 30 px, sans unités. Rangée 3 : la barre de zones. |
 | Bas | Large comme la fenêtre, à 20 px du bas. Sortie libre : sans les voyants des capteurs (un capteur muet affiche déjà « – »). Séance : le profil seul ; temps fait / total et « fin dans » en étiquette au-dessus, à gauche ; le nom de la séance disparaît. |
 | Message | l 400, centré, sous le bloc central. |
+
+**Bords** : la zone sûre (encoche, barre de gestes) n'est gardée que du côté de l'encoche, déduit de l'orientation de l'écran (90° : à gauche, 270° : à droite, `html[data-notch]` posé par `hud.ts`). De l'autre côté, les panneaux et les boutons de la sortie vont à `--hud-m` du bord de l'écran ; en bas, la zone sûre de la barre de gestes reste. Le bloc central et le message restent centrés sur l'écran, donc au-dessus du cycliste (`--hud-cx` compense la boîte du HUD devenue asymétrique).
 
 Les commandes de la séance (pause, palier suivant, ± 5 %) sont posées sur la vue, sous le bouton du menu : voir [sortie.md](sortie.md).
 
@@ -108,7 +110,8 @@ Typographie (polices servies par l'application via `@fontsource`, jamais depuis 
 | Vitesse | vitesse virtuelle pendant la sortie, sinon celle mesurée par le trainer |
 | Temps, distance, pente | `RideSnapshot` de la sortie virtuelle |
 | Dénivelé positif | `ClimbCounter`, cumul des altitudes de la sortie |
-| Prochain sommet, profil du tour | segments du parcours (`nextSummitM`, `routeProfile`) |
+| Prochain sommet, profil à venir | altitude du trajet (`nextSummitM`, `profileWindow`) : le trajet par défaut au-delà du prochain carrefour |
+| Carrefour annoncé | `Journey.pendingJunction` ; panneau « Carrefour » sous le panneau central ([parcours.md](parcours.md)) |
 | Zone | `zoneOf` de `workout/profile.ts`, FTP de la séance ou saisie |
 | Cible, écart, palier, profil de séance | `WorkoutState` du déroulement de séance, `profileShapes` |
 | Liste « À suivre », n° de répétition | `upcoming`, `findSeries` et `repetitionAt` de `ui/hud-model.ts` (testés), intensité de la séance |

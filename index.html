@@ -230,6 +230,47 @@
             </button>
           </div>
 
+          <dialog id="course-dialog" class="course-dialog" aria-labelledby="course-title">
+            <div class="course-card">
+              <header class="course-head">
+                <div>
+                  <span class="home-kicker">Parcours</span>
+                  <h2 id="course-title">Choisir le parcours</h2>
+                </div>
+                <button id="course-cancel" class="secondary" type="button">Annuler</button>
+              </header>
+              <div class="course-body">
+                <div id="course-options" class="course-options" role="radiogroup" aria-label="Parcours"></div>
+                <button id="course-map" class="course-map" type="button" aria-haspopup="dialog" aria-label="Agrandir la carte du parcours"></button>
+              </div>
+              <footer class="course-foot">
+                <button id="course-go" class="home-ride" type="button">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" /></svg>Partir
+                </button>
+              </footer>
+            </div>
+          </dialog>
+
+          <dialog id="map-dialog" class="map-dialog" aria-labelledby="map-title">
+            <div class="map-card">
+              <header class="map-head">
+                <div>
+                  <span class="home-kicker">Carte</span>
+                  <h2 id="map-title"></h2>
+                  <p id="map-desc"></p>
+                </div>
+                <button id="map-close" class="secondary" type="button">Fermer</button>
+              </header>
+              <div class="map-body">
+                <div id="map-plan" class="map-plan"></div>
+                <div class="map-side">
+                  <h3>Profil d’altitude</h3>
+                  <div id="map-profile"></div>
+                  <p class="map-note">Le parcours choisi est en couleur, l’autre en retrait. Les routes grises n’appartiennent à aucun parcours : on les prend en explorant. Les numéros sont les kilomètres de la boucle.</p>
+                </div>
+              </div>
+            </div>
+          </dialog>
           <aside class="home-side">
             <a class="home-radar" href="#appareils"><div id="radar-home"></div></a>
             <section class="home-workout" aria-labelledby="home-wo-title">

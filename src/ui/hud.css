@@ -30,6 +30,9 @@
   position: absolute; inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   overflow: hidden; pointer-events: none;
 }
+/* Téléphone couché : la zone sûre n'est gardée que du côté de l'encoche ; de l'autre, les panneaux vont jusqu'au bord de l'écran. */
+html[data-notch='left'] .hud.compact { right: 0; }
+html[data-notch='right'] .hud.compact { left: 0; }
 .hud-stage {
   position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
   transform-origin: 0 0; transform: translate(var(--hud-x, 0px), var(--hud-y, 0px)) scale(var(--hud-s, .5));
@@ -44,6 +47,8 @@
 }
 /* Qualité réduite ou navigateur sans flou : même teinte, plus opaque. */
 .hud.flat .hud-p { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--hud-panel-flat); }
+/* Le message de séance garde son fond coloré : sans lui, son texte sombre disparaît sur le fond sombre des autres panneaux. */
+.hud.flat .hud-message { background: var(--hud-accent); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .hud-p { background: var(--hud-panel-flat); }
 }
@@ -57,6 +62,25 @@
 .hud-bottom { left: 64px; top: calc(630px - var(--hud-m) + var(--hud-oy, 0px)); width: 1152px; height: 90px; padding: 10px 20px; justify-content: center; transform-origin: 50% 100%; }
 /* Message de la séance (consigne écrite dans le fichier), sous le panneau central. */
 .hud-message { left: 340px; top: calc(178px + var(--hud-m) - var(--hud-oy, 0px)); width: 600px; padding: 12px 20px; transform-origin: 50% 0; background: var(--hud-accent); color: var(--hud-ink); border-color: transparent; font-size: 24px; font-weight: 700; text-align: center; }
+
+/* Carrefour : une touche par route, sous le panneau central. Seul élément du HUD qu'on touche, d'où pointer-events. */
+.hud-junction { left: 290px; top: calc(196px + var(--hud-m) - var(--hud-oy, 0px)); width: 700px; padding: 10px 14px 14px; gap: 8px; transform-origin: 50% 0; pointer-events: auto; }
+.hud-junction[hidden] { display: none; }
+.hud-message:not([hidden]) ~ .hud-junction { top: calc(246px + var(--hud-m) - var(--hud-oy, 0px)); }
+.hud-junction-head { display: flex; align-items: baseline; gap: 10px; font-weight: 700; font-size: 18px; }
+.hud-junction-head [data-role='dist'] { color: var(--hud-accent); }
+.hud-junction-hint { margin-left: auto; font-weight: 500; font-size: 15px; color: var(--hud-muted); }
+.hud-junction-opts { display: flex; gap: 10px; }
+.hud-junction-opt {
+  flex: 1 1 0; min-width: 0; min-height: 64px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left;
+  padding: 8px 12px; border-radius: 10px; border: 2px solid var(--hud-edge); background: rgba(255, 255, 255, .06); color: var(--hud-fg); font: inherit; cursor: pointer;
+}
+.hud-junction-opt .arrow { grid-row: 1 / 3; font: 600 34px/1 var(--hud-num); color: var(--hud-muted); }
+.hud-junction-opt .nm { font-weight: 700; font-size: 20px; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-junction-opt .meta { font-size: 15px; line-height: 1.15; color: var(--hud-muted); }  /* passe à la ligne : jamais de montée coupée */
+.hud-junction-opt.on { border-color: var(--hud-accent); background: rgba(91, 227, 201, .18); }
+.hud-junction-opt.on .arrow { color: var(--hud-accent); }
+.hud-junction-opt:focus-visible { outline: 2px solid var(--hud-accent); outline-offset: 2px; }
 
 /* Ce qui s'affiche selon l'état : sortie libre (ou pas encore démarrée), séance. */
 .hud:not([data-mode='ride']) [data-when='ride'],
@@ -166,14 +190,15 @@
  * Téléphone couché (classe posée par hud.ts) : la scène ne descend pas sous 0,75 et déborde de la fenêtre, les panneaux
  * sont à 100 % et calés sur les bords. Rien sous 16 px de scène, soit 12 px réels. Voir docs/design/hud.md, « Téléphone ».
  */
-.hud.compact { --hud-k: 1; --hud-m: 20px; --hud-bw: min(1152px, calc(1280px + 2 * var(--hud-ox, 0px) - 2 * var(--hud-m))); }
-.hud.compact .hud-left { width: 256px; padding: 12px 16px; }
+.hud.compact { --hud-k: 1; --hud-m: 8px; /* panneaux au plus près des bords : sur téléphone, chaque pixel compte */ --hud-bw: calc(1280px + 2 * var(--hud-ox, 0px) - 2 * var(--hud-m)); /* pas de plafond : même bords que les autres panneaux */ }
+/* Presque contre le bord gauche de l'écran (4 px de scène, soit 3 px réels : un filet d'air pour garder les coins arrondis lisibles) ; côté encoche, la zone sûre de .hud garde la distance. */
+.hud.compact .hud-left { width: 256px; padding: 12px 16px; left: calc(4px - var(--hud-ox, 0px)); }
 /*
  * Bloc central étroit, centré au-dessus du cycliste. Rangée 1 : la puissance, et à sa droite la zone (numéro seul), ERG,
  * l'écart et la plage. Rangée 2 : les trois mesures, sans leurs unités. Rangée 3 : la barre de zones.
  */
 .hud.compact .hud-center {
-  left: 506px; width: 268px; padding: 8px 14px; transform-origin: 50% 0;
+  left: calc(506px - var(--hud-cx, 0px)); width: 268px; padding: 8px 14px; transform-origin: 50% 0;
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; align-items: center;
 }
 .hud.compact .hud-power { display: contents; }
@@ -194,7 +219,28 @@
 .hud.compact .hud-metrics .lab { line-height: 1.1; }
 .hud.compact .hud-metrics .u { display: none; }
 .hud.compact .hud-zbar { grid-column: 1 / -1; grid-row: 3; }
-.hud.compact .hud-message { left: 440px; width: 400px; top: calc(172px + var(--hud-m) - var(--hud-oy, 0px)); font-size: 20px; padding: 8px 16px; }
+.hud.compact .hud-message { left: calc(440px - var(--hud-cx, 0px)); width: 400px; top: calc(172px + var(--hud-m) - var(--hud-oy, 0px)); font-size: 20px; padding: 8px 16px; }
+/*
+ * Carrefour, version téléphone : un bandeau d'une ligne par route, calé comme les autres panneaux. À droite du panneau de
+ * gauche et jusqu'au bord de la fenêtre (même marge que le bandeau du bas), sous le panneau central, pour ne pas recouvrir
+ * le cycliste. La distance est une pastille à cheval sur le bord du haut : elle ne prend pas de place. Flèche et nom sur la
+ * première ligne, le résumé en dessous sur toute la largeur : il ne passe plus à la ligne.
+ */
+.hud.compact .hud-junction {
+  left: calc(var(--hud-m) - var(--hud-ox, 0px) + 264px); right: calc(var(--hud-m) - var(--hud-ox, 0px)); width: auto;
+  top: calc(172px + var(--hud-m) - var(--hud-oy, 0px)); padding: 5px 6px; gap: 0;
+}
+.hud.compact .hud-message:not([hidden]) ~ .hud-junction { top: calc(252px + var(--hud-m) - var(--hud-oy, 0px)); }
+.hud.compact .hud-junction-head {
+  position: absolute; top: -13px; right: 14px; padding: 0 10px; border-radius: 999px; background: var(--hud-panel-flat); border: 1px solid var(--hud-edge);
+  font-size: 16px; line-height: 22px; white-space: nowrap;
+}
+.hud.compact .hud-junction-head > :not([data-role='dist']) { display: none; }
+.hud.compact .hud-junction-opts { gap: 6px; }
+.hud.compact .hud-junction-opt { min-height: 59px; padding: 3px 8px; column-gap: 6px; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; }
+.hud.compact .hud-junction-opt .arrow { grid-row: 1; grid-column: 1; font-size: 24px; }
+.hud.compact .hud-junction-opt .nm { grid-row: 1; grid-column: 2; font-size: 18px; }
+.hud.compact .hud-junction-opt .meta { grid-row: 2; grid-column: 1 / -1; font-size: 16px; white-space: nowrap; }
 /* Bandeau du bas : large comme la fenêtre, collé en bas ; en séance, le profil seul, les temps en étiquette au-dessus. */
 .hud.compact .hud-bottom { left: calc(640px - var(--hud-bw) / 2); width: var(--hud-bw); top: auto; bottom: calc(var(--hud-m) - var(--hud-oy, 0px)); height: auto; padding: 8px 18px; }
 .hud.compact .hud-wo-name, .hud.compact .hud-dots { display: none; }
@@ -205,3 +251,35 @@
 .hud.compact .hud-next-head { font-size: 16px; }
 .hud.compact .hud-up-pw small, .hud.compact .hud-up-x small { font-size: 16px; }
 .hud.compact [data-h='stepDone'], .hud.compact [data-h='upInfo'] { display: none; }
+
+/*
+ * Écran court (Safari sur iPhone en paysage : barres du navigateur visibles, 340 px de haut et moins). Les panneaux ne
+ * doivent pas manger toute la hauteur : sans ce mode il reste 77 px pour la route et le cycliste disparaît. On enlève ce
+ * qui est redondant (le nom du parcours est dans le bandeau du bas) et on serre ; les textes restent à 12 px réels.
+ */
+@media (max-height: 360px) {
+  .hud.compact .hud-left { padding: 8px 14px; }
+  .hud.compact .hud-left [data-h='routeName'], .hud.compact .hud-left [data-when='ride'] > .lab { display: none; }
+  .hud.compact .hud-left [data-when='workout'] .hud-next { display: none; }
+  .hud.compact .hud-left [data-h='stepLeft'] { font-size: 44px !important; }
+  .hud.compact .hud-center { padding: 6px 12px; gap: 2px 12px; }
+  .hud.compact .hud-power-main .n { font-size: 46px; }
+  .hud.compact .hud-metrics .n { font-size: 26px; }
+  .hud.compact .hud-bottom { padding: 6px 18px; }
+  .hud.compact .hud-message { top: calc(150px + var(--hud-m) - var(--hud-oy, 0px)); }
+  .hud.compact .hud-junction { top: calc(150px + var(--hud-m) - var(--hud-oy, 0px)); }
+  .hud.compact .hud-message:not([hidden]) ~ .hud-junction { top: calc(220px + var(--hud-m) - var(--hud-oy, 0px)); }
+}
+
+/*
+ * Téléphone, séance : une colonne de boutons rapides (menu, pause, suivant, ±5 %, 100 %) occupe le bord droit, et le panneau
+ * central est plus haut (cible, écart, plage). Le bandeau des directions et le message s'arrêtent donc avant les boutons et
+ * passent sous le panneau central. Les valeurs sont celles qu'on mesure dans la page, voir tools/mobile.
+ */
+.hud.compact[data-mode='workout'] .hud-junction { right: calc(var(--hud-m) - var(--hud-ox, 0px) + 72px); top: calc(184px + var(--hud-m) - var(--hud-oy, 0px)); }
+.hud.compact[data-mode='workout'] .hud-message { top: calc(184px + var(--hud-m) - var(--hud-oy, 0px)); }
+.hud.compact[data-mode='workout'] .hud-message:not([hidden]) ~ .hud-junction { top: calc(260px + var(--hud-m) - var(--hud-oy, 0px)); }
+@media (max-height: 360px) {
+  .hud.compact[data-mode='workout'] .hud-junction, .hud.compact[data-mode='workout'] .hud-message { top: calc(174px + var(--hud-m) - var(--hud-oy, 0px)); }
+  .hud.compact[data-mode='workout'] .hud-message:not([hidden]) ~ .hud-junction { top: calc(249px + var(--hud-m) - var(--hud-oy, 0px)); }
+}

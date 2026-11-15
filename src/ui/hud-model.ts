@@ -1,4 +1,5 @@
-import type { Route } from '../sim/route';
+import type { Course } from '../sim/course';
+import type { JunctionOption } from '../sim/journey';
 import { targetWatts, type Target, type WorkoutStep } from '../workout/model';
 import { zoneOf, type Zone } from '../workout/profile';
 import { ZONES } from '../workout/zones';
@@ -146,39 +147,59 @@ export class ClimbCounter {
   }
 }
 
-/** Sommets d'un parcours bouclé : fin d'un segment qui monte suivi d'un segment plat ou descendant, en m depuis le départ. */
-export function summitsOf(route: Route): number[] {
-  const out: number[] = [];
-  const segs = route.segments;
-  let d = 0;
-  segs.forEach((s, i) => {
-    d += s.lengthM;
-    const next = segs[(i + 1) % segs.length]!;
-    if (s.gradePct > 0 && next.gradePct <= 0) out.push(d % route.lengthM);
-  });
-  return out.sort((a, b) => a - b);
+/** Montée minimale pour qu'un haut compte comme un sommet, et descente qui le confirme, en m. */
+const SUMMIT_MIN_RISE_M = 8;
+const SUMMIT_DROP_M = 2;
+
+/**
+ * Distance jusqu'au prochain sommet en avant sur le parcours (le trajet par défaut sur un réseau), `undefined` s'il n'y en
+ * a pas dans les `horizonM` m. Un sommet est un haut atteint après au moins 8 m de montée, que 2 m de descente confirment.
+ */
+export function nextSummitM(course: Course, fromM: number, horizonM = 8000, stepM = 20): number | undefined {
+  let valley = course.altitudeAt(fromM);
+  let peak = valley;
+  let peakAt = fromM;
+  for (let d = fromM + stepM; d <= fromM + horizonM; d += stepM) {
+    const a = course.altitudeAt(d);
+    if (a < valley) {
+      valley = peak = a;
+      peakAt = d;
+    } else if (a > peak) {
+      peak = a;
+      peakAt = d;
+    }
+    if (peak - valley >= SUMMIT_MIN_RISE_M && peak - a >= SUMMIT_DROP_M) return peakAt - fromM;
+  }
+  return undefined;
 }
 
-/** Distance jusqu'au prochain sommet, tours suivants compris ; `undefined` sur un parcours sans montée. */
-export function nextSummitM(route: Route, distanceM: number): number | undefined {
-  const summits = summitsOf(route);
-  if (!summits.length) return undefined;
-  const pos = ((distanceM % route.lengthM) + route.lengthM) % route.lengthM;
-  const ahead = summits.find((s) => s > pos);
-  return (ahead ?? summits[0]! + route.lengthM) - pos;
-}
+/** Fenêtre du profil d'altitude : derrière et devant le cycliste, en m. */
+export const PROFILE_BEHIND_M = 400;
+export const PROFILE_SPAN_M = 3000;
 
-/** Profil d'altitude d'un tour, dans un repère `width` × `height` (y vers le bas, 3 px de marge en haut et en bas). */
-export function routeProfile(route: Route, width: number, height: number, stepM = 20) {
+/**
+ * Profil d'altitude d'une fenêtre de `spanM` m dont le cycliste occupe la position `behindM`, dans un repère `width` × `height`
+ * (y vers le bas, 3 px de marge en haut et en bas). Au départ, la fenêtre ne recule pas avant 0.
+ */
+export function profileWindow(
+  course: Course,
+  fromM: number,
+  width: number,
+  height: number,
+  spanM = PROFILE_SPAN_M,
+  behindM = PROFILE_BEHIND_M,
+  stepM = 20,
+) {
+  const startM = Math.max(0, fromM - behindM);
   const pts: [number, number][] = [];
-  for (let d = 0; d <= route.lengthM; d += stepM) pts.push([d, route.altitudeAt(Math.min(d, route.lengthM - 0.01))]);
+  for (let d = startM; d <= startM + spanM + 1e-6; d += stepM) pts.push([d, course.altitudeAt(d)]);
   const alts = pts.map((p) => p[1]);
   const min = Math.min(...alts);
-  const span = Math.max(...alts) - min || 1;
-  const x = (d: number) => (d / route.lengthM) * width;
-  const y = (alt: number) => height - 3 - ((alt - min) / span) * (height - 6);
+  const range = Math.max(...alts) - min || 1;
+  const x = (d: number) => ((d - startM) / spanM) * width;
+  const y = (alt: number) => height - 3 - ((alt - min) / range) * (height - 6);
   const line = pts.map(([d, a], i) => `${i ? 'L' : 'M'}${x(d).toFixed(1)} ${y(a).toFixed(1)}`).join(' ');
-  return { line, area: `${line} L${width} ${height} L0 ${height} Z`, x, y };
+  return { line, area: `${line} L${width} ${height} L0 ${height} Z`, x, y, startM, endM: startM + spanM };
 }
 
 /** « Z3 · Tempo » pour une puissance et une FTP données. */
@@ -197,3 +218,22 @@ export const signed = (v: number, digits: 0 | 1 = 0) => {
   const zero = abs === '0' || abs === '0,0';
   return `${v < 0 && !zero ? '−' : '+'}${abs}`;
 };
+
+/**
+ * Flèche selon l'écart de cap : tout droit, en biais (25 à 65°), à angle droit (65 à 115°), en épingle (au-delà).
+ * Deux routes qui tournent du même côté ne se confondent pas.
+ */
+export function turnArrow(turnDeg: number): string {
+  const a = Math.abs(turnDeg);
+  const right = turnDeg > 0;
+  if (a < 25) return '↑';
+  if (a < 65) return right ? '↗' : '↖';
+  if (a < 115) return right ? '→' : '←';
+  return right ? '↘' : '↙';
+}
+
+/** Flèche, nom et résumé d'une route qui part d'un carrefour : « Le Col · 6,4 km · +5,6 % · +357 m ». */
+export function junctionLabel(o: JunctionOption): { arrow: string; name: string; meta: string } {
+  const climb = o.climbM >= 10 ? ` · +${Math.round(o.climbM)} m` : '';
+  return { arrow: turnArrow(o.turnDeg), name: o.name, meta: `${fmt1(o.lengthM / 1000)} km · ${signed(o.avgGradePct, 1)} %${climb}` };
+}
