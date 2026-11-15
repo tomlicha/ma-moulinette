@@ -12,6 +12,7 @@
  * - `mood=day|sunset` force l'ambiance (par défaut celle du parcours `course`).
  * - `quality=low` : profil bas du monde (par défaut le profil haut, comme l'application).
  * - `webgl` pour forcer le repli WebGL2 ; `shadows=0` pour couper les ombres (juger le modelé sans auto-ombrage).
+ * - `pale` : cuissard gris clair sur le premier coureur, pour juger le modelé du bassin, invisible en noir.
  */
 import * as THREE from 'three/webgpu';
 import { ambianceFor, type Mood } from '../../src/render/ambiance';
@@ -30,7 +31,7 @@ const num = (k: string, d: number) => (params.has(k) ? Number(params.get(k)) : d
 const shot = params.get('shot') ?? 'lineup';
 
 const KITS: Kit[] = [
-  {},
+  params.has('pale') ? { shorts: { color: 0xc9ccd2 } } : {},
   {
     jersey: { color: 0xf2c230 }, jerseyAlt: { color: 0x15171c }, jerseyAccent: { color: 0xf2c230 }, sock: { color: 0xf2c230 },
     frame: { color: 0xf08a3c }, frameAlt: { color: 0x15171c }, helmet: { color: 0x15171c }, helmetAlt: { color: 0xf2c230 },

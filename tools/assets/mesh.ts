@@ -165,6 +165,8 @@ export class MeshBuilder {
   readonly joints: number[] = [];
   readonly weights: number[] = [];
   readonly indices: number[] = [];
+  /** Occlusion ambiante par sommet (voir `ao.ts`) ; vide tant qu'elle n'est pas calculée : la pièce est alors dégagée. */
+  ao: number[] = [];
 
   get triangleCount() {
     return this.indices.length / 3;
@@ -410,6 +412,16 @@ export function roundEnds(s: number, s0: number, s1: number, len0: number, len1 
   if (len0 > 0 && s < s0 + len0) k = Math.min(k, Math.sqrt(Math.max(0, 1 - ((s0 + len0 - s) / len0) ** 2)));
   if (len1 > 0 && s > s1 - len1) k = Math.min(k, Math.sqrt(Math.max(0, 1 - ((s - (s1 - len1)) / len1) ** 2)));
   return k;
+}
+
+/**
+ * Facteur de rayon d'une extrémité enfouie dans un autre volume (le haut de la cuisse dans le bassin, le départ du
+ * bras dans le buste). Le rayon part de `floor` au bout du tube et rejoint 1 sur `len` mètres, à pente nulle aux
+ * deux bouts : la distance au tube reste lisse de part et d'autre de son extrémité. L'arrondi de `roundEnds`, lui,
+ * part de zéro à pente infinie ; fondue dans un autre volume, cette cassure y dessinait un pli.
+ */
+export function buriedEnd(s: number, s0: number, len: number, floor = 0): number {
+  return floor + (1 - floor) * smooth(s0, s0 + len, s);
 }
 
 export { smooth };
