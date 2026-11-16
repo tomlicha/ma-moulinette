@@ -57,7 +57,7 @@ Sur téléphone couché, pendant une séance, les commandes de séance prennent 
 
 ## Écran de chargement
 
-Tant que la vue 3D n'a pas dessiné sa première image, une carte au centre de la vue (même verre sombre que le HUD) dit « Préparation de la route », l'étape en cours (relief, coureur et moteur 3D, routes et décor, abords du départ, lumières et matériaux, première image) et l'avancement. Le HUD reste au-dessus et utilisable : on peut déjà pédaler. La carte apparaît avec 0,15 s de retard, pour ne pas clignoter quand la vue est déjà prête, et disparaît à la première image. Si la vue 3D ne peut pas démarrer, la carte le dit et rappelle que la sortie fonctionne sans elle.
+Tant que la vue 3D n'a pas dessiné sa première image, une carte au centre de la vue (même verre sombre que le HUD) dit « Préparation de la route », l'étape en cours (relief, coureur et moteur 3D, routes et décor, abords du départ, lumières et matériaux, première image) et l'avancement. Un voile sombre et flou couvre le reste de la sortie (HUD, commandes) ; seul le bouton du menu passe au-dessus, pour pouvoir quitter la sortie sans attendre. Les mesures continuent derrière le voile : on peut déjà pédaler. La carte apparaît avec 0,15 s de retard, pour ne pas clignoter quand la vue est déjà prête, et disparaît à la première image. Si la vue 3D ne peut pas démarrer, la carte le dit et rappelle que la sortie fonctionne sans elle.
 
 ## À faire
 
