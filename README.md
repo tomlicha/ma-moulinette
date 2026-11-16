@@ -4,6 +4,7 @@ App d'entraînement home trainer (cyclisme, puis course à pied), avec rendu 3D,
 
 Point de départ : [docs/analyse-technique.md](docs/analyse-technique.md), l'évaluation technologique des 26 et 27 octobre 2026.
 État d'avancement et prochaines étapes : [docs/roadmap.md](docs/roadmap.md).
+Audits de performance, maintenabilité et visibilité (ordinateur et mobile) : [docs/audit/](docs/audit/README.md).
 Source : https://claude.ai/artifact/DNwZzib59Z5B9rMruVJT1S
 
 Orientation retenue : un cœur web unique en TypeScript (Three.js, WebGPU avec repli WebGL2), livré en PWA sur ordinateur et Android, et dans une coquille Capacitor sur iOS et Android. Pas d'app TV.
