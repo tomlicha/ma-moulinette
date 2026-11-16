@@ -37,4 +37,10 @@ npx playwright install chromium     # si aucun Chromium n'est déjà installé
    node tools/audit/profile.cjs http://localhost:5199/
    ```
 
+5. **Réactivité du démarrage** : plus longue tâche pendant le chargement et à la première ouverture de la Sortie, au premier lancement (profil vierge) puis au second (caches remplis). Premier argument : ralentissement du processeur. `AUDIT_WEBGPU=1` pour essayer WebGPU (sinon WebGL2 sans GPU).
+
+   ```
+   node tools/audit/startup.cjs 4 http://localhost:4173/ http://localhost:4174/
+   ```
+
 Sans GPU (machine d'intégration, conteneur), Chromium rend en logiciel : les images par seconde ne sont pas significatives, les triangles et appels de dessin le sont. Pour la Sortie, utiliser `?renderer=webgl2`.

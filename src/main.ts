@@ -1121,6 +1121,7 @@ RideView.create($<HTMLCanvasElement>('view'), journey, {
   ...(Number.isFinite(Number(params.get('relief'))) && params.get('relief') ? { relief: Math.min(3, Math.max(1, Number(params.get('relief')))) } : {}),
 }, viewBuild)
   .then((v) => {
+    performance.mark('view-ready'); // relevé par tools/audit/startup.cjs
     view = v;
     v.setActive(router.current() === 'sortie');
     v.onStats = (s) => {
