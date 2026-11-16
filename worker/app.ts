@@ -1,18 +1,17 @@
 /**
  * Worker de l'application (Cloudflare) : sert le site statique et, devant lui, les adresses /api/* :
- * comptes (connexion Strava), salle temps réel (Durable Object) et passerelle Strava du propriétaire.
+ * comptes (connexion Strava), salle temps réel (Durable Object) et envoi des sorties sur le compte Strava de chacun.
  * Seules les adresses /api/* passent par ce code (`run_worker_first` de wrangler.app.toml) ; le reste est servi par les ressources.
- * Secrets à créer avec `npx wrangler secret put -c wrangler.app.toml` : STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, OWNER_KEY.
+ * Secrets à créer avec `npx wrangler secret put -c wrangler.app.toml` : STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET.
  */
-import { createStravaRelay } from '../src/export/strava/relay.ts';
 import { networkSignature, PROTOCOL_VERSION } from '../src/net/protocol.ts';
 import { createAccounts } from '../src/server/accounts.ts';
+import { createUserStrava } from '../src/server/user-strava.ts';
 import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_SIGNED_OUT } from '../src/server/room.ts';
 import { COL_DES_ERABLES } from '../src/sim/courses/col-des-erables.ts';
 import { WORLD_PATH } from '../src/net/world-client.ts';
 import { createD1AccountStore } from './account-store.ts';
 import type { D1Database } from './d1-store.ts';
-import { createD1TokenStore } from './token-store.ts';
 import type { CfWebSocket } from './world-room.ts';
 
 export { WorldRoom } from './world-room.ts';
@@ -27,8 +26,6 @@ interface Env {
   WORLD: DurableObjectNamespaceLike;
   STRAVA_CLIENT_ID?: string;
   STRAVA_CLIENT_SECRET?: string;
-  /** Sans clé, la passerelle refuse tout : un site public ne doit jamais écrire sur le compte du propriétaire sans elle. */
-  OWNER_KEY?: string;
   /** Origine publique, quand elle diffère de celle des requêtes (serveur de dev Vite devant `wrangler dev`). */
   PUBLIC_ORIGIN?: string;
   /** « 1 » : connexion par simple nom, sans Strava. Seulement dans `.dev.vars`, jamais en ligne. */
@@ -77,13 +74,8 @@ export default {
     const auth = await accounts.handle(req);
     if (auth) return auth;
 
-    const relay = createStravaRelay({
-      clientId: env.STRAVA_CLIENT_ID,
-      clientSecret: env.STRAVA_CLIENT_SECRET,
-      ownerKey: env.OWNER_KEY || crypto.randomUUID(), // clé absente : impossible à deviner, donc tout reste verrouillé
-      store: createD1TokenStore(env.DB),
-    });
-    return (await relay(req)) ?? new Response('not found', { status: 404 });
+    const strava = createUserStrava(accounts, { clientId: env.STRAVA_CLIENT_ID, clientSecret: env.STRAVA_CLIENT_SECRET });
+    return (await strava(req)) ?? new Response('not found', { status: 404 });
   },
 
   /** Purge des sessions expirées (déclencheur `crons` de wrangler.app.toml). */

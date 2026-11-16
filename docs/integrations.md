@@ -22,7 +22,7 @@ intervals.icu a été abandonné (décision du 12 novembre 2026) et son relais r
 |---|---|---|
 | Enregistrement 1 Hz (puissance, cadence, FC, vitesse, distance, altitude), pauses | [`src/export/recorder.ts`](../src/export/recorder.ts) | Fait, testé |
 | Encodage FIT Activity (SDK Garmin), un seul tour, sport `cycling`, sous-sport `virtualActivity` | [`src/export/fit-activity.ts`](../src/export/fit-activity.ts) | Fait ; fichier relu avec le décodeur Garmin ; jamais ouvert dans Strava ni Garmin Connect |
-| Relais Strava : OAuth, jetons dans `.strava-tokens.json`, dépôt et attente du traitement | [`src/export/strava/`](../src/export/strava/) | Codé, testé avec un faux `fetch` ; jamais lancé contre Strava |
+| Relais Strava : OAuth, jetons de chaque coureur dans D1 (Worker), dépôt et attente du traitement | [`src/export/strava/`](../src/export/strava/) | Codé, testé avec un faux `fetch` ; jamais lancé contre Strava |
 | Branchement des boutons, sortie gardée en mémoire pour réessayer | [`src/export/wiring.ts`](../src/export/wiring.ts) | Fait ; **la sortie est perdue si l'onglet se ferme** |
 | Lecture .zwo, .erg, .mrc ; écriture .zwo | [`src/workout/`](../src/workout/) | Fait, testé |
 | Bibliothèque de séances | [`src/workout/library.ts`](../src/workout/library.ts) | `localStorage`, un seul appareil |
@@ -279,7 +279,7 @@ Depuis l'éditeur ou la bibliothèque : « Envoyer vers… » ouvre la liste des
 | `POST /api/sync/workouts` | Envoi d'une séance vers une plateforme, date facultative |
 | `POST /api/webhooks/{p}` | Désautorisation (Strava), nouvelles sorties (Garmin, Wahoo) ; signature ou jeton vérifié selon la plateforme |
 
-Le relais Strava du serveur de dev reste tant que la passerelle n'est pas déployée ; ensuite `vite.config.ts` monte la passerelle elle-même, avec des magasins en fichiers locaux comme `.strava-tokens.json` aujourd'hui.
+La passerelle Strava est montée par le Worker (`worker/app.ts`, `src/server/user-strava.ts`), en local par `wrangler dev` comme en ligne : le relais du serveur Vite et son fichier `.strava-tokens.json` ont disparu le 16 novembre 2026.
 
 ## Formats et conversions
 

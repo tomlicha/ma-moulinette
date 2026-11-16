@@ -163,7 +163,8 @@ export function createAccounts(opts: AccountOptions) {
 
   async function callback(req: Request, url: URL): Promise<Response> {
     if (!cfg) return page('La connexion Strava n’est pas configurée.', 503);
-    const expected = readCookie(req, OAUTH_COOKIE) ?? '';
+    const [expected = '', popupFlag] = (readCookie(req, OAUTH_COOKIE) ?? '').split('.');
+    const popup = popupFlag === 'p';
     const clear = cookie(OAUTH_COOKIE, '', 0, AUTH_PREFIX);
     const state = url.searchParams.get('state') ?? '';
     if (!expected || !safeEqual(state, expected)) {
@@ -188,7 +189,17 @@ export function createAccounts(opts: AccountOptions) {
       (await store.userByIdentity('strava', tokens.athleteId)) ??
       (await store.createUser('strava', tokens.athleteId, suggestedName(tokens), false));
     await store.saveStravaTokens(user.id, tokens);
-    return redirect('/', [clear, await openSession(user.id)]);
+    const session = await openSession(user.id);
+    if (!popup) return redirect('/', [clear, session]);
+    const res = new Response(
+      `<!doctype html><meta charset="utf-8"><title>Strava</title><body style="font:16px system-ui;padding:2rem">` +
+        `<p>Strava est connecté. Cette fenêtre va se fermer.</p>` +
+        `<script>window.opener&&window.opener.postMessage('strava-connected',location.origin);setTimeout(()=>window.close(),800)</script>`,
+      { headers: { 'content-type': 'text/html; charset=utf-8' } },
+    );
+    res.headers.append('set-cookie', clear);
+    res.headers.append('set-cookie', session);
+    return res;
   }
 
   async function handle(req: Request): Promise<Response | undefined> {
@@ -199,14 +210,17 @@ export function createAccounts(opts: AccountOptions) {
     if (route === 'me' && req.method === 'GET') {
       const user = await userOf(req);
       const methods = { strava: !!cfg, dev: !!opts.devLogin };
-      return user ? json({ user, methods }) : json({ error: 'not_signed_in', methods }, 401);
+      // 200 même sans session : ne pas être connecté est un état normal, pas une erreur (et la console reste propre).
+      return json({ user: user ?? null, methods });
     }
 
     if (route === 'login' && req.method === 'GET') {
       if (!cfg) return page('La connexion Strava n’est pas configurée : renseigner STRAVA_CLIENT_ID et STRAVA_CLIENT_SECRET.', 503);
       const state = randomToken(16);
+      // `?popup=1` : ouverte dans une fenêtre par l'envoi à Strava (accès Strava à renouveler) ; elle se refermera seule.
+      const popup = url.searchParams.get('popup') === '1';
       const to = authorizeUrl(cfg.clientId, `${originOf(req)}${AUTH_PREFIX}callback`, state);
-      return redirect(to, [cookie(OAUTH_COOKIE, state, OAUTH_TTL_S, AUTH_PREFIX)]);
+      return redirect(to, [cookie(OAUTH_COOKIE, popup ? `${state}.p` : state, OAUTH_TTL_S, AUTH_PREFIX)]);
     }
 
     if (route === 'callback' && req.method === 'GET') return callback(req, url);
@@ -254,5 +268,5 @@ export function createAccounts(opts: AccountOptions) {
     return userOf(req);
   }
 
-  return { handle, resolveUser, sameOrigin };
+  return { handle, resolveUser, userOf, sameOrigin, store, mutating, originOf };
 }

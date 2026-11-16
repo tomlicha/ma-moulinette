@@ -38,6 +38,8 @@ import { setupHomeBackground } from './ui/home-background';
 import { HOME_SCENES } from './ui/home-scenes';
 import { setupCoursePicker } from './ui/course-picker';
 import { setupCourseMap } from './ui/course-map';
+import { setupAccount } from './ui/account-chip';
+import { WorldClient } from './net/world-client';
 import { controlModes } from './ui/radar-model';
 import { ClimbCounter, PowerAverage } from './ui/hud-model';
 import type { RideSnapshot } from './sim/ride';
@@ -283,6 +285,13 @@ function tickRide() {
     speedKmh: s.speedKmh,
     cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
   });
+  world.update({
+    pos: journey.locate(s.distanceM),
+    speedMs: s.speedKmh / 3.6,
+    powerW: power,
+    cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
+    riding: true,
+  });
 
   // Zwift Cog. Protocole Zwift : le trainer reçoit la pente réelle et le braquet, et fait le calcul. Autres protocoles :
   // la pente envoyée est celle qui rend, avec le braquet réel, l'effort du braquet virtuel choisi.
@@ -338,6 +347,7 @@ function stopRide(resetTrainer = true) {
   clearInterval(rideTimer);
   setErgActive(false);
   view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0 });
+  world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
   ride = undefined;
   rideBtn.textContent = 'Démarrer la sortie';
   massInput.readOnly = false;
@@ -1145,6 +1155,23 @@ if (import.meta.env.DEV && params.has('recap')) {
     m.showRecapDemo($('recap').parentElement!, params.get('recap') ?? '', parseWorkout(sample.fileName, sample.text), readFtp(), journey.name);
   });
 }
+
+// Compte (connexion Strava, facultative) et salle temps réel : sans compte, on roule seul et l'export FIT reste là.
+const world = new WorldClient(journey.network);
+const account = setupAccount({
+  hosts: [...document.querySelectorAll<HTMLElement>('.home-top')],
+  log,
+  onChange: (s) => {
+    if (s.kind === 'signed-in' && s.user.nameConfirmed) world.connect();
+    else world.disconnect();
+  },
+});
+world.onStatus = (s) => {
+  account.setWorld(s, world.population);
+  log(`multijoueur : ${s}`);
+};
+world.onRoster = (event, name) => log(`multijoueur : ${name} ${event === 'join' ? 'arrive' : 'part'}`);
+setInterval(() => account.setWorld(world.status, world.population), 1000);
 
 // En dernier : tout l'état de la page est initialisé avant la première connexion.
 setState(currentState); // chaque bouton reçoit dès le départ sa raison d'être indisponible

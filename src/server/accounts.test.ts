@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanName, createAccounts, CSRF_HEADER, readCookie, SESSION_COOKIE, suggestedName, type AccountOptions } from './accounts';
 import { createMemoryAccountStore } from './memory-store';
+import { createUserStrava } from './user-strava';
 
 const ORIGIN = 'https://moulinette.example';
 const NOW = 1_800_000_000;
@@ -102,9 +103,11 @@ describe('comptes par Strava', () => {
     expect(session).toBeUndefined();
   });
 
-  it('sans session, me répond 401 et la salle ne reconnaît personne', async () => {
+  it('sans session, me ne donne aucun coureur et la salle ne reconnaît personne', async () => {
     const { accounts } = setup();
-    expect((await accounts.handle(new Request(`${ORIGIN}/api/auth/me`)))!.status).toBe(401);
+    const me = (await accounts.handle(new Request(`${ORIGIN}/api/auth/me`)))!;
+    expect(me.status).toBe(200);
+    expect(await me.json()).toEqual({ user: null, methods: { strava: true, dev: false } });
     const forged = new Request(`${ORIGIN}/api/world/ws`, { headers: { cookie: `${SESSION_COOKIE}=${'a'.repeat(64)}` } });
     expect(await accounts.resolveUser(forged)).toBeUndefined();
   });
@@ -164,5 +167,67 @@ describe('noms', () => {
     const req = new Request(ORIGIN, { headers: { cookie: 'a=1; mm_session=xyz ; b=2' } });
     expect(readCookie(req, 'mm_session')).toBe('xyz');
     expect(readCookie(req, 'c')).toBeUndefined();
+  });
+});
+
+describe('envoi à Strava sur le compte du coureur', () => {
+  async function signedIn() {
+    const uploads: string[] = [];
+    const store = createMemoryAccountStore();
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(input);
+      if (u.endsWith('/oauth/token')) return stravaTokens();
+      if (u.endsWith('/uploads')) {
+        uploads.push(new Headers(init?.headers).get('authorization') ?? '');
+        return new Response(JSON.stringify({ id_str: '9', activity_id: 77, status: 'ready' }), { status: 201 });
+      }
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+    const accounts = createAccounts({ store, clientId: '123', clientSecret: 'secret', now: () => NOW, fetch: f });
+    const strava = createUserStrava(accounts, { clientId: '123', clientSecret: 'secret', now: () => NOW, fetch: f, sleep: async () => {} });
+    const { session } = await signIn(accounts);
+    return { strava, uploads, cookie: `${SESSION_COOKIE}=${session}` };
+  }
+
+  it("sans compte, rien n'est proposé : seul l'export FIT reste", async () => {
+    const { strava } = await signedIn();
+    const status = await (await strava(new Request(`${ORIGIN}/api/strava/status`)))!.json();
+    expect(status).toMatchObject({ configured: false, connected: false });
+    const up = (await strava(post('/api/strava/upload', {})))!;
+    expect(up.status).toBe(401);
+  });
+
+  it('connecté, la sortie part avec les jetons du coureur', async () => {
+    const { strava, uploads, cookie } = await signedIn();
+    const status = await (await strava(new Request(`${ORIGIN}/api/strava/status`, { headers: { cookie } })))!.json();
+    expect(status).toMatchObject({ configured: true, connected: true });
+    const req = new Request(`${ORIGIN}/api/strava/upload?name=Sortie&externalId=x1`, {
+      method: 'POST',
+      headers: { cookie, origin: ORIGIN, [CSRF_HEADER]: '1' },
+      body: new Uint8Array([1, 2, 3]),
+    });
+    const res = (await strava(req))!;
+    expect(await res.json()).toMatchObject({ activityId: '77' });
+    expect(uploads).toEqual(['Bearer acc']);
+  });
+
+  it("un accès Strava à renouveler passe par la connexion des comptes, dans une fenêtre qui se referme", async () => {
+    const { strava, cookie } = await signedIn();
+    const res = (await strava(post('/api/strava/login', {}, cookie)))!;
+    expect(await res.json()).toEqual({ url: `${ORIGIN}/api/auth/login?popup=1` });
+  });
+
+  it('la connexion en fenêtre prévient la page et ouvre la session', async () => {
+    const { accounts } = setup();
+    const login = (await accounts.handle(new Request(`${ORIGIN}/api/auth/login?popup=1`)))!;
+    const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+    const oauth = cookieValue(login, 'mm_oauth')!;
+    expect(oauth).toBe(`${state}.p`);
+    const cb = (await accounts.handle(
+      new Request(`${ORIGIN}/api/auth/callback?state=${state}&code=abc`, { headers: { cookie: `mm_oauth=${oauth}` } }),
+    ))!;
+    expect(cb.status).toBe(200);
+    expect(await cb.text()).toContain("postMessage('strava-connected'");
+    expect(cookieValue(cb, SESSION_COOKIE)).toMatch(/^[0-9a-f]{64}$/);
   });
 });

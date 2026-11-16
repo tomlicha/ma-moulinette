@@ -46,13 +46,13 @@ Le protocole Wahoo est repris du code de GoldenCheetah, sans documentation offic
 
 `src/export/` : la sortie est enregistrée à 1 Hz (puissance, cadence, cardio, et vitesse, distance, altitude quand la sortie virtuelle tourne), en pause quand le trainer est déconnecté. « Exporter FIT » télécharge un fichier FIT Activity encodé avec le SDK officiel de Garmin (`@garmin/fitsdk`), chargé seulement à l'export.
 
-Envoi à Strava, depuis le serveur de dev uniquement :
+Envoi à Strava, pour un coureur connecté avec Strava (voir « Multijoueur ») : sa sortie part sur son propre compte, avec les jetons obtenus à la connexion. **Sans compte**, l'application marche entièrement, seule et sans serveur : on roule seul, et « Exporter FIT » télécharge le fichier, à déposer soi-même où l'on veut.
 
-1. Créer une application sur https://www.strava.com/settings/api avec « Authorization Callback Domain » = `localhost`.
-2. Copier `.env.example` en `.env.local` et renseigner `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET`.
-3. `npm run dev`, puis « Envoyer à Strava » : la première fois, une fenêtre Strava demande l'autorisation (`activity:write`).
+1. Créer une application sur https://www.strava.com/settings/api avec « Authorization Callback Domain » = `localhost` (le domaine de l'application en ligne).
+2. Copier `.dev.vars.example` en `.dev.vars` et renseigner `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET`.
+3. `npm run dev:api` et `npm run dev`, « Connect with Strava » en haut à droite, puis « Envoyer à Strava » à la fin de la sortie.
 
-Strava exige le `client_secret` pour l'échange et le rafraîchissement des jetons, et sa documentation ne prévoit pas PKCE : le secret ne peut pas vivre dans le navigateur. Un relais dans le serveur Vite (`src/export/strava/relay.ts`) garde donc le secret et les jetons (`.strava-tokens.json`, ignoré par le dépôt) ; la page ne parle qu'à `localhost`. Les variables `STRAVA_*` n'ont pas le préfixe `VITE_` et ne sont jamais envoyées au navigateur. Un déploiement public demandera de rejouer ce relais sur un vrai serveur : le gestionnaire de routes est indépendant de Vite (`Request` vers `Response`), seul le magasin de jetons et l'adaptateur de `vite.config.ts` sont à remplacer.
+Strava exige le `client_secret` pour l'échange et le rafraîchissement des jetons, et sa documentation ne prévoit pas PKCE : le secret ne peut pas vivre dans le navigateur. Le Worker (`worker/app.ts`, en local par `wrangler dev`) garde donc le secret, et les jetons de chaque coureur dans D1 ; la passerelle (`src/export/strava/relay.ts`) travaille sur ceux du coureur connecté (`src/server/user-strava.ts`). Le relais du serveur Vite, avec sa clé du propriétaire et son fichier `.strava-tokens.json`, a disparu le 16 novembre 2026 : en local comme en ligne, c'est le même Worker.
 
 Depuis le 1er juin 2026, un compte Strava avec abonnement payant est exigé pour créer une nouvelle application (niveau Standard ; les anciennes applications dès le 30 juin). Plusieurs médias le rapportent, avec un prix de 11,99 $ par mois aux États-Unis ; nous ne l'avons pas relu dans la documentation officielle. Une application Standard sert un athlète par défaut, et jusqu'à dix selon les sources : le palier réel de l'application s'affiche sur https://www.strava.com/settings/api.
 
@@ -87,6 +87,8 @@ Chaque coureur se connecte avec Strava ; il voit les autres rouler dans le monde
 - `src/server/accounts.ts` : connexion Strava (un compte par athlète), cookie de session, nom affiché proposé (« Tom L. ») et validé par le coureur avant d'être montré aux autres. Les conditions de l'API Strava interdisent de montrer à un autre utilisateur les données d'un athlète : ni photo ni activité Strava n'est affichée.
 - `src/server/room.ts` : la salle (arrivées, départs, états vérifiés, instantanés à 4 Hz) ; `worker/world-room.ts` la branche sur un Durable Object Cloudflare, avec mise en veille quand personne ne roule.
 - `src/net/` : protocole binaire (19 octets par état, pas de fréquence cardiaque), lissage des autres coureurs, client avec reconnexion. `src/sim/remote-track.ts` reconstruit la trajectoire d'un autre coureur.
+
+Le compte est **facultatif** : sans lui, on roule seul et l'export FIT reste là. Il se montre en haut à droite des écrans Accueil, Appareils et Séances, en face de la marque : le bouton officiel « Connect with Strava », puis, une fois connecté, une pastille (initiale, nom, « En ligne · 3 autres coureurs ») qui ouvre « Changer de nom » et « Se déconnecter ». Spécification : [docs/design/compte.md](docs/design/compte.md).
 
 En local :
 

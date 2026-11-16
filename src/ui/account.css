@@ -1,0 +1,61 @@
+/* Compte du joueur, en haut à droite des écrans plein écran (docs/design/compte.md). Palette claire fixe, comme la marque. */
+.account { position: relative; display: flex; align-items: center; gap: 12px; margin-left: auto; font-family: Barlow, system-ui, sans-serif; }
+.account[hidden] { display: none; }
+
+/* Sans compte : une pastille de verre, le pitch à gauche, le bouton officiel Strava à droite (jamais retouché). */
+.account-out { padding: 6px 6px 6px 18px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); backdrop-filter: blur(14px) saturate(1.2); }
+.account-pitch { display: flex; flex-direction: column; margin: 0; line-height: 1.2; color: var(--fg); }
+.account-pitch b { font-size: .95rem; }
+.account-pitch span { font-size: .8rem; color: var(--muted); }
+.strava-connect { display: block; border-radius: 6px; line-height: 0; }
+.strava-connect img { display: block; width: 237px; height: 48px; }
+.strava-connect:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.account-dev { min-height: 44px; font-size: .9rem; }
+
+/* Connecté : pastille à la hauteur de la marque, initiale sur l'accent, nom puis état en ligne. */
+.account-chip { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px 0 6px; border-radius: 999px; background: var(--glass); color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); backdrop-filter: blur(14px) saturate(1.2); font-weight: 400; text-align: left; }
+.account-chip:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.account-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 1.15rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.account-who { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.account-who b { font-size: 1rem; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-status { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.account-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #9aa1aa; }
+.account-status[data-tone='ok']::before { background: #2b8a3e; box-shadow: 0 0 0 3px rgb(43 138 62 / .2); }
+.account-status[data-tone='busy']::before { background: #d6336c; }
+.account-caret { width: 12px; height: 12px; color: var(--muted); }
+
+.account-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 10; min-width: 220px; display: flex; flex-direction: column; padding: 6px; border-radius: 16px; background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .22); }
+.account-menu[hidden] { display: none; }
+.account-menu button { min-height: 44px; padding: 10px 14px; border-radius: 10px; background: none; color: var(--fg); font-weight: 600; text-align: left; }
+.account-menu button:hover, .account-menu button:focus-visible { background: #f4ede3; outline: none; }
+.account-note { margin: 4px 14px 6px; font-size: .75rem; color: var(--muted); }
+
+/* Boîte du nom : même carte que la fiche du coureur. */
+.name-card h2 { margin: 2px 0 0; font: 700 2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.name-field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.name-field input { min-height: 48px; padding: 0 14px; border: 1px solid var(--btn-line); border-radius: 14px; font: 600 1.15rem Barlow, system-ui, sans-serif; color: #14171a; background: #fff; }
+.name-field input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.name-card .note { margin: 0; color: #4f5865; }
+.name-error { margin: 0; color: #c92a2a; font-weight: 600; }
+.name-card .row { display: flex; justify-content: flex-end; gap: 10px; }
+.name-card .row button { min-height: 44px; }
+
+/* Téléphone couché : seulement le bouton Strava (ou la pastille sans la ligne d'état), à la hauteur de la marque. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .account-out { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+  .account-pitch { display: none; }
+  .strava-connect img { width: 198px; height: 40px; }
+  .account-chip { height: 40px; padding-left: 4px; }
+  .account-avatar { width: 32px; height: 32px; }
+  .account-status { display: none; }
+  /* La ligne d'état disparaît : un point sur l'initiale dit encore si l'on est en ligne. */
+  .account-avatar { position: relative; }
+  .account-chip[data-tone='ok'] .account-avatar::after,
+  .account-chip[data-tone='busy'] .account-avatar::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: #2b8a3e; }
+  .account-chip[data-tone='busy'] .account-avatar::after { background: #d6336c; }
+}
+/* Portrait étroit : la marque et le compte partagent la ligne ; le pitch passe sous le bouton s'il ne tient pas. */
+@media (max-width: 560px) {
+  .account-pitch { display: none; }
+  .account-out { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+}

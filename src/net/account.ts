@@ -1,0 +1,64 @@
+/**
+ * Compte du joueur, vu de la page : qui est connecté, et les gestes du compte (connexion Strava, nom, déconnexion).
+ * Parle aux adresses /api/auth/* du Worker (src/server/accounts.ts). Sans Worker (build statique, serveur de dev seul),
+ * tout répond « indisponible » : l'application reste en mode sans compte.
+ */
+import type { User } from '../server/accounts';
+
+export type { User } from '../server/accounts';
+
+export const AUTH = '/api/auth/';
+const CSRF = { 'x-zwift2': '1' };
+
+export interface Methods {
+  /** Connexion Strava configurée sur le serveur. */
+  strava: boolean;
+  /** Connexion par simple nom (développement local). */
+  dev: boolean;
+}
+
+export type AccountState =
+  /** Aucun serveur de comptes : mode sans compte, rien à proposer. */
+  | { kind: 'unavailable' }
+  | { kind: 'signed-out'; methods: Methods }
+  | { kind: 'signed-in'; user: User; methods: Methods };
+
+type Fetch = typeof fetch;
+
+export async function fetchAccount(f: Fetch = fetch): Promise<AccountState> {
+  let res: Response;
+  try {
+    res = await f(`${AUTH}me`, { credentials: 'same-origin' });
+  } catch {
+    return { kind: 'unavailable' };
+  }
+  const body = (await res.json().catch(() => undefined)) as { user?: User; methods?: Methods } | undefined;
+  if (!body?.methods) return { kind: 'unavailable' };
+  if (res.ok && body.user) return { kind: 'signed-in', user: body.user, methods: body.methods };
+  if (!body.methods.strava && !body.methods.dev) return { kind: 'unavailable' };
+  return { kind: 'signed-out', methods: body.methods };
+}
+
+/** Adresse qui lance la connexion Strava ; le retour se fait sur la page d'accueil de l'application. */
+export const loginUrl = () => `${AUTH}login`;
+
+async function post<T>(route: string, body: unknown, f: Fetch): Promise<T> {
+  const res = await f(`${AUTH}${route}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json', ...CSRF },
+    body: JSON.stringify(body),
+  });
+  const out = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(out.error ?? `HTTP ${res.status}`);
+  return out;
+}
+
+/** Valide (ou change) le nom montré aux autres coureurs. */
+export const saveDisplayName = (displayName: string, f: Fetch = fetch) =>
+  post<{ user: User }>('profile', { displayName }, f).then((r) => r.user);
+
+export const logout = (f: Fetch = fetch) => post<unknown>('logout', {}, f).then(() => undefined);
+
+/** Connexion de développement, par simple nom. */
+export const devLogin = (name: string, f: Fetch = fetch) => post<{ user: User }>('dev-login', { name }, f).then((r) => r.user);
