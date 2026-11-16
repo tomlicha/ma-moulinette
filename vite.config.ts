@@ -50,10 +50,24 @@ function logReceiver(env: Record<string, string>): Plugin {
   };
 }
 
+/**
+ * Adresse publique du site dans les balises de partage (`%SITE_URL%` dans index.html) : les aperçus de liens
+ * (WhatsApp, Slack, Strava…) exigent une URL absolue pour l'image. Donnée par `SITE_URL` au build (variable
+ * d'environnement ou `.env`) ; sans elle, les chemins restent relatifs, ce qui suffit aux navigateurs mais pas aux aperçus.
+ */
+function siteUrl(env: Record<string, string>): Plugin {
+  const url = (env.SITE_URL ?? '').replace(/\/+$/, '');
+  return {
+    name: 'site-url',
+    transformIndexHtml: (html) => html.replaceAll('%SITE_URL%', url),
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   define: { __RIDER_PORTRAIT_KEY__: JSON.stringify(riderPortraitKey()) },
   plugins: [
     logReceiver(loadEnv(mode, process.cwd(), ['LOG_'])),
+    siteUrl(loadEnv(mode, process.cwd(), ['SITE_'])),
   ],
   server: {
     // Comptes, envoi à Strava et salle temps réel : servis par le Worker lancé à côté (`npm run dev:api`, wrangler dev
@@ -63,6 +77,14 @@ export default defineConfig(({ mode }) => ({
       '/api/strava': 'http://localhost:8787',
       '/api/world': { target: 'ws://localhost:8787', ws: true },
     },
+  },
+  build: {
+    rolldownOptions: {
+      // three.js à part, sous son nom : la vue 3D et le portrait le chargent à la demande (budget : tools/ci/bundle-budget.mjs).
+      output: { codeSplitting: { groups: [{ name: 'three', test: /node_modules[\\/]three[\\/]/ }] } },
+    },
+    // three.js seul fait ~1 Mio, chargé après le premier affichage : l'avertissement de Vite ne dit plus rien d'utile.
+    chunkSizeWarningLimit: 1100,
   },
   // Chargé à la demande par l'export : sans cela, Vite l'optimise au premier clic et recharge la page, ce qui efface la sortie en cours.
   optimizeDeps: { include: ['@garmin/fitsdk'] },
