@@ -1,4 +1,5 @@
 import { shoreDistance, type Edge, type RoadNetwork, type WaterDef } from '../sim/network';
+import { drain, type Steps } from './background';
 import { fbm, smoothstep } from './noise';
 
 /** Demi-largeur de la chaussée, en m. */
@@ -28,6 +29,8 @@ const MACRO_SLOPE_FAR = 0.35;
 const MACRO_NEAR_M = 800;
 /** Un point de route sur `MACRO_STRIDE` (16 m) suffit pour dessiner les versants. */
 const MACRO_STRIDE = 4;
+/** Marque d'un `WorldLayout` dont `WorldLayout.build` déroule lui-même les calculs lourds. */
+const DEFERRED = Symbol('deferred');
 /**
  * Relief propre au pays, indépendant des routes : des croupes qui montent quand on s'éloigne de la chaussée. Nul jusqu'à
  * `ROLL_NEAR_M` d'une route (elle reste dégagée), entier à `ROLL_FAR_M`. Sa hauteur vaut au plus `ROLL_M`, plus
@@ -119,33 +122,27 @@ export class WorldLayout {
   private readonly waters: { def: WaterDef; minX: number; maxX: number; minZ: number; maxZ: number }[];
   private readonly waterScratch: WaterHit = { sd: Infinity, level: 0, beach: 0 };
 
-  private readonly macro: Float32Array;
+  /** Affecté en fin de `heavySteps`, après les passes de flou. */
+  private macro!: Float32Array;
   /** Distance à la route la plus proche, sur la même grille que `macro`, en m. */
   private readonly roadDist: Float32Array;
-  // (affecté en fin de constructeur, après les passes de flou)
   private readonly macroCols: number;
   private readonly macroRows: number;
   private readonly macroX0: number;
   private readonly macroZ0: number;
 
-  constructor(readonly network: RoadNetwork, readonly relief = DEFAULT_RELIEF) {
+  /**
+   * Le même monde, construit par étapes (une route, puis une rangée de la grille de relief à la fois) : à dérouler avec
+   * `Background.run` pour ne pas bloquer la page. Le constructeur, lui, fait tout d'un coup.
+   */
+  static *build(network: RoadNetwork, relief = DEFAULT_RELIEF): Steps<WorldLayout> {
+    const layout = new WorldLayout(network, relief, DEFERRED);
+    yield* layout.heavySteps();
+    return layout;
+  }
+
+  constructor(readonly network: RoadNetwork, readonly relief = DEFAULT_RELIEF, deferred?: typeof DEFERRED) {
     this.edges = [...network.edges.values()];
-    this.edges.forEach((e, rank) => {
-      const pts = e.sample(SAMPLE_STEP_M);
-      pts.forEach((p, n) => {
-        const i = this.xs.length;
-        this.xs.push(p.x);
-        this.zs.push(p.z);
-        this.alts.push(p.altitude);
-        this.edgeOf.push(rank);
-        this.sOf.push(p.s);
-        this.next.push(n < pts.length - 1 ? i + 1 : -1);
-        const key = this.key(Math.floor(p.x / CELL_M), Math.floor(p.z / CELL_M));
-        const list = this.cells.get(key);
-        if (list) list.push(i);
-        else this.cells.set(key, [i]);
-      });
-    });
     for (const l of network.landmarks) {
       if (l.kind === 'grove') this.groves.push({ edge: this.edges.findIndex((e) => e.id === l.edge), from: l.from, to: l.to });
     }
@@ -160,15 +157,40 @@ export class WorldLayout {
     this.center = { x: (this.bounds.minX + this.bounds.maxX) / 2, z: (this.bounds.minZ + this.bounds.maxZ) / 2 };
     this.radius = Math.hypot(this.bounds.maxX - this.bounds.minX, this.bounds.maxZ - this.bounds.minZ) / 2;
 
-    // Relief de fond sur une grille grossière : le plus haut des versants que soutiennent les points de route.
+    // Grille du relief de fond, remplie par `heavySteps`.
     const pad = FAR_MARGIN_M;
     this.macroX0 = this.bounds.minX - pad;
     this.macroZ0 = this.bounds.minZ - pad;
     this.macroCols = Math.ceil((this.bounds.maxX - this.bounds.minX + 2 * pad) / MACRO_CELL_M) + 1;
     this.macroRows = Math.ceil((this.bounds.maxZ - this.bounds.minZ + 2 * pad) / MACRO_CELL_M) + 1;
-    const raw = new Float32Array(this.macroCols * this.macroRows);
     this.roadDist = new Float32Array(this.macroCols * this.macroRows);
+    if (deferred !== DEFERRED) drain(this.heavySteps());
+  }
+
+  /** Échantillons des routes et grille de relief de fond : le gros du coût de construction. */
+  private *heavySteps(): Steps {
+    for (const [rank, e] of this.edges.entries()) {
+      yield;
+      const pts = e.sample(SAMPLE_STEP_M);
+      pts.forEach((p, n) => {
+        const i = this.xs.length;
+        this.xs.push(p.x);
+        this.zs.push(p.z);
+        this.alts.push(p.altitude);
+        this.edgeOf.push(rank);
+        this.sOf.push(p.s);
+        this.next.push(n < pts.length - 1 ? i + 1 : -1);
+        const key = this.key(Math.floor(p.x / CELL_M), Math.floor(p.z / CELL_M));
+        const list = this.cells.get(key);
+        if (list) list.push(i);
+        else this.cells.set(key, [i]);
+      });
+    }
+
+    // Relief de fond sur une grille grossière : le plus haut des versants que soutiennent les points de route.
+    const raw = new Float32Array(this.macroCols * this.macroRows);
     for (let r = 0; r < this.macroRows; r++) {
+      yield;
       for (let c = 0; c < this.macroCols; c++) {
         const x = this.macroX0 + c * MACRO_CELL_M;
         const z = this.macroZ0 + r * MACRO_CELL_M;
@@ -193,6 +215,7 @@ export class WorldLayout {
     for (let pass = 0; pass < 2; pass++) {
       const dst = new Float32Array(src.length);
       for (let r = 0; r < this.macroRows; r++) {
+        if (r % 16 === 0) yield;
         for (let c = 0; c < this.macroCols; c++) {
           let sum = 0;
           let n = 0;

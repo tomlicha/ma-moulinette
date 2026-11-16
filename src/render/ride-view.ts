@@ -4,7 +4,8 @@ import { createRenderer, type Backend } from './renderer';
 import { ambianceFor, type Mood } from './ambiance';
 import { loadRiderAssets, type RiderAssets } from './assets';
 import { Rider } from './rider';
-import { buildWorld, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
+import { Background } from './background';
+import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
 import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
 import { IntervalGates } from './interval-gate';
 import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, swayPhaseStep, swayRoll } from './ride-feel';
@@ -50,7 +51,6 @@ const percentile = (sorted: number[], p: number) =>
 export class RideView {
   onStats?: (s: RenderStats) => void;
 
-  private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.3, CAMERA_FAR_M);
   private readonly layout: WorldLayout;
   private readonly rider: Rider;
@@ -80,11 +80,12 @@ export class RideView {
     private readonly journey: Journey,
     quality: Quality,
     assets: RiderAssets,
-    relief: number,
+    private readonly scene: THREE.Scene,
+    layout: WorldLayout,
+    world: World,
   ) {
     this.rider = new Rider(assets);
-    this.layout = new WorldLayout(journey.network, relief);
-    const world = buildWorld(this.layout, this.scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets);
+    this.layout = layout;
     this.sky = world.sky;
     this.world = world;
     this.gates = new IntervalGates(journey, this.layout);
@@ -95,17 +96,31 @@ export class RideView {
     this.resizeObserver.observe(canvas);
     this.resize();
     this.place(0, 0);
-    world.prime(this.p.x, this.p.z); // le décor autour du départ est là dès la première image
-    this.raf = requestAnimationFrame((t) => this.frame(t));
   }
 
+  /**
+   * Crée la vue sans bloquer la page : le monde (relief, route, décor autour du départ) se construit par petites
+   * tranches dans `background`, entre lesquelles le navigateur traite clics et affichage. La vue ne dessine rien avant
+   * d'être complète. `background.hurry()` accélère la fin quand l'écran de sortie s'ouvre avant.
+   */
   static async create(
     canvas: HTMLCanvasElement,
     journey: Journey,
     opts: { forceWebGL?: boolean; quality?: Quality; relief?: number } = {},
+    background = new Background(),
   ): Promise<RideView> {
-    const [{ renderer, backend }, assets] = await Promise.all([createRenderer(canvas, opts.forceWebGL), loadRiderAssets()]);
-    return new RideView(renderer, backend, canvas, journey, opts.quality ?? 'high', assets, opts.relief ?? DEFAULT_RELIEF);
+    const quality = opts.quality ?? 'high';
+    // Le moteur et les modèles arrivent pendant que le monde se construit.
+    const ready = Promise.all([createRenderer(canvas, opts.forceWebGL), loadRiderAssets()]);
+    ready.catch(() => {}); // une erreur est relevée plus bas ; pas de rejet orphelin si la construction échoue d'abord
+    const layout = await background.run(WorldLayout.build(journey.network, opts.relief ?? DEFAULT_RELIEF));
+    const [{ renderer, backend }, assets] = await ready;
+    const scene = new THREE.Scene();
+    const world = await background.run(buildWorldSteps(layout, scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets));
+    const view = new RideView(renderer, backend, canvas, journey, quality, assets, scene, layout, world);
+    await background.run(world.primeSteps(view.p.x, view.p.z)); // le décor autour du départ est là dès la première image
+    view.raf = requestAnimationFrame((t) => view.frame(t));
+    return view;
   }
 
   setState(s: ViewState) {

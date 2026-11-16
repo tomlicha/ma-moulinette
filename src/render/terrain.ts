@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { vec3 } from 'three/tsl';
+import { drain, type Steps } from './background';
 import { fbm, smoothstep } from './noise';
 import { cloudShade } from './shade';
 import { PALETTE } from './palette';
@@ -56,8 +57,9 @@ function groundColor(layout: WorldLayout, x: number, z: number, y: number, ny: n
 /**
  * Maillage régulier du relief sur le rectangle [x0, x0+w] × [z0, z0+h]. Les normales viennent du relief lui-même
  * (différences centrées, une rangée de plus de chaque côté) : aucune couture d'éclairage entre deux morceaux.
+ * Par étapes, une rangée de sommets à la fois.
  */
-function gridMesh(
+function* gridMeshSteps(
   layout: WorldLayout,
   x0: number,
   z0: number,
@@ -69,12 +71,13 @@ function gridMesh(
   skirt: boolean,
   /** Hauteur à l'image en (x, z) ; par défaut le sol. Le relief lointain passe un minorant (voir `Terrain`). */
   sample: (x: number, z: number) => number = (x, z) => layout.groundY(x, z, scratch),
-): THREE.BufferGeometry {
+): Steps<THREE.BufferGeometry> {
   const sx = w / nx;
   const sz = h / nz;
   const cols = nx + 3;
   const heights = new Float32Array(cols * (nz + 3));
   for (let b = -1; b <= nz + 1; b++) {
+    yield;
     for (let a = -1; a <= nx + 1; a++) {
       const i = (b + 1) * cols + (a + 1);
       heights[i] = sample(x0 + a * sx, z0 + b * sz) - drop;
@@ -89,6 +92,7 @@ function gridMesh(
   const nor = new Float32Array(total * 3);
   const col = new Float32Array(total * 3);
   for (let b = 0; b <= nz; b++) {
+    yield;
     for (let a = 0; a <= nx; a++) {
       const v = b * (nx + 1) + a;
       const x = x0 + a * sx;
@@ -180,9 +184,21 @@ export class Terrain {
   private lastZ = Infinity;
   private pending = true;
 
-  constructor(private readonly layout: WorldLayout, private readonly radiusM = TERRAIN_RADIUS_M) {
+  /** Le relief, construit par étapes (le relief lointain, une rangée à la fois) : à dérouler avec `Background.run`. */
+  static *build(layout: WorldLayout, radiusM = TERRAIN_RADIUS_M): Steps<Terrain> {
+    const terrain = new Terrain(layout, radiusM);
+    yield* terrain.backdropSteps();
+    return terrain;
+  }
+
+  private constructor(private readonly layout: WorldLayout, private readonly radiusM = TERRAIN_RADIUS_M) {
     // La couleur des sommets est multipliée par ce nœud : les ombres de nuages glissent sur le sol.
     this.material.colorNode = vec3(cloudShade()) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
+  }
+
+  /** Relief lointain grossier sous tout le réseau. */
+  private *backdropSteps(): Steps {
+    const layout = this.layout;
     const b = layout.bounds;
     const pad = FAR_MARGIN_M;
     const w = b.maxX - b.minX + 2 * pad;
@@ -201,7 +217,7 @@ export class Terrain {
       for (const dx of [-half, 0, half]) for (const dz of [-half, 0, half]) m = Math.min(m, layout.groundY(x + dx, z + dz, scratch));
       return m;
     };
-    const far = new THREE.Mesh(gridMesh(layout, b.minX - pad, b.minZ - pad, w, h, nx, nz, BACKDROP_DROP_M, false, lowest), this.material);
+    const far = new THREE.Mesh(yield* gridMeshSteps(layout, b.minX - pad, b.minZ - pad, w, h, nx, nz, BACKDROP_DROP_M, false, lowest), this.material);
     far.receiveShadow = true;
     this.group.add(far);
   }
@@ -217,11 +233,11 @@ export class Terrain {
     return c;
   }
 
-  private build(i: number, j: number, fine: boolean): Chunk {
+  private *build(i: number, j: number, fine: boolean): Steps<Chunk> {
     const x0 = i * CHUNK_M;
     const z0 = j * CHUNK_M;
     const n = CHUNK_M / (fine ? NEAR_CELL_M : FAR_CELL_M);
-    const mesh = new THREE.Mesh(gridMesh(this.layout, x0, z0, CHUNK_M, CHUNK_M, n, n, 0, true), this.material);
+    const mesh = new THREE.Mesh(yield* gridMeshSteps(this.layout, x0, z0, CHUNK_M, CHUNK_M, n, n, 0, true), this.material);
     mesh.receiveShadow = true;
     this.group.add(mesh);
     return { mesh, fine };
@@ -238,6 +254,11 @@ export class Terrain {
    * pas d'à-coup à l'image. Renvoie vrai si l'ensemble a changé.
    */
   update(x: number, z: number, budget = 2): boolean {
+    return drain(this.updateSteps(x, z, budget));
+  }
+
+  /** `update` par étapes, une rangée de sommets à la fois. */
+  private *updateSteps(x: number, z: number, budget: number): Steps<boolean> {
     if (!this.pending && Math.hypot(x - this.lastX, z - this.lastZ) < MOVE_STEP_M) return false;
     this.lastX = x;
     this.lastZ = z;
@@ -266,7 +287,7 @@ export class Terrain {
         continue;
       }
       if (cur) this.drop(cur);
-      this.chunks.set(key, this.build(c.i, c.j, near));
+      this.chunks.set(key, yield* this.build(c.i, c.j, near));
       left--;
       changed = true;
     }
@@ -286,10 +307,13 @@ export class Terrain {
 
   /** Construit d'un coup tout ce qui entoure (x, z) : à l'ouverture de la vue, avant la première image. */
   prime(x: number, z: number) {
+    drain(this.primeSteps(x, z));
+  }
+
+  /** `prime` par étapes, un morceau à la fois. */
+  *primeSteps(x: number, z: number): Steps {
     this.pending = true;
-    while (this.update(x, z, 64) || this.pending) {
-      /* jusqu'à ce que plus rien ne manque */
-    }
+    while ((yield* this.updateSteps(x, z, 1)) || this.pending) yield;
   }
 
   get chunkCount(): number {

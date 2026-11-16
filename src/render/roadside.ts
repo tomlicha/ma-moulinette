@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { Steps } from './background';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { bends, ramps } from '../sim/road-features';
 import { sign } from './places';
@@ -71,7 +72,8 @@ interface Wall {
   side: 1 | -1;
 }
 
-export function buildRoadside(layout: WorldLayout): THREE.Group {
+/** Le bord des routes par étapes, une route (ou un carrefour) à la fois. */
+export function* buildRoadside(layout: WorldLayout): Steps<THREE.Group> {
   const group = new THREE.Group();
   const dummy = new THREE.Object3D();
   const edges = layout.edges;
@@ -115,6 +117,7 @@ export function buildRoadside(layout: WorldLayout): THREE.Group {
     mesh.setMatrixAt(mesh.count++, dummy.matrix);
   };
   for (const e of edges) {
+    yield;
     for (let s = JUNCTION_CLEAR_M; s <= e.lengthM - JUNCTION_CLEAR_M; s += POST_EVERY_M) {
       // Le parapet remplace le piquet de son côté.
       if (!walled(e.id, s, 1)) put(posts, e, s, POST_LAT_M);
@@ -133,6 +136,7 @@ export function buildRoadside(layout: WorldLayout): THREE.Group {
   const blocks = lot(blockGeo, blockCount, true);
   const shade = new THREE.Color();
   for (const e of edges) {
+    yield;
     for (const w of walls.get(e.id)!) {
       for (let s = w.from; s <= w.to; s += WALL_STEP_M) {
         const p = e.pointAt(s);
@@ -159,6 +163,7 @@ export function buildRoadside(layout: WorldLayout): THREE.Group {
   // Panneaux de pente : au pied de chaque rampe, à droite de celui qui monte. Le panneau donne la pente moyenne réelle
   // (celle que sent le home-trainer) et la longueur de la rampe.
   for (const e of edges) {
+    yield;
     for (const r of ramps(e)) {
       const up = r.gradePct > 0;
       const s = Math.min(Math.max(up ? r.from : r.to, JUNCTION_CLEAR_M + 6), e.lengthM - JUNCTION_CLEAR_M - 6);
@@ -182,6 +187,7 @@ export function buildRoadside(layout: WorldLayout): THREE.Group {
 
   // Poteaux indicateurs : dans le plus grand angle libre du carrefour, une flèche par route.
   for (const node of layout.network.nodes.values()) {
+    yield;
     const ways = layout.network.incident(node.id).map((e) => ({ e, h: e.from.id === node.id ? e.headingAt(0) : e.headingAt(e.lengthM) + Math.PI }));
     if (ways.length < 2) continue;
     const sorted = ways.map((w) => ((w.h % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)).sort((a, b) => a - b);

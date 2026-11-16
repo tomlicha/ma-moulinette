@@ -4,6 +4,7 @@ import { SimulatedTrainer } from './sensors/simulator';
 import { WebBluetoothTrainer } from './sensors/web-bluetooth';
 import { webBluetoothAvailable } from './sensors/gatt-device';
 import { RideView } from './render/ride-view';
+import { Background } from './render/background';
 import { GradeThrottle } from './sim/grade-throttle';
 import { gearedGradePct, trainerModelFor } from './sim/virtual-gears';
 import { setupGears } from './ui/gears';
@@ -123,6 +124,8 @@ const climb = new ClimbCounter();
 let lastRide: RideSnapshot | undefined;
 let lastWoState: WorkoutState | undefined;
 let view: RideView | undefined;
+/** Construction du monde 3D, en tâche de fond dès l'ouverture : elle ne presse que si l'on ouvre la sortie avant la fin. */
+const viewBuild = new Background();
 let currentState: ConnectionState = 'disconnected';
 
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join(' ');
@@ -854,6 +857,7 @@ const recap = setupRecap($<HTMLDialogElement>('recap'), {
 
 const router = setupRouter((v) => {
   view?.setActive(v === 'sortie');
+  if (v === 'sortie') viewBuild.hurry();
   if (v !== 'sortie') {
     rideMenu.close();
     recap.close();
@@ -1109,12 +1113,13 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   if (journey.choose(Math.min(p.options.length - 1, Math.max(0, p.selected + by)))) renderHud();
 });
+if (router.current() === 'sortie') viewBuild.hurry(); // ouverture directe sur la sortie : on attend la vue
 RideView.create($<HTMLCanvasElement>('view'), journey, {
   forceWebGL: params.get('renderer') === 'webgl2',
   quality: params.get('quality') === 'low' ? 'low' : 'high',
   // `?relief=1` : relief réel ; `?relief=2` : plus marqué. Par défaut 1,6 : un 6 % se voit comme un 10 %.
   ...(Number.isFinite(Number(params.get('relief'))) && params.get('relief') ? { relief: Math.min(3, Math.max(1, Number(params.get('relief')))) } : {}),
-})
+}, viewBuild)
   .then((v) => {
     view = v;
     v.setActive(router.current() === 'sortie');

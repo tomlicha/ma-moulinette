@@ -5,6 +5,7 @@ import { attribute, cameraPosition, color, float, mix, normalWorld, normalize, p
 import type { Edge } from '../sim/network';
 import { createTones, DAY, type Ambiance, type Tones } from './ambiance';
 import type { RiderAssets } from './assets';
+import { drain, type Steps } from './background';
 import { Decor, DECOR_HIGH, DECOR_LOW, type DecorOptions } from './decor';
 import { faceted, instanced, merge } from './geometry-utils';
 import { buildMarie } from './marie';
@@ -29,6 +30,8 @@ export interface World {
   sun: SunLight;
   /** Construit d'un coup le décor autour de (x, z) : à l'ouverture de la vue. */
   prime(x: number, z: number): void;
+  /** `prime` par étapes, un morceau de terrain ou de décor à la fois : à dérouler avec `Background.run`. */
+  primeSteps(x: number, z: number): Steps;
   /** Change la lumière, le ciel et la brume : l'ambiance du parcours choisi. */
   setAmbiance(a: Ambiance): void;
   /**
@@ -114,13 +117,15 @@ function ribbon(layout: WorldLayout, latA: number, latB: number, lift: number, s
   return mergeGeometries(parts)!;
 }
 
-function buildRoad(layout: WorldLayout): THREE.Group {
+/** La route par étapes : une bande (chaussée, bas-côté, ligne) à la fois. */
+function* buildRoad(layout: WorldLayout): Steps<THREE.Group> {
   const out = new THREE.Group();
   const asphaltMat = new THREE.MeshStandardNodeMaterial({ roughness: 0.92 });
   asphaltMat.colorNode = color(PALETTE.road).mul(asphaltGrain()).mul(cloudShade()) as unknown as NonNullable<THREE.MeshStandardNodeMaterial['colorNode']>;
   const asphalt = new THREE.Mesh(ribbon(layout, -ROAD_HALF, ROAD_HALF, 0.04, 4), asphaltMat);
   asphalt.receiveShadow = true;
   out.add(asphalt);
+  yield;
 
   // Bas-côté sableux : une bande de chaque côté, posée sous la chaussée, qui donne un bord net au gazon.
   const sandMat = new THREE.MeshStandardNodeMaterial({ roughness: 1 });
@@ -129,6 +134,7 @@ function buildRoad(layout: WorldLayout): THREE.Group {
     const shoulder = new THREE.Mesh(ribbon(layout, a, b, 0.025, 4), sandMat);
     shoulder.receiveShadow = true;
     out.add(shoulder);
+    yield;
   }
 
   // Plaque d'asphalte à chaque carrefour : elle couvre l'angle entre deux routes qui ne se prolongent pas.
@@ -144,8 +150,11 @@ function buildRoad(layout: WorldLayout): THREE.Group {
   const yellow = new THREE.MeshStandardNodeMaterial({ color: PALETTE.centerLine, roughness: 0.7 });
   const white = new THREE.MeshStandardNodeMaterial({ color: PALETTE.edgeLine, roughness: 0.75 });
   const inside: Keep = (e, _i, s0, s1) => s0 > JUNCTION_CLEAR_M && s1 < e.lengthM - JUNCTION_CLEAR_M;
+  yield;
   const dashes = new THREE.Mesh(ribbon(layout, -0.08, 0.08, 0.06, 3, (e, i, s0, s1) => i % 3 === 0 && inside(e, i, s0, s1)), yellow);
+  yield;
   const edgeL = new THREE.Mesh(ribbon(layout, -ROAD_HALF + 0.25, -ROAD_HALF + 0.4, 0.06, 4, inside), white);
+  yield;
   const edgeR = new THREE.Mesh(ribbon(layout, ROAD_HALF - 0.4, ROAD_HALF - 0.25, 0.06, 4, inside), white);
   for (const m of [dashes, edgeL, edgeR]) {
     m.receiveShadow = true;
@@ -495,21 +504,32 @@ function buildSky(tones: Tones): THREE.Mesh {
 }
 
 export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH, assets?: RiderAssets): World {
+  return drain(buildWorldSteps(layout, scene, opts, assets));
+}
+
+/**
+ * `buildWorld` par étapes, un élément du monde à la fois (et le relief lointain, la route, par morceaux) : à dérouler
+ * avec `Background.run` pour ne pas bloquer la page. Rien n'est ajouté à `scene` avant la dernière étape.
+ */
+export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: WorldOptions = WORLD_HIGH, assets?: RiderAssets): Steps<World> {
   const group = new THREE.Group();
   const tones = createTones(DAY);
   const clouds = buildClouds(layout, opts.clouds, tones);
-  const terrain = new Terrain(layout, opts.terrainRadiusM);
-  const places = buildPlaces(layout);
+  yield;
+  const terrain = yield* Terrain.build(layout, opts.terrainRadiusM);
+  const places = yield* buildPlaces(layout);
+  yield;
   const decor = new Decor(layout, opts.decor, opts.decorRadiusM, SHADOW_RANGE_M, places.clearings);
-  group.add(
-    terrain.group,
-    buildRoad(layout),
-    decor.group,
-    buildFence(layout),
-    buildArches(layout),
-    buildMountains(layout, opts.mountainSegments),
-    clouds,
-  );
+  yield;
+  const road = yield* buildRoad(layout);
+  yield;
+  const fence = buildFence(layout);
+  yield;
+  const arches = buildArches(layout);
+  yield;
+  const mountains = buildMountains(layout, opts.mountainSegments);
+  yield;
+  group.add(terrain.group, road, decor.group, fence, arches, mountains, clouds);
 
   // Sol de fond sous tout : une grille de cellules de 100 m, posée sous le relief lointain (qui ne descend jamais sous zéro).
   const size = 2 * (layout.radius + FAR_MARGIN_M + 4000);
@@ -519,7 +539,11 @@ export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldO
   );
   plane.position.set(layout.center.x, -3, layout.center.z);
   plane.receiveShadow = true;
-  group.add(plane, buildWater(layout, tones), places.group, buildRoadside(layout));
+  const water = buildWater(layout, tones);
+  yield;
+  const roadside = yield* buildRoadside(layout);
+  yield;
+  group.add(plane, water, places.group, roadside);
 
   // Soleil et ciel à parts presque égales : les faces à l'ombre restent colorées, comme sur les maquettes.
   const sun = new SunLight(DAY.sunColor, DAY.sunIntensity);
@@ -563,6 +587,10 @@ export function buildWorld(layout: WorldLayout, scene: THREE.Scene, opts: WorldO
     prime(x, z) {
       terrain.prime(x, z);
       decor.prime(x, z);
+    },
+    *primeSteps(x, z) {
+      yield* terrain.primeSteps(x, z);
+      yield* decor.primeSteps(x, z);
     },
     update(dtS, rider) {
       if (rider) lastRider = { x: rider.x, z: rider.z };

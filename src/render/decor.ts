@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { drain, type Steps } from './background';
 import { float, length, positionGeometry, positionLocal, sin, smoothstep as tslSmoothstep, time, uv, vec3 } from 'three/tsl';
 import { faceted, instanced, lumpy, merge, painted } from './geometry-utils';
 import { mulberry32, smoothstep } from './noise';
@@ -443,6 +444,13 @@ export class Decor {
    */
   update(x: number, z: number, budget = 2): boolean {
     if (!this.pending && Math.hypot(x - this.lastX, z - this.lastZ) < 16) return false;
+    const changed = this.sow(x, z, budget);
+    this.repopulate(x, z);
+    return changed;
+  }
+
+  /** Sème au plus `budget` morceaux manquants autour de (x, z) et oublie les lointains, sans toucher aux lots. */
+  private sow(x: number, z: number, budget: number): boolean {
     this.lastX = x;
     this.lastZ = z;
     const radiusM = this.radiusM;
@@ -477,15 +485,21 @@ export class Decor {
         changed = true;
       }
     }
-    this.repopulate(x, z);
     return changed;
   }
 
-  prime(x: number, z: number) {
+  /** Sème tout ce qui entoure (x, z), un morceau par étape, puis remplit les lots une seule fois. */
+  *primeSteps(x: number, z: number): Steps {
     this.pending = true;
-    while (this.update(x, z, 64) || this.pending) {
-      /* jusqu'à ce que plus rien ne manque */
+    while (this.pending) {
+      this.sow(x, z, 1);
+      yield;
     }
+    this.repopulate(x, z);
+  }
+
+  prime(x: number, z: number) {
+    drain(this.primeSteps(x, z));
   }
 
   /** Arbres et rochers dessinés en ce moment. */

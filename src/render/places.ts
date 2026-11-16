@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { Steps } from './background';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NodeDef } from '../sim/network';
 import { lumpy } from './geometry-utils';
@@ -245,7 +246,8 @@ function jetty(layout: WorldLayout, node: NodeDef, boats: number, rand: () => nu
   return k.mesh();
 }
 
-export function buildPlaces(layout: WorldLayout): Places {
+/** Les lieux (villages, moulin, col…) par étapes, un lieu à la fois : à dérouler avec `Background.run` ou `drain`. */
+export function* buildPlaces(layout: WorldLayout): Steps<Places> {
   const group = new THREE.Group();
   const clearings: Places['clearings'] = [];
   const spinning: THREE.Mesh[] = [];
@@ -253,6 +255,7 @@ export function buildPlaces(layout: WorldLayout): Places {
 
   for (const node of layout.network.nodes.values()) {
     if (!node.place) continue;
+    yield;
     const rand = mulberry32(Math.imul(Math.round(node.x) + 977, 2654435761) ^ Math.round(node.z));
     const k = new Kit();
 
