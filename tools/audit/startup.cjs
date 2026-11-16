@@ -1,6 +1,7 @@
 // Réactivité du démarrage : plus longue tâche du thread principal pendant le chargement (en restant sur l'accueil),
 // temps jusqu'à la vue 3D prête, puis plus longue tâche à la première ouverture de la Sortie. Deux lancements par adresse : le
-// premier sur un profil vierge (rien en cache), le second dans le même profil (cache du navigateur rempli).
+// premier sur un profil vierge (rien en cache), le second dans le même profil (cache du navigateur rempli). Un troisième
+// (« direct ») ouvre la Sortie dès le chargement et chronomètre l'attente jusqu'aux premières images de la vue 3D.
 //
 //   node tools/audit/startup.cjs [ralentissement CPU] <adresse>...
 //   node tools/audit/startup.cjs 4 http://localhost:4173/ http://localhost:4174/
@@ -54,5 +55,22 @@ const worstSince = (from) =>
       console.log(`${url.padEnd(24)} ${run.padEnd(5)} | ${ready.padEnd(7)} | chargement : plus longue tâche ${String(load).padStart(5)} ms${Number.isFinite(readyAt) ? ` | vue prête à ${readyAt} ms` : ''} | ouverture de la Sortie : plus longue tâche ${String(sortie).padStart(5)} ms`);
       await ctx.close();
     }
+    // Sortie ouverte dès le lancement (profil déjà rempli) : temps jusqu'à la première ligne de statistiques de la vue,
+    // affichée une demi-seconde après les premières images.
+    const ctx = await chromium.launchPersistentContext(profile, {
+      viewport: { width: 1280, height: 800 },
+      args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', ...(process.env.AUDIT_WEBGPU ? ['--enable-unsafe-webgpu'] : [])],
+    });
+    const p = ctx.pages()[0] ?? (await ctx.newPage());
+    const c = await ctx.newCDPSession(p);
+    await c.send('Emulation.setCPUThrottlingRate', { rate });
+    await p.addInitScript(PROBE);
+    await p.addInitScript(() => addEventListener('DOMContentLoaded', () => setTimeout(() => { location.hash = 'sortie'; }, 0)));
+    await p.goto(url);
+    await p.waitForFunction(() => /i\/s/.test(document.getElementById('view-stats')?.textContent ?? ''), null, { timeout: 300000, polling: 50 });
+    const shown = await p.evaluate(() => Math.round(performance.now()));
+    const worst = await p.evaluate(`(${worstSince})(0)`);
+    console.log(`${url.padEnd(24)} direct | Sortie ouverte au lancement : vue 3D affichée à ${shown} ms | plus longue tâche ${worst} ms`);
+    await ctx.close();
   }
 })();

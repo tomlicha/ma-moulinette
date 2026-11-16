@@ -30,8 +30,16 @@ export interface World {
   sun: SunLight;
   /** Construit d'un coup le décor autour de (x, z) : à l'ouverture de la vue. */
   prime(x: number, z: number): void;
-  /** `prime` par étapes, un morceau de terrain ou de décor à la fois : à dérouler avec `Background.run`. */
-  primeSteps(x: number, z: number): Steps;
+  /**
+   * `prime` par étapes, un morceau de terrain ou de décor à la fois : à dérouler avec `Background.run`. `nearOnly` :
+   * seulement les abords (assez pour la première image) ; le reste se complète avec `fillSteps`.
+   */
+  primeSteps(x: number, z: number, nearOnly?: boolean): Steps;
+  /**
+   * Complète en tâche de fond ce que `primeSteps(x, z, true)` a laissé. Tant qu'elle tourne, `update` ne construit rien
+   * (les deux construiraient les mêmes morceaux) ; elle peut tourner pendant qu'on roule.
+   */
+  fillSteps(x: number, z: number): Steps;
   /** Change la lumière, le ciel et la brume : l'ambiance du parcours choisi. */
   setAmbiance(a: Ambiance): void;
   /**
@@ -42,6 +50,14 @@ export interface World {
   /** Ce qui est construit en ce moment, pour les mesures. */
   stats(): { chunks: number; decorInstances: number; coarseNearRoad: number };
 }
+
+/**
+ * Abords construits avant la première image quand le reste peut suivre en tâche de fond (`primeSteps(x, z, true)`) :
+ * la route et ses deux virages devant soi. Au-delà, le relief lointain grossier tient lieu de sol le temps que les
+ * morceaux arrivent, en une ou deux secondes.
+ */
+const NEAR_TERRAIN_M = 400;
+const NEAR_DECOR_M = 300;
 
 export interface WorldOptions {
   decor: DecorOptions;
@@ -568,6 +584,7 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
 
   scene.add(group, sky, sun, fill);
   let lastRider: { x: number; z: number } | undefined;
+  let filling = false;
   return {
     group,
     sky,
@@ -588,13 +605,22 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
       terrain.prime(x, z);
       decor.prime(x, z);
     },
-    *primeSteps(x, z) {
-      yield* terrain.primeSteps(x, z);
-      yield* decor.primeSteps(x, z);
+    *primeSteps(x, z, nearOnly = false) {
+      yield* terrain.primeSteps(x, z, nearOnly ? NEAR_TERRAIN_M : Infinity);
+      yield* decor.primeSteps(x, z, nearOnly ? NEAR_DECOR_M : Infinity);
+    },
+    *fillSteps(x, z) {
+      filling = true;
+      try {
+        yield* terrain.primeSteps(x, z);
+        yield* decor.primeSteps(x, z);
+      } finally {
+        filling = false;
+      }
     },
     update(dtS, rider) {
       if (rider) lastRider = { x: rider.x, z: rider.z };
-      if (rider) {
+      if (rider && !filling) {
         terrain.update(rider.x, rider.z);
         decor.update(rider.x, rider.z);
       }
