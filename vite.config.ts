@@ -103,6 +103,13 @@ export default defineConfig(({ mode }) => ({
     exportRelays(loadEnv(mode, process.cwd(), ['STRAVA_'])),
     logReceiver(loadEnv(mode, process.cwd(), ['LOG_'])),
   ],
+  server: {
+    // Comptes et salle temps réel : servis par le Worker lancé à côté (`npm run dev:api`, wrangler dev sur le port 8787).
+    proxy: {
+      '/api/auth': 'http://localhost:8787',
+      '/api/world': { target: 'ws://localhost:8787', ws: true },
+    },
+  },
   // Chargé à la demande par l'export : sans cela, Vite l'optimise au premier clic et recharge la page, ce qui efface la sortie en cours.
   optimizeDeps: { include: ['@garmin/fitsdk'] },
   test: {

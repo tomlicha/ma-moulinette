@@ -79,6 +79,28 @@ L'application a trois écrans : **Appareils** (toujours le premier au lancement)
 
 L'écran Sortie est plein écran : le rendu 3D occupe toute la fenêtre, un bouton en haut à droite ouvre un menu (navigation, sortie, séance, pilotage manuel, export, rendu, journal), et le premier coup de pédale démarre la séance chargée, ou la sortie libre ([docs/design/sortie.md](docs/design/sortie.md)). Les mesures sont posées sur la vue 3D : parcours ou palier en haut à gauche, puissance (moyenne 3 s), FC, cadence et vitesse en haut au centre, profil du parcours ou de la séance en bas. Panneaux en verre dépoli, police Barlow servie par l'application. `?quality=low` les passe sans flou. Spécification, décisions et jetons : [docs/design/hud.md](docs/design/hud.md).
 
+### Multijoueur : comptes Strava et salle temps réel
+
+Chaque coureur se connecte avec Strava ; il voit les autres rouler dans le monde. Le serveur ne simule rien : chaque client calcule sa position et l'annonce sur le réseau routier (route, sens, abscisse, route suivante), 4 fois par seconde ; la salle relaie un instantané à tous, et chaque client redessine les autres avec 200 ms de retard.
+
+- `src/server/accounts.ts` : connexion Strava (un compte par athlète), cookie de session, nom affiché proposé (« Tom L. ») et validé par le coureur avant d'être montré aux autres. Les conditions de l'API Strava interdisent de montrer à un autre utilisateur les données d'un athlète : ni photo ni activité Strava n'est affichée.
+- `src/server/room.ts` : la salle (arrivées, départs, états vérifiés, instantanés à 4 Hz) ; `worker/world-room.ts` la branche sur un Durable Object Cloudflare, avec mise en veille quand personne ne roule.
+- `src/net/` : protocole binaire (19 octets par état, pas de fréquence cardiaque), lissage des autres coureurs, client avec reconnexion. `src/sim/remote-track.ts` reconstruit la trajectoire d'un autre coureur.
+
+En local :
+
+```
+cp .dev.vars.example .dev.vars                                         # connexion de développement, sans Strava
+npx wrangler d1 migrations apply ma-moulinette-logs --local -c wrangler.app.toml
+npm run dev:api    # Worker : comptes et salle, sur http://localhost:8787
+npm run dev        # page sur http://localhost:5173, qui relaie /api/auth et /api/world vers le Worker
+npm run bots -- --count 5 --watch --url ws://localhost:5173/api/world/ws   # 5 robots qui roulent
+```
+
+En ligne : `npx wrangler d1 migrations apply ma-moulinette-logs --remote -c wrangler.app.toml`, les secrets `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET` (`npx wrangler secret put … -c wrangler.app.toml`), puis `npm run deploy:app`. Dans les réglages de l'application Strava, « Authorization Callback Domain » doit être le domaine de l'application. L'application Strava est limitée à 10 athlètes ; au-delà, il faut une revue de Strava.
+
+Vérifié : tests unitaires (dont deux clients reliés par une salle, sans réseau), et `wrangler dev` avec un vrai Durable Object : robots connectés directement et à travers Vite, refus lisibles sans session et pour une mauvaise version. Non vérifié : la vraie connexion Strava, et un déploiement.
+
 ### Journaux d'erreurs à distance
 
 `src/telemetry/` : tout ce que la page écrit dans son journal (connexion au trainer, reconnexions, échecs de commande, erreurs non gérées du navigateur) est gardé en mémoire (300 dernières lignes). Dès qu'une ligne ressemble à une erreur, la page envoie le tampon au récepteur, 5 s plus tard pour y embarquer les essais de reconnexion qui suivent, avec le contexte (navigateur, trainer, état de connexion, capacités). Chaque ligne n'est envoyée qu'une fois ; au plus un envoi toutes les 30 s et vingt par session. Hors ligne, l'envoi repart au retour du réseau ou à la fermeture de la page. Les envois ne font jamais d'erreur visible et ne sont jamais journalisés eux-mêmes.

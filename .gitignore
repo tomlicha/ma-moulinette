@@ -6,3 +6,4 @@ dist
 .strava-tokens.json
 .logs/
 .wrangler/
+.dev.vars

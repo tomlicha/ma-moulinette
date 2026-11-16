@@ -19,6 +19,10 @@ export interface Tokens {
   /** Expiration du jeton d'accès, en secondes epoch. Il vit 6 h. */
   expiresAt: number;
   athlete?: string;
+  /** Identifiant Strava de l'athlète : sert de clé au compte Ma Moulinette. Donné à l'échange du code, pas au rafraîchissement. */
+  athleteId?: string;
+  firstname?: string;
+  lastname?: string;
 }
 
 export class StravaError extends Error {
@@ -46,7 +50,7 @@ interface TokenResponse {
   access_token: string;
   refresh_token: string;
   expires_at: number;
-  athlete?: { firstname?: string; lastname?: string };
+  athlete?: { id?: number; firstname?: string; lastname?: string };
 }
 
 async function tokenRequest(cfg: ClientConfig, params: Record<string, string>, f: Fetch): Promise<Tokens> {
@@ -60,6 +64,9 @@ async function tokenRequest(cfg: ClientConfig, params: Record<string, string>, f
     refreshToken: j.refresh_token,
     expiresAt: j.expires_at,
     athlete: name || undefined,
+    ...(j.athlete?.id !== undefined ? { athleteId: String(j.athlete.id) } : {}),
+    ...(j.athlete?.firstname ? { firstname: j.athlete.firstname } : {}),
+    ...(j.athlete?.lastname ? { lastname: j.athlete.lastname } : {}),
   };
 }
 
