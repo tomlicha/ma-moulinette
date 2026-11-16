@@ -119,6 +119,11 @@ export class RideView {
     const world = await background.run(buildWorldSteps(layout, scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets));
     const view = new RideView(renderer, backend, canvas, journey, quality, assets, scene, layout, world);
     await background.run(world.primeSteps(view.p.x, view.p.z)); // le décor autour du départ est là dès la première image
+    // Shaders compilés d'avance, la caméra posée comme à la première image (seul ce qu'elle voit est compilé) : sinon le
+    // premier `render()` les compile tous d'un coup et fige la page à l'ouverture de la sortie. `compileAsync` construit
+    // les matériaux objet par objet en rendant la main entre deux, et crée les pipelines de façon asynchrone.
+    view.follow(0);
+    await renderer.compileAsync(scene, view.camera).catch((e: unknown) => console.warn('rendu 3D : précompilation des shaders impossible', e));
     view.raf = requestAnimationFrame((t) => view.frame(t));
     return view;
   }
