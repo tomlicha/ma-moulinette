@@ -165,7 +165,7 @@ export function setupAccount(o: {
     const line = user.nameConfirmed ? worldLine(world.status, world.population) : worldLine('name-pending', 0);
     el.className = 'account account-in';
     el.innerHTML = `
-      <button type="button" class="account-chip" data-tone="${line.tone}" aria-haspopup="menu" aria-expanded="false">
+      <button type="button" class="account-chip" data-tone="${line.tone}" aria-haspopup="menu" aria-expanded="false" aria-label="Compte de ${html(user.displayName)}">
         <span class="account-avatar" aria-hidden="true">${html(initialOf(user.displayName))}</span>
         <span class="account-who"><b>${html(user.displayName)}</b><span class="account-status" data-tone="${line.tone}">${html(line.text)}</span></span>
         <svg class="account-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>

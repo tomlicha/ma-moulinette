@@ -113,9 +113,12 @@ main:has([data-view='accueil']:not([hidden])) { max-width: none; padding: 0; }
 @media (prefers-reduced-motion: reduce) { .home-scene { transition: none; } }
 /* Voile crème : la scène reste visible, les cartes se détachent. */
 .home-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 246, 235, .38) 0%, rgba(255, 246, 235, .08) 45%, rgba(255, 246, 235, .3) 100%); }
-.home > :not(.home-scenes):not(.home-shade), .dev > :not(.home-scenes):not(.home-shade):not(dialog):not(.home-top) { position: relative; z-index: 1; }
+.home > :not(.home-scenes):not(.home-shade):not(.home-top), .dev > :not(.home-scenes):not(.home-shade):not(dialog):not(.home-top) { position: relative; z-index: 1; }
+/* L'en-tête (marque, compte, navigation) passe au-dessus des cartes : le menu du compte déborde sur elles quand l'écran
+   est bas (iPhone couché en plein écran, 390 px). Avant, la règle ci-dessus le ramenait au niveau des cartes. */
+.home > .home-top, .dev > .home-top, .sea > .home-top { position: relative; z-index: 20; }
 
-.home-top { grid-column: 1 / -1; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.home-top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .home-brand { display: flex; align-items: center; height: 48px; padding: 0 20px 0 14px; border-radius: 999px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); backdrop-filter: blur(14px) saturate(1.2); color: var(--fg); font: 700 1.7rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; letter-spacing: .02em; }
 .home-nav a:focus-visible, .dev :focus-visible, a.home-radar:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 
