@@ -1,6 +1,6 @@
 # Feuille de route
 
-Mise à jour du 27 octobre 2026. Référence : [analyse technique](analyse-technique.md) (preuves de concept, exigences EF et ENF).
+Mise à jour du 16 novembre 2026. Référence : [analyse technique](analyse-technique.md) (preuves de concept, exigences EF et ENF).
 
 « Validé » veut dire essayé sur du vrai matériel. Le reste n'est vérifié que par des tests automatiques, ce qui ne prouve pas que le matériel se comporte pareil.
 
@@ -19,7 +19,7 @@ Mise à jour du 27 octobre 2026. Référence : [analyse technique](analyse-techn
 | Capteur de puissance seul | Fait : lecture, cadence déduite de la manivelle, cadence à 0 à l'arrêt | Oui sur un Stages (connexion) ; correction de cadence à confirmer |
 | Ceinture cardio autonome | Codée, avec reconnexion | Oui sur un Garmin HRM-Pro+ : connexion, valeurs affichées, reconnexion (18,6 s, mais la ceinture était coupée pendant l'essai : le seuil de 5 s reste non mesuré) |
 | Simulation physique | Fait : puissance, pente, air, roulement, inertie, freinage sans pédalage, trajet sur un réseau routier de 28,8 km avec deux parcours, montagne et plat ([parcours](design/parcours.md)) | Ressenti du SIM confirmé ; réglages à affiner |
-| Rendu 3D | Décor remis à niveau d'après la maquette (14 et 15 novembre 2026) : rendu neutre, forêts et prés, relief propre, chaîne de montagnes, deux lacs, lieux bâtis à chaque carrefour, érables roux du Col, mobilier de bord de route, vent et nuages ([parcours](design/parcours.md)). Monde construit sur le réseau routier (relief par morceaux autour du cycliste, décor semé par morceau), relief exagéré ×1,6, caméra qui suit la pente, champ de vision et balancement selon l'effort, ombres en cascades, cycliste animé, WebGPU et repli WebGL2 ; carrefours et choix de route (14 novembre 2026) | WebGPU confirmé sur l'ordinateur de Tom ; **aucune mesure de performance** |
+| Rendu 3D | Décor remis à niveau d'après la maquette (14 et 15 novembre 2026) : rendu neutre, forêts et prés, relief propre, chaîne de montagnes, deux lacs, lieux bâtis à chaque carrefour, érables roux du Col, mobilier de bord de route, vent et nuages ([parcours](design/parcours.md)). Monde construit sur le réseau routier (relief par morceaux autour du cycliste, décor semé par morceau), relief exagéré ×1,6, caméra qui suit la pente, champ de vision et balancement selon l'effort, ombres en cascades, cycliste animé, WebGPU et repli WebGL2 ; carrefours et choix de route (14 novembre 2026) ; vue chargée à la demande et reconstruite après une perte du GPU (16 novembre 2026) | WebGPU confirmé sur l'ordinateur de Tom ; **aucune mesure de performance** |
 | Export FIT | Fait ; bouton essayé dans la vraie page avec le trainer simulé, fichier relu avec le décodeur de Garmin | Fichier non encore ouvert dans Strava ni Garmin Connect |
 | Envoi à Strava | Fait via un relais dans le serveur de dev ; abonnement requis pour créer l'application | **Non** : jamais lancé avec de vrais identifiants |
 | Tapis, capteur de foulée (seconde vague) | Non commencé | — |
@@ -52,7 +52,7 @@ C'est la plus grosse inconnue de l'analyse.
 - Ajouter la chaîne d'image : occlusion ambiante (GTAO), anticrénelage temporel, mise à l'échelle, lumière indirecte. Aujourd'hui il n'y a que des ombres en cascades.
 - Départager Three.js et Babylon.js sur la même scène (critère de l'analyse).
 - Mesurer sur les appareils planchers (iPhone 11, Android 2021, portable à GPU intégré) : 30 i/s stables pendant 60 min sur mobile, température et mémoire stables (ENF-01, ENF-07).
-- Profils de qualité automatiques et baisse de profil en cas de dérive thermique.
+- Profils de qualité automatiques et baisse de profil en cas de dérive thermique. Premier palier fait le 16 novembre 2026 : qualité réduite par défaut sur écran tactile (`src/render/quality.ts`) ; reste la résolution dynamique pilotée par le temps d'image.
 
 ### Étape 4. Coquille iOS, PoC 4 (à lancer tôt, en parallèle)
 

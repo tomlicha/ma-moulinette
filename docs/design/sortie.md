@@ -61,5 +61,5 @@ Tant que la vue 3D n'a pas dessiné sa première image, une carte au centre de l
 
 ## À faire
 
-- Vérifier le coût du plein écran sur un grand écran (4K, ratio de pixels 2) : `renderer.setPixelRatio` est limité à 2, `?quality=low` le ramène à 1.
+- Vérifier le coût du plein écran sur un grand écran (4K, ratio de pixels 2) : `renderer.setPixelRatio` est limité à 2 en qualité complète, à 1,5 en qualité réduite (`src/render/quality.ts`). La qualité réduite est le défaut des écrans tactiles ; `?quality=high` force la complète.
 - Dire à l'écran, avant le départ, que le premier coup de pédale démarre (la séance ou la sortie) ; aujourd'hui le HUD reste en tirets sans l'indiquer.
