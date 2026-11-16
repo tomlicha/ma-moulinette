@@ -1,5 +1,8 @@
 import type { Course } from './course';
 import type { CourseDef, Edge, RoadNetwork } from './network';
+import { edgeS, endNodeId, findLeg, trackPoint, type JourneyPoint, type Leg, type NetPosition } from './track';
+
+export { CORNER_M, type JourneyPoint, type NetPosition } from './track';
 
 /** Distance à laquelle un carrefour est annoncé, en m. */
 export const ANNOUNCE_M = 250;
@@ -8,8 +11,6 @@ export const ANNOUNCE_M = 250;
  * la pente envoyée au trainer ne voit jamais une route encore indécise.
  */
 export const LOCK_M = 40;
-/** Rayon de l'arc qui arrondit le coin d'un carrefour, en m : de part et d'autre du nœud. */
-export const CORNER_M = 12;
 /** En dessous de cet écart de cap, une route compte comme « tout droit », en degrés. */
 const STRAIGHT_DEG = 25;
 
@@ -42,22 +43,6 @@ export interface PendingJunction {
   options: JunctionOption[];
   /** Option retenue : le choix du cycliste, sinon le tout droit. */
   selected: number;
-}
-
-export interface JourneyPoint {
-  x: number;
-  y: number;
-  z: number;
-  /** Cap en rad (`atan2(dz, dx)`), positif vers la droite. */
-  heading: number;
-  edgeId: string;
-}
-
-interface Leg {
-  edge: Edge;
-  forward: boolean;
-  startM: number;
-  lengthM: number;
 }
 
 const wrapPi = (a: number) => {
@@ -135,7 +120,7 @@ export class Journey implements Course {
     const last = this.committed[this.committed.length - 1]!;
     const options = this.optionsAfter(last);
     return {
-      nodeId: this.endNodeId(last),
+      nodeId: endNodeId(last),
       atM,
       distanceM: atM - distanceM,
       options,
@@ -155,7 +140,7 @@ export class Journey implements Course {
   altitudeAt(distanceM: number): number {
     const d = Math.max(0, distanceM);
     const leg = this.legAt(d);
-    return leg.edge.altitudeAt(this.edgeS(leg, d));
+    return leg.edge.altitudeAt(edgeS(leg, d));
   }
 
   /** Pente lissée sur 2 × `halfWindowM`, sans reculer avant le départ. */
@@ -166,55 +151,29 @@ export class Journey implements Course {
   }
 
   /**
-   * Position, altitude et cap à la distance `distanceM`. À moins de `CORNER_M` d'un carrefour, la trajectoire est un arc
-   * (courbe de Bézier) qui coupe le coin entre les deux routes : le cycliste tourne, il ne pivote pas sur un angle. L'altitude
-   * et la distance n'en sont pas touchées (les bouts de route sont plats).
+   * Position, altitude et cap à la distance `distanceM`, avec les coins des carrefours arrondis (voir `trackPoint`).
    */
   pointAt(distanceM: number): JourneyPoint {
-    const d = Math.max(0, distanceM);
-    const leg = this.legAt(d);
-    const toStart = d - leg.startM;
-    const toEnd = leg.startM + leg.lengthM - d;
-    // Le nœud qu'on vient de passer, ou celui qu'on approche : `boundary` est sa distance sur le trajet.
-    let boundary: number | undefined;
-    if (leg.startM > 0 && toStart < CORNER_M) boundary = leg.startM;
-    else if (toEnd < CORNER_M) boundary = leg.startM + leg.lengthM;
-    if (boundary === undefined) return this.rawPoint(d);
-
-    const a = this.rawPoint(boundary - CORNER_M);
-    const c = this.rawPoint(boundary);
-    const b = this.rawPoint(boundary + CORNER_M);
-    const t = (d - (boundary - CORNER_M)) / (2 * CORNER_M);
-    const u = 1 - t;
-    const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
-    const z = u * u * a.z + 2 * u * t * c.z + t * t * b.z;
-    const dx = 2 * u * (c.x - a.x) + 2 * t * (b.x - c.x);
-    const dz = 2 * u * (c.z - a.z) + 2 * t * (b.z - c.z);
-    return { x, z, y: leg.edge.altitudeAt(this.edgeS(leg, d)), heading: Math.atan2(dz, dx), edgeId: leg.edge.id };
+    return trackPoint((d) => this.legAt(d), Math.max(0, distanceM));
   }
 
-  /** Point sur la route elle-même, sans arrondir les coins. */
-  private rawPoint(distanceM: number): JourneyPoint {
+  /**
+   * Position sur le réseau à la distance `distanceM`, à envoyer aux autres joueurs. La route suivante y figure dès que
+   * le carrefour est verrouillé (`LOCK_M` avant le nœud) : les autres arrondissent ainsi le virage au bon moment.
+   */
+  locate(distanceM: number): NetPosition {
     const d = Math.max(0, distanceM);
     const leg = this.legAt(d);
-    const s = this.edgeS(leg, d);
-    const p = leg.edge.pointAt(s);
-    const heading = leg.edge.headingAt(s) + (leg.forward ? 0 : Math.PI);
-    return { x: p.x, y: leg.edge.altitudeAt(s), z: p.z, heading: wrapPi(heading), edgeId: leg.edge.id };
+    const pos: NetPosition = { edgeId: leg.edge.id, forward: leg.forward, s: edgeS(leg, d) };
+    const i = this.committed.indexOf(leg);
+    const next = i >= 0 ? this.committed[i + 1] : undefined;
+    if (next) pos.next = { edgeId: next.edge.id, forward: next.forward };
+    return pos;
   }
 
   /** Nom de la route sous le cycliste. */
   edgeNameAt(distanceM: number): string {
     return this.legAt(Math.max(0, distanceM)).edge.name;
-  }
-
-  private edgeS(leg: Leg, d: number): number {
-    const local = d - leg.startM;
-    return leg.forward ? local : leg.lengthM - local;
-  }
-
-  private endNodeId(leg: Leg): string {
-    return leg.forward ? leg.edge.to.id : leg.edge.from.id;
   }
 
   private legFor(option: JunctionOption, startM: number): Leg {
@@ -224,7 +183,7 @@ export class Journey implements Course {
 
   /** Les routes qui partent du nœud où finit `leg`, de la gauche vers la droite, demi-tour exclu. */
   private optionsAfter(leg: Leg): JunctionOption[] {
-    const nodeId = this.endNodeId(leg);
+    const nodeId = endNodeId(leg);
     const inHeading = leg.forward ? leg.edge.headingAt(leg.edge.lengthM) : leg.edge.headingAt(0) + Math.PI;
     const options: JunctionOption[] = [];
     const onCourse = this.guideNextAfter(leg);
@@ -288,17 +247,6 @@ export class Journey implements Course {
     const last = this.tentative[this.tentative.length - 1];
     return last ? last.startM + last.lengthM : this.committedEndM;
   }
-}
-
-function findLeg(legs: Leg[], d: number): Leg {
-  let lo = 0;
-  let hi = legs.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (legs[mid]!.startM <= d) lo = mid;
-    else hi = mid - 1;
-  }
-  return legs[lo]!;
 }
 
 /** La route du parcours si elle est proposée ; sinon l'option la plus droite (à égalité, la première de gauche à droite). */
