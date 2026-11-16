@@ -77,3 +77,5 @@ Mesures dans le navigateur (`tools/audit/startup.cjs`, processeur ralenti 4×, s
 La dernière ligne est le prix du rendu fait d'avance : la compilation des ombres et de la passe de sortie a lieu pendant un temps mort de l'accueil plutôt qu'au moment où l'on ouvre la Sortie. Sans GPU elle dure ~2 s (ralenti 4×) ; sur un vrai GPU, bien moins. À vérifier sur téléphone : si elle se sent sur l'accueil, la réserver au moment où l'on touche « Rouler » ou « Sortie ».
 
 Note : `tools/audit/serve.mjs` recompressait chaque fichier en brotli maximal à chaque requête, ce qui ajoutait plusieurs secondes d'« attente réseau » aux mesures précédentes (identique pour toutes les versions comparées : les comparaisons tiennent, pas les durées absolues). Il garde désormais la version compressée.
+
+Écran de chargement : si la Sortie est ouverte avant que la vue soit prête, une carte « Préparation de la route » affiche l'étape et l'avancement (`RideView.create`, option `onProgress`), jusqu'à la première image (`RideView.firstFrame`). Voir [docs/design/sortie.md](../../design/sortie.md#écran-de-chargement).

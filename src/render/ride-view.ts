@@ -107,10 +107,19 @@ export class RideView {
   static async create(
     canvas: HTMLCanvasElement,
     journey: Journey,
-    opts: { forceWebGL?: boolean; quality?: Quality; relief?: number } = {},
+    opts: {
+      forceWebGL?: boolean;
+      quality?: Quality;
+      relief?: number;
+      /** Avancement de la préparation (0 à 1) et l'étape en cours, pour l'écran de chargement. */
+      onProgress?: (done: number, step: string) => void;
+    } = {},
     background = new Background(),
   ): Promise<RideView> {
     const quality = opts.quality ?? 'high';
+    // Parts de chaque étape dans l'attente totale, d'après les mesures (docs/audit/2026-11-16/mesure-demarrage.md).
+    const progress = opts.onProgress ?? (() => {});
+    progress(0, 'Relief du parcours');
     // Le moteur et les modèles arrivent pendant que le monde se construit.
     const ready = Promise.all([
       createRenderer(canvas, opts.forceWebGL).then((r) => (performance.mark('ride:gpu'), r)),
@@ -119,22 +128,28 @@ export class RideView {
     ready.catch(() => {}); // une erreur est relevée plus bas ; pas de rejet orphelin si la construction échoue d'abord
     const layout = await background.run(WorldLayout.build(journey.network, opts.relief ?? DEFAULT_RELIEF));
     performance.mark('ride:layout');
+    progress(0.29, 'Coureur et moteur 3D');
     const [{ renderer, backend }, assets] = await ready;
     performance.mark('ride:renderer');
+    progress(0.31, 'Routes, villages et décor');
     const scene = new THREE.Scene();
     const world = await background.run(buildWorldSteps(layout, scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets));
     performance.mark('ride:world');
+    progress(0.44, 'Abords du départ');
     const view = new RideView(renderer, backend, canvas, journey, quality, assets, scene, layout, world);
     // Avant la première image, seulement les abords du départ ; le reste du relief et du décor (jusqu'à 1,2 km) suit en
     // tâche de fond, sans presser, même si l'écran de sortie est ouvert : il ne doit pas voler d'images.
     await background.run(world.primeSteps(view.p.x, view.p.z, true));
     performance.mark('ride:prime');
+    progress(0.6, 'Lumières et matériaux');
     // Shaders compilés d'avance, la caméra posée comme à la première image (seul ce qu'elle voit est compilé) : sinon le
     // premier `render()` les compile tous d'un coup et fige la page à l'ouverture de la sortie. `compileAsync` construit
     // les matériaux objet par objet en rendant la main entre deux, et crée les pipelines de façon asynchrone.
     view.follow(0);
-    await renderer.compileAsync(scene, view.camera).catch((e: unknown) => console.warn('rendu 3D : précompilation des shaders impossible', e));
+    const compiled = (e: ProgressEvent) => progress(0.6 + (0.3 * e.loaded) / Math.max(1, e.total), 'Lumières et matériaux');
+    await renderer.compileAsync(scene, view.camera, null, compiled).catch((e: unknown) => console.warn('rendu 3D : précompilation des shaders impossible', e));
     performance.mark('ride:compile');
+    progress(0.9, 'Première image');
     view.raf = requestAnimationFrame((t) => view.frame(t));
     view.warmUpWhenIdle();
     void new Background().run(world.fillSteps(view.p.x, view.p.z)).catch((e: unknown) => console.warn('rendu 3D : décor lointain incomplet', e));
@@ -178,6 +193,9 @@ export class RideView {
 
   private size = { w: 0, h: 0 };
   private drawn = false;
+  private resolveFirstFrame: () => void = () => {};
+  /** Résolue à la première image affichée (pas au rendu fait d'avance, canevas masqué). */
+  readonly firstFrame = new Promise<void>((resolve) => (this.resolveFirstFrame = resolve));
   private disposed = false;
   private readonly onWindowResize = () => this.resize();
 
@@ -305,6 +323,7 @@ export class RideView {
     if (!this.drawn) {
       this.drawn = true;
       performance.mark('ride-first-frame'); // relevé par tools/audit/startup.cjs
+      this.resolveFirstFrame();
     }
 
     this.frameTimes.push(dtMs);
