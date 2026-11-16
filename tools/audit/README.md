@@ -1,0 +1,40 @@
+# Outils d'audit
+
+Scripts utilisés pour [docs/audit/](../../docs/audit/). Ils ne font pas partie des dépendances du projet : on les installe à part, sans toucher à `package.json`.
+
+```
+npm i --no-save playwright axe-core lighthouse@12
+npx playwright install chromium     # si aucun Chromium n'est déjà installé
+```
+
+1. **Servir le build** comme Cloudflare (brotli, en-têtes de cache par défaut, repli SPA) :
+
+   ```
+   npm run build
+   node tools/audit/serve.mjs "$PWD/dist" 4173
+   ```
+
+2. **Lighthouse**, ordinateur et mobile :
+
+   ```
+   npx lighthouse http://localhost:4173/ --preset=desktop --output=json --output=html --output-path=./lh-desktop
+   npx lighthouse http://localhost:4173/ --output=json --output=html --output-path=./lh-mobile
+   node tools/audit/lighthouse-summary.mjs lh-desktop.report.json lh-mobile.report.json
+   ```
+
+3. **Parcours des écrans** (captures, axe-core, débordements, textes < 12 px, cibles tactiles, erreurs console) sur tous les formats, ou ceux dont le nom commence par le 3ᵉ argument :
+
+   ```
+   node tools/audit/screens.cjs <dossier-captures> <resultats.json> [iphone]
+   ```
+
+   Les iPhone sont mesurés en plein écran (844 × 390), jamais dans la fenêtre Safari.
+
+4. **Profil CPU du démarrage**, par fichier et par fonction (serveur de dev, pour garder les noms de modules) :
+
+   ```
+   npx vite --port 5199 &
+   node tools/audit/profile.cjs http://localhost:5199/
+   ```
+
+Sans GPU (machine d'intégration, conteneur), Chromium rend en logiciel : les images par seconde ne sont pas significatives, les triangles et appels de dessin le sont. Pour la Sortie, utiliser `?renderer=webgl2`.
