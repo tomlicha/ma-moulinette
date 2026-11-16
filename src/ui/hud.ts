@@ -71,6 +71,10 @@ function notchSide(): 'left' | 'right' | '' {
   return angle === 90 ? 'left' : angle === 270 || angle === -90 ? 'right' : '';
 }
 
+/** Échelle des widgets dans la scène (hud.css, --hud-k), taille des libellés en pixels de scène, et leur minimum à l'écran. */
+const HUD_K = 0.9;
+const LABEL_PX = 16;
+const MIN_LABEL_PX = 12;
 const PHONE_QUERY = '(pointer: coarse) and (orientation: landscape) and (max-height: 600px)';
 /** Échelle plancher de la scène sur téléphone : les libellés de 16 px y font 12 px réels. */
 const COMPACT_SCALE = 0.75;
@@ -277,6 +281,10 @@ export class RideHud {
       this.upMax = !compact ? UP_ITEMS : h >= COMPACT_TALL_PX ? UP_ITEMS_COMPACT_TALL : UP_ITEMS_COMPACT;
       const s = Math.max(Math.min(w / REF_W, h / REF_H), compact ? COMPACT_SCALE : 0);
       root.style.setProperty('--hud-s', String(s));
+      // Petite fenêtre d'ordinateur (portable 1024 × 640) : les widgets, à 90 % de la scène, auraient des libellés de
+      // 16 px de scène sous 12 px à l'écran. On les grossit jusqu'à 100 % pour garder 12 px. Téléphone : `.hud.compact`.
+      if (compact) root.style.removeProperty('--hud-k');
+      else root.style.setProperty('--hud-k', String(Math.min(1, Math.max(HUD_K, MIN_LABEL_PX / (LABEL_PX * s)))));
       root.style.setProperty('--hud-x', `${(w - REF_W * s) / 2}px`);
       root.style.setProperty('--hud-y', `${(h - REF_H * s) / 2}px`);
       // Marges autour de la scène centrée, en pixels de scène : les panneaux s'en servent pour se caler sur les bords de la fenêtre.

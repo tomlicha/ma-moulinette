@@ -87,10 +87,15 @@ export function createRadar(root: HTMLElement, variant: RadarVariant, opts: Rada
     .then((url) => { if (core.isConnected) img.src = url; })
     .catch((e) => console.warn('portrait du coureur : repli sur l’image statique', e));
 
+  // Le radar contient un bouton (le médaillon) : il ne peut pas être une image (`role="img"`) sans cacher ce bouton aux
+  // lecteurs d'écran. Ses dessins et étiquettes sont donc masqués, et une phrase cachée à l'œil résume les appareils.
+  const desc = el('p', 'visually-hidden', box);
   const parts = {} as Record<RadarRole, { dot: HTMLElement; tag: HTMLElement; role: HTMLElement; name: HTMLElement; status: HTMLElement }>;
   for (const role of ['trainer', 'hr'] as const) {
     const dot = el('span', 'radar-dot', box);
     const tag = el('div', 'radar-tag', box);
+    dot.setAttribute('aria-hidden', 'true');
+    tag.setAttribute('aria-hidden', 'true');
     const r = el('b', 'r', tag);
     const name = el('span', 'n', tag);
     const status = el('span', 's', tag);
@@ -111,8 +116,7 @@ export function createRadar(root: HTMLElement, variant: RadarVariant, opts: Rada
         links[role].dataset.tone = t.tone;
         summary.push(`${t.role} : ${t.name}, ${t.status.toLowerCase()}`);
       }
-      box.setAttribute('role', 'img');
-      box.setAttribute('aria-label', `Appareils. ${summary.join(' ; ')}.`);
+      desc.textContent = `Appareils. ${summary.join(' ; ')}.`;
     },
   };
 }
