@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanName, createAccounts, CSRF_HEADER, readCookie, SESSION_COOKIE, suggestedName, type AccountOptions } from './accounts';
 import { createMemoryAccountStore } from './memory-store';
 import { createUserStrava } from './user-strava';
+import { APP_RETRY_MS, prefersStravaApp } from '../net/account';
 
 const ORIGIN = 'https://moulinette.example';
 const NOW = 1_800_000_000;
@@ -229,5 +230,38 @@ describe('envoi à Strava sur le compte du coureur', () => {
     expect(cb.status).toBe(200);
     expect(await cb.text()).toContain("postMessage('strava-connected'");
     expect(cookieValue(cb, SESSION_COOKIE)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("connexion par l'app Strava (Android)", () => {
+  it("?via=app envoie vers l'adresse mobile de Strava, que l'app intercepte", async () => {
+    const { accounts } = setup();
+    const app = (await accounts.handle(new Request(`${ORIGIN}/api/auth/login?via=app`)))!;
+    expect(app.headers.get('location')).toMatch(/^https:\/\/www\.strava\.com\/oauth\/mobile\/authorize\?/);
+    const web = (await accounts.handle(new Request(`${ORIGIN}/api/auth/login`)))!;
+    expect(web.headers.get('location')).toMatch(/^https:\/\/www\.strava\.com\/oauth\/authorize\?/);
+    // Jamais pour la fenêtre de renouvellement : l'app rendrait la main au navigateur, pas à elle.
+    const popup = (await accounts.handle(new Request(`${ORIGIN}/api/auth/login?via=app&popup=1`)))!;
+    expect(popup.headers.get('location')).toMatch(/\/oauth\/authorize\?/);
+  });
+
+  it('le retour dans un autre navigateur explique quoi faire', async () => {
+    const { accounts } = setup();
+    const res = (await accounts.handle(new Request(`${ORIGIN}/api/auth/callback?state=abc&code=x`)))!;
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('autre navigateur');
+  });
+
+  it("ne passe par l'app que sur Android, et repasse par le web après un essai resté sans suite", () => {
+    const android = { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36' };
+    const iphone = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1' };
+    const desktop = { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/131 Safari/537.36', platform: 'Linux' };
+    const now = 1_000_000_000;
+    expect(prefersStravaApp(android, undefined, now)).toBe(true);
+    expect(prefersStravaApp({ userAgent: '', platform: 'Android' }, undefined, now)).toBe(true);
+    expect(prefersStravaApp(iphone, undefined, now)).toBe(false);
+    expect(prefersStravaApp(desktop, undefined, now)).toBe(false);
+    expect(prefersStravaApp(android, now - 60_000, now)).toBe(false); // essai il y a une minute, toujours pas connecté
+    expect(prefersStravaApp(android, now - APP_RETRY_MS - 1, now)).toBe(true);
   });
 });

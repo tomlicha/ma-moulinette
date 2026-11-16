@@ -168,7 +168,13 @@ export function createAccounts(opts: AccountOptions) {
     const clear = cookie(OAUTH_COOKIE, '', 0, AUTH_PREFIX);
     const state = url.searchParams.get('state') ?? '';
     if (!expected || !safeEqual(state, expected)) {
-      return page('Connexion refusée : demande inconnue ou expirée. Relancez-la depuis l’application.', 400);
+      // Cas typique sur Android : l'app Strava a rendu la main à un autre navigateur que celui de Ma Moulinette.
+      return page(
+        'Connexion non terminée : cette page ne retrouve pas ta demande (expirée, ou ouverte dans un autre navigateur que ' +
+          'celui de Ma Moulinette). Reviens dans Ma Moulinette et touche de nouveau « Connect with Strava » : la connexion ' +
+          'passera cette fois par la page web de Strava.',
+        400,
+      );
     }
     const code = url.searchParams.get('code');
     if (url.searchParams.get('error') || !code) return redirect('/', [clear]);
@@ -219,7 +225,9 @@ export function createAccounts(opts: AccountOptions) {
       const state = randomToken(16);
       // `?popup=1` : ouverte dans une fenêtre par l'envoi à Strava (accès Strava à renouveler) ; elle se refermera seule.
       const popup = url.searchParams.get('popup') === '1';
-      const to = authorizeUrl(cfg.clientId, `${originOf(req)}${AUTH_PREFIX}callback`, state);
+      // `?via=app` : passer par l'app Strava (Android). Jamais pour la fenêtre : l'app rendrait la main au navigateur, pas à elle.
+      const viaApp = url.searchParams.get('via') === 'app' && !popup;
+      const to = authorizeUrl(cfg.clientId, `${originOf(req)}${AUTH_PREFIX}callback`, state, viaApp);
       return redirect(to, [cookie(OAUTH_COOKIE, popup ? `${state}.p` : state, OAUTH_TTL_S, AUTH_PREFIX)]);
     }
 

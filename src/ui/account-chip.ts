@@ -1,5 +1,5 @@
 import './account.css';
-import { devLogin, fetchAccount, loginUrl, logout, saveDisplayName, type AccountState, type User } from '../net/account';
+import { devLogin, fetchAccount, loginUrl, logout, prefersStravaApp, saveDisplayName, type AccountState, type User } from '../net/account';
 import type { WorldStatus } from '../net/world-client';
 
 /**
@@ -18,6 +18,25 @@ export interface AccountUi {
 }
 
 const NAME_MAX = 32;
+/** Instant du dernier essai de connexion par l'app Strava (Android), effacé dès qu'une session s'ouvre. */
+const APP_TRY_KEY = 'mm.stravaAppTry';
+
+const readAppTry = (): number | undefined => {
+  try {
+    const v = Number(localStorage.getItem(APP_TRY_KEY));
+    return v > 0 ? v : undefined;
+  } catch {
+    return undefined;
+  }
+};
+const writeAppTry = (v: number | undefined) => {
+  try {
+    if (v === undefined) localStorage.removeItem(APP_TRY_KEY);
+    else localStorage.setItem(APP_TRY_KEY, String(v));
+  } catch {
+    // stockage indisponible : chaque essai repasse par l'app, sans autre conséquence
+  }
+};
 
 const initialOf = (name: string) => [...name.trim()][0]?.toUpperCase() ?? '?';
 
@@ -121,6 +140,14 @@ export function setupAccount(o: {
       <p class="account-pitch"><b>Rouler avec les autres</b><span>Sans compte : seul, export FIT</span></p>
       ${s.methods.strava ? `<a class="strava-connect" href="${loginUrl()}"><img src="/strava/connect-with-strava-orange.svg" alt="Connect with Strava" width="237" height="48" /></a>` : ''}
       ${s.methods.dev ? `<button type="button" class="secondary account-dev">Connexion de développement</button>` : ''}`;
+    // Le chemin se décide au toucher : par l'app Strava sur Android, sauf si le dernier essai par l'app n'a rien donné.
+    el.querySelector<HTMLAnchorElement>('.strava-connect')?.addEventListener('click', (e) => {
+      const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+      const viaApp = prefersStravaApp({ userAgent: navigator.userAgent, platform: nav.userAgentData?.platform }, readAppTry(), Date.now());
+      writeAppTry(viaApp ? Date.now() : undefined);
+      (e.currentTarget as HTMLAnchorElement).href = loginUrl(viaApp);
+      o.log(`compte : connexion Strava par ${viaApp ? 'l’app Strava' : 'la page web de Strava'}`);
+    });
     el.querySelector('.account-dev')?.addEventListener('click', async () => {
       const name = window.prompt('Nom du coureur (connexion de développement)', 'Tom L.');
       if (!name) return;
@@ -191,6 +218,7 @@ export function setupAccount(o: {
   }
 
   function set(s: AccountState) {
+    if (s.kind === 'signed-in') writeAppTry(undefined);
     const firstSignIn = s.kind === 'signed-in' && !s.user.nameConfirmed && state.kind !== 'signed-in';
     state = s;
     render();

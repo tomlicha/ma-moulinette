@@ -40,7 +40,22 @@ export async function fetchAccount(f: Fetch = fetch): Promise<AccountState> {
 }
 
 /** Adresse qui lance la connexion Strava ; le retour se fait sur la page d'accueil de l'application. */
-export const loginUrl = () => `${AUTH}login`;
+export const loginUrl = (viaApp = false) => `${AUTH}login${viaApp ? '?via=app' : ''}`;
+
+/** Un essai par l'app Strava resté sans session depuis moins longtemps que ceci fait repasser par la page web. */
+export const APP_RETRY_MS = 15 * 60_000;
+
+/**
+ * Passer par l'app Strava ? Seulement sur Android : Strava y ouvre son app depuis une simple adresse web (sur iPhone,
+ * il faut une app native). Mais l'app rend la main au navigateur par défaut : si ce n'est pas celui de Ma Moulinette,
+ * la connexion échoue. Un essai par l'app encore récent, sans session ouverte depuis, fait donc repasser par la page web.
+ * C'est l'un des rares endroits où l'on regarde le système : le comportement dépend de lui, pas d'une capacité.
+ */
+export function prefersStravaApp(env: { userAgent: string; platform?: string }, lastAppTryMs: number | undefined, nowMs: number): boolean {
+  const android = env.platform === 'Android' || /\bAndroid\b/i.test(env.userAgent);
+  const recentFailure = lastAppTryMs !== undefined && nowMs - lastAppTryMs < APP_RETRY_MS;
+  return android && !recentFailure;
+}
 
 async function post<T>(route: string, body: unknown, f: Fetch): Promise<T> {
   const res = await f(`${AUTH}${route}`, {

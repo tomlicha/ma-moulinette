@@ -34,7 +34,12 @@ export class StravaError extends Error {
   }
 }
 
-export function authorizeUrl(clientId: string, redirectUri: string, state: string): string {
+/**
+ * Page d'autorisation de Strava. `mobile` : l'adresse « mobile OAuth », que l'app Strava (75.0 ou plus) intercepte sur
+ * Android quand elle est installée : le coureur déjà connecté n'a qu'à toucher « Autoriser ». Sans l'app, Strava affiche
+ * sa page web. https://developers.strava.com/docs/authentication/
+ */
+export function authorizeUrl(clientId: string, redirectUri: string, state: string, mobile = false): string {
   const q = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -43,7 +48,7 @@ export function authorizeUrl(clientId: string, redirectUri: string, state: strin
     scope: 'activity:write',
     state,
   });
-  return `${STRAVA_OAUTH}/authorize?${q}`;
+  return `${STRAVA_OAUTH}/${mobile ? 'mobile/' : ''}authorize?${q}`;
 }
 
 interface TokenResponse {
