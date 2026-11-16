@@ -1124,7 +1124,16 @@ document.addEventListener('keydown', (e) => {
   if (journey.choose(Math.min(p.options.length - 1, Math.max(0, p.selected + by)))) renderHud();
 });
 if (router.current() === 'sortie') viewBuild.hurry(); // ouverture directe sur la sortie : on attend la vue
+/** Écran de chargement de la sortie (index.html, sortie.css) : visible tant que la vue 3D n'a pas dessiné sa première image. */
+const rideLoading = $('ride-loading');
+const rideLoadingBar = rideLoading.querySelector<HTMLElement>('.rl-bar')!;
+const showRideProgress = (done: number, step: string) => {
+  $('ride-loading-step').textContent = step;
+  rideLoadingBar.style.setProperty('--p', String(done));
+  rideLoadingBar.setAttribute('aria-valuenow', String(Math.round(done * 100)));
+};
 RideView.create($<HTMLCanvasElement>('view'), journey, {
+  onProgress: showRideProgress,
   forceWebGL: params.get('renderer') === 'webgl2',
   quality: params.get('quality') === 'low' ? 'low' : 'high',
   // `?relief=1` : relief réel ; `?relief=2` : plus marqué. Par défaut 1,6 : un 6 % se voit comme un 10 %.
@@ -1133,6 +1142,7 @@ RideView.create($<HTMLCanvasElement>('view'), journey, {
   .then((v) => {
     performance.mark('view-ready'); // relevé par tools/audit/startup.cjs
     view = v;
+    void v.firstFrame.then(() => (rideLoading.hidden = true));
     v.setActive(router.current() === 'sortie');
     v.onStats = (s) => {
       $('view-stats').textContent =
@@ -1144,6 +1154,9 @@ RideView.create($<HTMLCanvasElement>('view'), journey, {
   })
   .catch((e) => {
     $('view-stats').textContent = 'rendu 3D indisponible';
+    rideLoading.dataset.state = 'error';
+    $('ride-loading-title').textContent = 'Vue 3D indisponible';
+    $('ride-loading-step').textContent = 'La sortie fonctionne sans elle : mesures, profil et séance restent affichés.';
     log(`rendu 3D indisponible : ${e instanceof Error ? e.message : e}`);
   });
 

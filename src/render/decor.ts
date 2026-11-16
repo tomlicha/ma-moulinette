@@ -449,11 +449,14 @@ export class Decor {
     return changed;
   }
 
-  /** Sème au plus `budget` morceaux manquants autour de (x, z) et oublie les lointains, sans toucher aux lots. */
-  private sow(x: number, z: number, budget: number): boolean {
+  /**
+   * Sème au plus `budget` morceaux manquants autour de (x, z), jusqu'à `withinM`, et oublie les lointains, sans toucher
+   * aux lots.
+   */
+  private sow(x: number, z: number, budget: number, withinM = this.radiusM): boolean {
     this.lastX = x;
     this.lastZ = z;
-    const radiusM = this.radiusM;
+    const radiusM = Math.min(withinM, this.radiusM);
     const ci = Math.floor(x / CHUNK_M);
     const cj = Math.floor(z / CHUNK_M);
     const span = Math.ceil(radiusM / CHUNK_M) + 1;
@@ -478,7 +481,7 @@ export class Decor {
       budget--;
       changed = true;
     }
-    const keep = radiusM + 2 * CHUNK_M;
+    const keep = this.radiusM + 2 * CHUNK_M;
     for (const [key, chunk] of this.chunks) {
       if (Math.hypot(chunk.cx - x, chunk.cz - z) > keep) {
         this.chunks.delete(key);
@@ -488,14 +491,18 @@ export class Decor {
     return changed;
   }
 
-  /** Sème tout ce qui entoure (x, z), un morceau par étape, puis remplit les lots une seule fois. */
-  *primeSteps(x: number, z: number): Steps {
+  /**
+   * Sème ce qui entoure (x, z), un morceau par étape, puis remplit les lots une seule fois. `withinM` : seulement jusqu'à
+   * cette distance ; le reste reste dû (`pending`).
+   */
+  *primeSteps(x: number, z: number, withinM = this.radiusM): Steps {
     this.pending = true;
     while (this.pending) {
-      this.sow(x, z, 1);
+      this.sow(x, z, 1, withinM);
       yield;
     }
     this.repopulate(x, z);
+    if (withinM < this.radiusM) this.pending = true;
   }
 
   prime(x: number, z: number) {

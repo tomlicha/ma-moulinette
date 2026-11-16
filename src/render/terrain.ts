@@ -257,19 +257,20 @@ export class Terrain {
     return drain(this.updateSteps(x, z, budget));
   }
 
-  /** `update` par étapes, une rangée de sommets à la fois. */
-  private *updateSteps(x: number, z: number, budget: number): Steps<boolean> {
+  /** `update` par étapes, une rangée de sommets à la fois. `withinM` : ne construire que jusqu'à cette distance. */
+  private *updateSteps(x: number, z: number, budget: number, withinM = this.radiusM): Steps<boolean> {
     if (!this.pending && Math.hypot(x - this.lastX, z - this.lastZ) < MOVE_STEP_M) return false;
     this.lastX = x;
     this.lastZ = z;
     const ci = Math.floor(x / CHUNK_M);
     const cj = Math.floor(z / CHUNK_M);
-    const span = Math.ceil(this.radiusM / CHUNK_M) + 1;
+    const reach = Math.min(withinM, this.radiusM);
+    const span = Math.ceil(reach / CHUNK_M) + 1;
     const want: { i: number; j: number; d: number }[] = [];
     for (let i = ci - span; i <= ci + span; i++) {
       for (let j = cj - span; j <= cj + span; j++) {
         const d = Math.hypot((i + 0.5) * CHUNK_M - x, (j + 0.5) * CHUNK_M - z);
-        if (d <= this.radiusM) want.push({ i, j, d });
+        if (d <= reach) want.push({ i, j, d });
       }
     }
     want.sort((a, b) => a.d - b.d);
@@ -310,10 +311,14 @@ export class Terrain {
     drain(this.primeSteps(x, z));
   }
 
-  /** `prime` par étapes, un morceau à la fois. */
-  *primeSteps(x: number, z: number): Steps {
+  /**
+   * `prime` par étapes, un morceau à la fois. `withinM` : seulement les morceaux à moins de cette distance ; le reste
+   * reste dû (`pending`) et se construit ensuite, par `update` ou par un nouveau `primeSteps` sans limite.
+   */
+  *primeSteps(x: number, z: number, withinM = this.radiusM): Steps {
     this.pending = true;
-    while ((yield* this.updateSteps(x, z, 1)) || this.pending) yield;
+    while ((yield* this.updateSteps(x, z, 1, withinM)) || this.pending) yield;
+    if (withinM < this.radiusM) this.pending = true;
   }
 
   get chunkCount(): number {

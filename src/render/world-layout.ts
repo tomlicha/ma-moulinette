@@ -29,6 +29,113 @@ const MACRO_SLOPE_FAR = 0.35;
 const MACRO_NEAR_M = 800;
 /** Un point de route sur `MACRO_STRIDE` (16 m) suffit pour dessiner les versants. */
 const MACRO_STRIDE = 4;
+const NO_SAMPLES = new Int32Array(0);
+
+/** Versant soutenu par un point de route d'altitude `alt` à la distance `d` : pente douce, puis raide après `MACRO_NEAR_M`. */
+const slopeDrop = (d: number) => MACRO_SLOPE_NEAR * Math.min(d, MACRO_NEAR_M) + MACRO_SLOPE_FAR * Math.max(0, d - MACRO_NEAR_M);
+/** Côté des paquets de points de `SupportPoints`, en m. */
+const SUPPORT_BUCKET_M = 256;
+/** Marge sur les distances minorées : bien au-dessus des erreurs d'arrondi des racines carrées (≈ 1e-12 m ici). */
+const BOUND_EPS_M = 0.01;
+
+/**
+ * Points de route qui soutiennent le relief de fond (un sur `MACRO_STRIDE`), rangés par paquets de 256 m. Pour un nœud
+ * de la grille, `query` donne le plus haut versant (`top`, jamais sous 0) et la distance au point le plus proche
+ * (`nearest`), exactement comme un parcours de tous les points : les paquets sont visités par anneaux, et un paquet
+ * n'est écarté que si aucun de ses points ne peut changer ni `top` ni `nearest` (minorant de distance, majorant
+ * d'altitude ; voir `skippable`). Min et max ne dépendent pas de l'ordre : résultat identique au bit près.
+ */
+class SupportPoints {
+  top = 0;
+  nearest = Infinity;
+  private readonly x0: number;
+  private readonly z0: number;
+  private readonly cols: number;
+  private readonly rows: number;
+  private readonly buckets: { xs: Float64Array; zs: Float64Array; alts: Float64Array; maxAlt: number }[] = [];
+  private readonly maxAlt: number;
+
+  constructor(xs: readonly number[], zs: readonly number[], alts: readonly number[]) {
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity, maxAlt = -Infinity;
+    for (let i = 0; i < xs.length; i += MACRO_STRIDE) {
+      minX = Math.min(minX, xs[i]!);
+      maxX = Math.max(maxX, xs[i]!);
+      minZ = Math.min(minZ, zs[i]!);
+      maxZ = Math.max(maxZ, zs[i]!);
+      maxAlt = Math.max(maxAlt, alts[i]!);
+    }
+    this.x0 = minX;
+    this.z0 = minZ;
+    this.cols = Math.max(1, Math.floor((maxX - minX) / SUPPORT_BUCKET_M) + 1);
+    this.rows = Math.max(1, Math.floor((maxZ - minZ) / SUPPORT_BUCKET_M) + 1);
+    this.maxAlt = maxAlt;
+    const lists: number[][] = Array.from({ length: this.cols * this.rows }, () => []);
+    for (let i = 0; i < xs.length; i += MACRO_STRIDE) {
+      const bc = Math.floor((xs[i]! - minX) / SUPPORT_BUCKET_M);
+      const br = Math.floor((zs[i]! - minZ) / SUPPORT_BUCKET_M);
+      lists[br * this.cols + bc]!.push(i);
+    }
+    for (const list of lists) {
+      this.buckets.push({
+        xs: Float64Array.from(list, (i) => xs[i]!),
+        zs: Float64Array.from(list, (i) => zs[i]!),
+        alts: Float64Array.from(list, (i) => alts[i]!),
+        maxAlt: list.reduce((m, i) => Math.max(m, alts[i]!), -Infinity),
+      });
+    }
+  }
+
+  /**
+   * Aucun point à au moins `minDist` (minoré) et d'altitude au plus `maxAlt` ne peut ni rapprocher `nearest` ni relever
+   * `top` : chaque terme du versant est croissant avec la distance, en flottants comme en réels.
+   */
+  private skippable(minDist: number, maxAlt: number): boolean {
+    const d = Math.max(0, minDist - BOUND_EPS_M);
+    return d >= this.nearest && maxAlt - slopeDrop(d) <= this.top;
+  }
+
+  query(x: number, z: number): void {
+    this.top = 0; // jamais sous le niveau de la mer
+    this.nearest = Infinity;
+    const B = SUPPORT_BUCKET_M;
+    const fc = Math.floor((x - this.x0) / B);
+    const fr = Math.floor((z - this.z0) / B);
+    // Anneau le plus lointain qui touche encore la grille des paquets.
+    const last = Math.max(Math.abs(fc), Math.abs(fc - (this.cols - 1)), Math.abs(fr), Math.abs(fr - (this.rows - 1)));
+    for (let k = 0; k <= last; k++) {
+      // Tout paquet de l'anneau k est à au moins (k - 1) paquets de distance du nœud.
+      if (k > 0 && this.skippable((k - 1) * B, this.maxAlt)) break;
+      for (let br = fr - k; br <= fr + k; br++) {
+        if (br < 0 || br >= this.rows) continue;
+        const edgeRow = br === fr - k || br === fr + k;
+        for (let bc = fc - k; bc <= fc + k; bc += edgeRow ? 1 : 2 * k || 1) {
+          if (bc < 0 || bc >= this.cols) continue;
+          this.scan(this.buckets[br * this.cols + bc]!, bc, br, x, z);
+        }
+      }
+    }
+  }
+
+  private scan(b: { xs: Float64Array; zs: Float64Array; alts: Float64Array; maxAlt: number }, bc: number, br: number, x: number, z: number) {
+    if (b.xs.length === 0) return;
+    const B = SUPPORT_BUCKET_M;
+    const left = this.x0 + bc * B;
+    const top = this.z0 + br * B;
+    const ox = Math.max(left - x, 0, x - (left + B));
+    const oz = Math.max(top - z, 0, z - (top + B));
+    if (this.skippable(Math.sqrt(ox * ox + oz * oz), b.maxAlt)) return;
+    for (let k = 0; k < b.xs.length; k++) {
+      const dx = b.xs[k]! - x;
+      const dz = b.zs[k]! - z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < this.nearest) this.nearest = d;
+      // Majorant (pente douce partout) : écarte vite les points qui ne battront pas le meilleur.
+      if (b.alts[k]! - MACRO_SLOPE_NEAR * d <= this.top) continue;
+      const v = b.alts[k]! - MACRO_SLOPE_NEAR * Math.min(d, MACRO_NEAR_M) - MACRO_SLOPE_FAR * Math.max(0, d - MACRO_NEAR_M);
+      if (v > this.top) this.top = v;
+    }
+  }
+}
 /** Marque d'un `WorldLayout` dont `WorldLayout.build` déroule lui-même les calculs lourds. */
 const DEFERRED = Symbol('deferred');
 /**
@@ -118,6 +225,10 @@ export class WorldLayout {
   /** Bosquets des données : rang de la route, début et fin, en m. */
   private readonly groves: { edge: number; from: number; to: number }[] = [];
   private readonly cells = new Map<number, number[]>();
+  /** Segments de route en tableaux typés (voir `segmentData`). */
+  private seg!: { x0s: Float64Array; z0s: Float64Array; sxs: Float64Array; szs: Float64Array; len2s: Float64Array; a0s: Float64Array; das: Float64Array };
+  /** Voisinage de chaque case déjà interrogée (voir `around`). */
+  private readonly neighbourhood = new Map<number, Int32Array>();
 
   private readonly waters: { def: WaterDef; minX: number; maxX: number; minZ: number; maxZ: number }[];
   private readonly waterScratch: WaterHit = { sd: Infinity, level: 0, beach: 0 };
@@ -187,27 +298,19 @@ export class WorldLayout {
       });
     }
 
+    this.segmentData();
+
     // Relief de fond sur une grille grossière : le plus haut des versants que soutiennent les points de route.
     const raw = new Float32Array(this.macroCols * this.macroRows);
+    const support = new SupportPoints(this.xs, this.zs, this.alts);
     for (let r = 0; r < this.macroRows; r++) {
       yield;
       for (let c = 0; c < this.macroCols; c++) {
         const x = this.macroX0 + c * MACRO_CELL_M;
         const z = this.macroZ0 + r * MACRO_CELL_M;
-        let top = 0; // jamais sous le niveau de la mer
-        let nearest = Infinity;
-        for (let i = 0; i < this.xs.length; i += MACRO_STRIDE) {
-          const dx = this.xs[i]! - x;
-          const dz = this.zs[i]! - z;
-          const d = Math.sqrt(dx * dx + dz * dz);
-          if (d < nearest) nearest = d;
-          // Majorant (pente douce partout) : écarte vite les points qui ne battront pas le meilleur.
-          if (this.alts[i]! - MACRO_SLOPE_NEAR * d <= top) continue;
-          const v = this.alts[i]! - MACRO_SLOPE_NEAR * Math.min(d, MACRO_NEAR_M) - MACRO_SLOPE_FAR * Math.max(0, d - MACRO_NEAR_M);
-          if (v > top) top = v;
-        }
-        raw[r * this.macroCols + c] = top;
-        this.roadDist[r * this.macroCols + c] = nearest;
+        support.query(x, z);
+        raw[r * this.macroCols + c] = support.top;
+        this.roadDist[r * this.macroCols + c] = support.nearest;
       }
     }
     // Deux passes de flou 3 × 3 : les arêtes entre deux versants s'arrondissent.
@@ -236,6 +339,51 @@ export class WorldLayout {
     this.macro = src;
   }
 
+  /** Données de chaque segment [s, s+1], dans les mêmes opérations flottantes que le calcul d'origine. */
+  private segmentData(): void {
+    const n = this.xs.length;
+    const seg = { x0s: new Float64Array(n), z0s: new Float64Array(n), sxs: new Float64Array(n), szs: new Float64Array(n), len2s: new Float64Array(n), a0s: new Float64Array(n), das: new Float64Array(n) };
+    for (let s = 0; s < n; s++) {
+      const x0 = this.xs[s]!;
+      const z0 = this.zs[s]!;
+      const nx = this.next[s]!;
+      seg.x0s[s] = x0;
+      seg.z0s[s] = z0;
+      seg.a0s[s] = this.alts[s]!;
+      if (nx < 0) continue; // bout de route : vecteur nul
+      const sx = this.xs[nx]! - x0;
+      const sz = this.zs[nx]! - z0;
+      seg.sxs[s] = sx;
+      seg.szs[s] = sz;
+      seg.len2s[s] = sx * sx + sz * sz;
+      seg.das[s] = this.alts[nx]! - this.alts[s]!;
+    }
+    this.seg = seg;
+  }
+
+  /**
+   * Échantillons de route des cases voisines de (ci, cj), assez proches pour compter dans `nearestRoad` : une seule
+   * liste par case, construite à la première demande, au lieu de 49 recherches à chaque appel. L'ordre est celui de
+   * l'ancien parcours (cases par i puis j, échantillons dans l'ordre de leur case) : les sommes pondérées de
+   * `nearestRoad` se font dans le même ordre, donc donnent les mêmes nombres au bit près.
+   */
+  private around(ci: number, cj: number): Int32Array {
+    const key = this.key(ci, cj);
+    let list = this.neighbourhood.get(key);
+    if (list) return list;
+    const ring = Math.ceil((ROAD_INFLUENCE_M + SAMPLE_STEP_M) / CELL_M); // un segment qui débute dans une case voisine peut arriver jusqu'ici
+    const found: number[] = [];
+    for (let i = ci - ring; i <= ci + ring; i++) {
+      for (let j = cj - ring; j <= cj + ring; j++) {
+        const cell = this.cells.get(this.key(i, j));
+        if (cell) for (const s of cell) found.push(s);
+      }
+    }
+    list = found.length ? Int32Array.from(found) : NO_SAMPLES;
+    this.neighbourhood.set(key, list);
+    return list;
+  }
+
   private key(i: number, j: number): number {
     return (i + 32768) * 65536 + (j + 32768);
   }
@@ -248,35 +396,28 @@ export class WorldLayout {
   /** La route la plus proche de (x, z) et l'altitude de route qui s'y applique. */
   nearestRoad(x: number, z: number, out: RoadHit = { dist: Infinity, alt: 0, edge: -1, s: 0 }): RoadHit {
     const reach = ROAD_INFLUENCE_M;
-    const ring = Math.ceil((reach + SAMPLE_STEP_M) / CELL_M); // un segment qui débute dans une case voisine peut arriver jusqu'ici
-    const ci = Math.floor(x / CELL_M);
-    const cj = Math.floor(z / CELL_M);
     const r2 = reach * reach;
     let min = Infinity;
     let best = -1;
     let bestT = 0;
     let sw = 0;
     let sa = 0;
-    for (let i = ci - ring; i <= ci + ring; i++) {
-      for (let j = cj - ring; j <= cj + ring; j++) {
-        const list = this.cells.get(this.key(i, j));
-        if (!list) continue;
-        for (const s of list) {
+    {
+      {
+        const list = this.around(Math.floor(x / CELL_M), Math.floor(z / CELL_M));
+        const { x0s, z0s, sxs, szs, len2s, a0s, das } = this.seg;
+        for (let k = 0; k < list.length; k++) {
+          const s = list[k]!;
           // Projection sur le segment [s, s+1] : l'altitude s'interpole, elle ne saute pas d'un échantillon à l'autre.
-          const x0 = this.xs[s]!;
-          const z0 = this.zs[s]!;
-          const nx = this.next[s]!;
-          let t = 0;
-          if (nx >= 0) {
-            const sx = this.xs[nx]! - x0;
-            const sz = this.zs[nx]! - z0;
-            const len2 = sx * sx + sz * sz;
-            if (len2 > 0) t = Math.min(1, Math.max(0, ((x - x0) * sx + (z - z0) * sz) / len2));
-          }
-          const px = nx >= 0 ? x0 + (this.xs[nx]! - x0) * t : x0;
-          const pz = nx >= 0 ? z0 + (this.zs[nx]! - z0) * t : z0;
-          const dx = px - x;
-          const dz = pz - z;
+          // Données du segment calculées une fois (voir `segmentData`) ; bout de route : vecteur nul, donc t = 0.
+          const x0 = x0s[s]!;
+          const z0 = z0s[s]!;
+          const sx = sxs[s]!;
+          const sz = szs[s]!;
+          const len2 = len2s[s]!;
+          const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - x0) * sx + (z - z0) * sz) / len2)) : 0;
+          const dx = x0 + sx * t - x;
+          const dz = z0 + sz * t - z;
           const d2 = dx * dx + dz * dz;
           if (d2 >= r2) continue;
           if (d2 < min) {
@@ -288,7 +429,7 @@ export class WorldLayout {
           // qu'on foule pèse ; entre deux branches d'un lacet, le mélange est continu (aucune bascule d'une branche à l'autre).
           const w = 1 / ((d2 + 1) * (d2 + 1));
           sw += w;
-          sa += w * (nx >= 0 ? this.alts[s]! + (this.alts[nx]! - this.alts[s]!) * t : this.alts[s]!);
+          sa += w * (a0s[s]! + das[s]! * t);
         }
       }
     }

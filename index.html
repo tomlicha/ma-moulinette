@@ -293,6 +293,15 @@
         <h1 class="visually-hidden">Sortie</h1>
         <div class="ride">
           <canvas id="view"></canvas>
+          <!-- Préparation de la vue 3D : visible tant qu'elle n'a pas dessiné sa première image. Voile sur toute la sortie
+               (sortie.css), le menu reste accessible. Apparaît avec un léger retard : rien ne clignote si la vue est prête. -->
+          <div id="ride-loading" class="ride-loading" role="status">
+            <div class="rl-card">
+              <p class="rl-title" id="ride-loading-title">Préparation de la route</p>
+              <p class="rl-step" id="ride-loading-step">Chargement…</p>
+              <div class="rl-bar" role="progressbar" aria-labelledby="ride-loading-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+            </div>
+          </div>
           <div id="hud"></div>
           <div id="view-stats" class="view-stats" hidden>rendu : initialisation…</div>
           <button id="ride-menu-open" class="ride-menu-open" type="button" aria-haspopup="dialog" aria-controls="ride-menu" aria-label="Menu de la sortie">
