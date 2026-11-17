@@ -34,9 +34,11 @@ new_sqlite_classes = ["WorldRoom"]
 crons = ["30 3 * * *"]
 
 # Aperçus de branche (Worker Previews : toute branche autre que main, construite par Cloudflare avec `wrangler preview`).
-# Réglage Cloudflare (Workers & Pages > ma-moulinette-ride > Settings > Build) : la commande de déploiement des branches
-# hors production DOIT nommer ce fichier : `npx wrangler preview -c wrangler.app.toml`. Sans `-c`, wrangler lit wrangler.toml
-# (le récepteur de journaux, un autre Worker), n'y trouve pas de bloc [previews] et le build échoue (constaté le 17 novembre 2026).
+# Cloudflare lance `npx wrangler preview` sans `-c` pour ces branches : wrangler lirait wrangler.toml (le récepteur de
+# journaux, un autre Worker, sans bloc [previews]) et le build échouait (constaté le 17 novembre 2026). `npm run build`
+# écrit donc, dans Workers Builds seulement, `.wrangler/deploy/config.json` qui redirige vers ce fichier
+# (tools/ci/wrangler-redirect.mjs). Réglage équivalent dans le tableau de bord (Settings > Build) : la commande de
+# déploiement des branches `npx wrangler preview -c wrangler.app.toml`.
 # Base D1 à part : un aperçu n'a jamais accès aux comptes ni aux jetons Strava de production. Création et migrations :
 # voir wrangler.previews-db.toml. Chaque aperçu reçoit sa propre salle temps réel (Durable Object isolé, même classe).
 [previews]

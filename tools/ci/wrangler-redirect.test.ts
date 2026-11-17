@@ -1,0 +1,35 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+// @ts-expect-error module JavaScript sans types
+import { inWorkersBuilds, redirectFile } from './wrangler-redirect.mjs';
+
+const script = path.resolve('tools/ci/wrangler-redirect.mjs');
+
+function run(env: Record<string, string>) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'wr-'));
+  // Environnement réduit : ni WORKERS_CI ni autre variable du poste ne doit s'y glisser.
+  execFileSync(process.execPath, [script], { cwd, env: { PATH: process.env.PATH ?? '', ...env } });
+  return path.join(cwd, '.wrangler', 'deploy', 'config.json');
+}
+
+describe('redirection de configuration wrangler', () => {
+  it('ne s’active que dans Workers Builds', () => {
+    expect(inWorkersBuilds({ WORKERS_CI: '1' })).toBe(true);
+    expect(inWorkersBuilds({ WORKERS_CI_BUILD_UUID: 'abc' })).toBe(true);
+    expect(inWorkersBuilds({})).toBe(false);
+    expect(inWorkersBuilds({ WORKERS_CI: '0' })).toBe(false);
+  });
+
+  it('pointe vers la configuration de l’application, chemin relatif au fichier', () => {
+    expect(JSON.parse(redirectFile())).toEqual({ configPath: '../../wrangler.app.toml' });
+  });
+
+  it('écrit .wrangler/deploy/config.json dans Workers Builds, rien ailleurs', () => {
+    const file = run({ WORKERS_CI: '1' });
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({ configPath: '../../wrangler.app.toml' });
+    expect(fs.existsSync(run({}))).toBe(false);
+  });
+});
