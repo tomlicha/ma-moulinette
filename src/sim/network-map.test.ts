@@ -29,7 +29,7 @@ describe('renderNetworkMap', () => {
   });
 
   it("donne la longueur, la montée et la pente maximale de chaque parcours", () => {
-    expect(svg).toMatch(/16,0 km · \+3[67]0 m de montée · pente max 9,8 %/);
+    expect(svg).toMatch(/16,0 km · \+3[67]0 m de montée · pente max 8,7 %/);
     expect(svg).toMatch(/9,2 km · \+\d+ m de montée · pente max 1,\d %/);
   });
 

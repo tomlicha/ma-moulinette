@@ -7,7 +7,7 @@ import { FAR_MARGIN_M, WorldLayout } from './world-layout';
  * changer au monde, au bit près. Si le relief change volontairement (nouvelles règles, nouveau parcours), relancer ce
  * test et recopier la nouvelle empreinte affichée.
  */
-const EXPECTED = '470022af:355348';
+const EXPECTED = '0680392b:355348';
 
 /** FNV-1a sur les bits exacts des nombres. */
 function fingerprint(values: number[]): string {

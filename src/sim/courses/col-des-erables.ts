@@ -128,11 +128,13 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       from: 'moulin',
       to: 'sommet',
       // Épingles : on monte en zigzag entre x ≈ 2300 et x ≈ 3100.
+      // Pente homogène : elle croît régulièrement de 4,7 % à 6,6 %, sans replat ni rampe (un trainer rend chaque
+      // creux comme un soulagement brutal). Altitudes d'une parabole, au dixième pour ne pas osciller.
       plan: [
         [2470, -570], [2900, -900], [2300, -1250], [2900, -1650], [2350, -2000],
         [3000, -2450], [2500, -2850], [3100, -3200],
       ],
-      profile: [[0.1, 45], [0.25, 105], [0.36, 165], [0.42, 180], [0.62, 270], [0.8, 340], [0.93, 365]],
+      profile: [[0.05, 29.2], [0.10, 44.6], [0.15, 60.3], [0.20, 76.3], [0.25, 92.6], [0.30, 109.2], [0.35, 126.1], [0.40, 143.3], [0.45, 160.8], [0.50, 178.6], [0.55, 196.7], [0.60, 215.2], [0.65, 233.9], [0.70, 252.9], [0.75, 272.2], [0.80, 291.8], [0.85, 311.7], [0.90, 332.0], [0.95, 352.5]],
     },
     {
       id: 'descente',
