@@ -3,6 +3,7 @@ import { blockDurationS, BLOCK_LABEL, defaultBlock, type BlockType, type EditorB
 /**
  * Blocs préfaits de l'étagère de l'écran Séances (docs/design/seances.md, piste S) : des blocs d'entraînement qui ont un
  * sens (nom, durée et intensité connus), rangés par type donc par zone de couleur. Les puissances sont des fractions de FTP.
+ * Chaque type d'effort (Endurance à Sprint) propose **un bloc d'intervalles et un bloc simple continu**.
  */
 export type PresetCategory = 'warm' | 'endu' | 'sweet' | 'thr' | 'vo2' | 'spr' | 'cool';
 
@@ -35,16 +36,16 @@ const intervals = (repeat: number, onS: number, onPower: number, offS: number, o
 export const BLOCK_PRESETS: BlockPreset[] = [
   { id: 'warm-progressive', category: 'warm', name: 'Progressif', blocks: [{ type: 'warmup', durationS: 600, from: 0.45, to: 0.75 }] },
   { id: 'warm-accel', category: 'warm', name: 'Avec 3 accélérations', blocks: [{ type: 'warmup', durationS: 360, from: 0.45, to: 0.65 }, intervals(3, 30, 1.15, 90, 0.55)] },
-  { id: 'endu-20', category: 'endu', name: 'Endurance 20 min', blocks: [{ type: 'steady', durationS: 1200, power: 0.65 }] },
+  { id: 'endu-3x15', category: 'endu', name: 'Endurance 3×15', blocks: [intervals(3, 900, 0.68, 180, 0.5)] },
   { id: 'endu-45', category: 'endu', name: 'Endurance 45 min', blocks: [{ type: 'steady', durationS: 2700, power: 0.7 }] },
   { id: 'sweet-2x20', category: 'sweet', name: 'Sweet spot 2×20', blocks: [intervals(2, 1200, 0.9, 300, 0.55)] },
-  { id: 'sweet-3x12', category: 'sweet', name: 'Sweet spot 3×12', blocks: [intervals(3, 720, 0.9, 240, 0.55)] },
+  { id: 'sweet-30', category: 'sweet', name: 'Sweet spot 30 min', blocks: [{ type: 'steady', durationS: 1800, power: 0.9 }] },
   { id: 'thr-3x10', category: 'thr', name: 'Seuil 3×10', blocks: [intervals(3, 600, 1, 300, 0.55)] },
-  { id: 'thr-2x20', category: 'thr', name: 'Seuil 2×20', blocks: [intervals(2, 1200, 1, 360, 0.55)] },
+  { id: 'thr-20', category: 'thr', name: 'Seuil 20 min', blocks: [{ type: 'steady', durationS: 1200, power: 1 }] },
   { id: 'vo2-5x4', category: 'vo2', name: 'VO2 5×4', blocks: [intervals(5, 240, 1.2, 240, 0.5)] },
-  { id: 'vo2-6x3', category: 'vo2', name: 'VO2 6×3', blocks: [intervals(6, 180, 1.18, 180, 0.5)] },
+  { id: 'vo2-5', category: 'vo2', name: 'VO2 5 min', blocks: [{ type: 'steady', durationS: 300, power: 1.15 }] },
   { id: 'spr-30-30', category: 'spr', name: '30/30 × 10', blocks: [intervals(10, 30, 1.28, 30, 0.5)] },
-  { id: 'spr-15s', category: 'spr', name: 'Sprints 8×15 s', blocks: [intervals(8, 15, 1.5, 120, 0.5)] },
+  { id: 'spr-30s', category: 'spr', name: 'Sprint 30 s', blocks: [{ type: 'steady', durationS: 30, power: 1.5 }] },
   { id: 'cool-10', category: 'cool', name: 'Retour au calme', blocks: [{ type: 'cooldown', durationS: 600, from: 0.65, to: 0.4 }] },
   { id: 'cool-down', category: 'cool', name: 'Descente progressive', blocks: [{ type: 'cooldown', durationS: 480, from: 0.7, to: 0.35 }] },
 ];
