@@ -27,7 +27,7 @@ describe('blocs préfaits', () => {
   });
 
   it('les blocs par zone couvrent Z1 à Z6 et sont valides', () => {
-    for (const z of ['z1', 'z2', 'z3', 'z4', 'z5', 'z6']) expect(ZONE_PRESETS.filter((p) => p.id.startsWith(`zone-${z}-`)).length, z).toBe(2);
+    for (const z of ['z1', 'z2', 'z3', 'z4', 'z5', 'z6']) expect(ZONE_PRESETS.filter((p) => p.id === `zone-${z}`).length, z).toBe(1);
     for (const p of ZONE_PRESETS) expect(validateBlocks(p.blocks), p.id).toEqual([]);
   });
 

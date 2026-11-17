@@ -49,7 +49,7 @@ export const BLOCK_PRESETS: BlockPreset[] = [
   { id: 'cool-down', category: 'cool', name: 'Descente progressive', blocks: [{ type: 'cooldown', durationS: 480, from: 0.7, to: 0.35 }] },
 ];
 
-/** Blocs simples par zone de puissance : un palier constant au milieu de la zone, en 5 et 10 min (Z1 à Z6). */
+/** Blocs simples par zone de puissance : un seul palier constant par zone (Z1 à Z6), au milieu de la zone. */
 const ZONE_MID: [PresetCategoryInfo['zone'], string, number][] = [
   ['z1', 'Récupération', 0.45],
   ['z2', 'Endurance', 0.65],
@@ -59,8 +59,8 @@ const ZONE_MID: [PresetCategoryInfo['zone'], string, number][] = [
   ['z6', 'Anaérobie', 1.3],
 ];
 export const ZONE_PRESETS: { id: string; name: string; blocks: EditorBlock[] }[] = ZONE_MID.flatMap(([z, name, power]) =>
-  (z === 'z5' || z === 'z6' ? [3, 5] : [5, 10]).map((min) => ({
-    id: `zone-${z}-${min}`,
+  [{ min: z === 'z6' ? 3 : z === 'z5' ? 5 : 10 }].map(({ min }) => ({
+    id: `zone-${z}`,
     name: `${z.toUpperCase()} ${name} ${min} min`,
     blocks: [{ type: 'steady', durationS: min * 60, power } as EditorBlock],
   })),
