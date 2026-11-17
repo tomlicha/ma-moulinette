@@ -3,7 +3,7 @@
  * Secrets à créer avec `npx wrangler secret put INGEST_TOKEN` et `READ_TOKEN` ; jamais dans wrangler.toml.
  */
 import { createLogReceiver } from '../src/telemetry/receiver.ts';
-import { createD1Store, RETENTION_MS, type D1Database } from './d1-store.ts';
+import { createD1DeviceStore, createD1Store, RETENTION_MS, type D1Database } from './d1-store.ts';
 
 interface Env {
   DB: D1Database;
@@ -16,6 +16,7 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const receiver = createLogReceiver({
       store: createD1Store(env.DB),
+      devices: createD1DeviceStore(env.DB),
       ingestToken: env.INGEST_TOKEN,
       readToken: env.READ_TOKEN,
       allowedOrigin: env.ALLOWED_ORIGIN,

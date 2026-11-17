@@ -5,12 +5,15 @@
 # rouge et s'arrête ; elle est retentée à la poussée suivante, ou à la main (« Run workflow »).
 #
 # Secrets du dépôt (Settings > Secrets and variables > Actions) :
-#   CLOUDFLARE_API_TOKEN   jeton Cloudflare ; le droit « D1 : modifier » sur le compte suffit
+#   CLOUDFLARE_API_TOKEN   jeton Cloudflare : « D1 : modifier » pour les migrations, et « Workers Scripts : modifier »
+#                          pour le déploiement du Worker de journaux (job deploy-logs)
 #   CLOUDFLARE_ACCOUNT_ID  identifiant du compte Cloudflare
 #
-# Le déploiement du Worker est fait à part, par Cloudflare, à chaque poussée sur main : les deux démarrent ensemble et ce
-# job est en général fini avant. Pour ne jamais avoir le code neuf avant sa migration : migrations additives d'abord
-# (créer, ajouter ; jamais renommer ni supprimer dans la même version que le code qui s'en passe), voir README.
+# Le Worker de l'application est déployé à part, par Cloudflare, à chaque poussée sur main : les deux démarrent ensemble et
+# le job migrate est en général fini avant. Pour ne jamais avoir le code neuf avant sa migration : migrations additives
+# d'abord (créer, ajouter ; jamais renommer ni supprimer dans la même version que le code qui s'en passe), voir README.
+# Le Worker de journaux (wrangler.toml) est déployé ici, par le job deploy-logs, une fois la migration passée : il n'y a
+# donc jamais de code neuf sans sa table.
 name: Migrations D1
 
 on:
@@ -65,3 +68,21 @@ jobs:
       - name: Base des aperçus
         if: steps.secrets.outputs.present == 'true'
         run: npx --yes wrangler@4 d1 migrations apply ma-moulinette-previews --remote -c wrangler.previews-db.toml
+
+  # Récepteur de journaux (worker/index.ts, wrangler.toml) : seulement sur main, et seulement après la migration de la
+  # production. Ses secrets (INGEST_TOKEN, READ_TOKEN) restent ceux déjà posés par `wrangler secret put` : un déploiement
+  # ne les touche pas.
+  deploy-logs:
+    needs: migrate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx --yes wrangler@4 deploy -c wrangler.toml

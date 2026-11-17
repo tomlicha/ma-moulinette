@@ -10,6 +10,7 @@
 import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname } from 'node:path';
+import { createFileDeviceStore } from './logs/device-store.ts';
 import { createFileStore } from './logs/file-store.ts';
 import { serveWith } from './logs/node-http.ts';
 import { createLogReceiver } from '../src/telemetry/receiver.ts';
@@ -27,6 +28,7 @@ await mkdir(dirname(file), { recursive: true });
 
 const receiver = createLogReceiver({
   store: createFileStore(file),
+  devices: createFileDeviceStore(env.LOG_DEVICES_FILE ?? '.logs/trainers.json'),
   ingestToken: env.LOG_INGEST_TOKEN,
   readToken: env.LOG_READ_TOKEN,
   allowedOrigin: env.LOG_ALLOWED_ORIGIN,
