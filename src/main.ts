@@ -330,6 +330,8 @@ function tickRide() {
     distanceM: s.distanceM,
     speedKmh: s.speedKmh,
     cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
+    powerW: power,
+    ftpW: readFtp(),
   });
   world.update({
     pos: journey.locate(s.distanceM),
@@ -401,7 +403,7 @@ function stopRide(resetTrainer = true) {
   if (!ride) return;
   clearInterval(rideTimer);
   setErgActive(false);
-  view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0 });
+  view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
   world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
   ride = undefined;
   rideBtn.textContent = 'Démarrer la sortie';

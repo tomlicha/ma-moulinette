@@ -169,11 +169,21 @@ const HEAD_ANGLE = 74 * DEG;
 const REACH = 0.9;
 
 /**
- * Déhanchement : le bassin bascule vers la jambe qui pousse, les épaules compensent un peu en sens inverse, la
- * tête reste droite. Nul à l'angle de référence (manivelles à l'horizontale), où le modèle est lié au squelette.
+ * Attitude du coureur. Assis, le tronc reste immobile. En danseuse, le bassin se lève de la selle, les bras se tendent
+ * et le bassin bascule vers la jambe qui pousse, les épaules compensant un peu en sens inverse (nul à l'angle de
+ * référence, manivelles à l'horizontale, où le modèle est lié au squelette).
  */
-const PELVIS_ROCK = 4 * DEG;
-const CHEST_ROCK = -2.2 * DEG;
+export interface Stance {
+  /** Hauteur dont le bassin quitte la selle, en m. */
+  lift: number;
+  /** Part de la longueur des bras entre épaule et poignet. */
+  reach: number;
+  /** Bascule du bassin et du buste à chaque coup de pédale, en radians. */
+  pelvisRock: number;
+  chestRock: number;
+}
+export const SEATED: Stance = { lift: 0, reach: REACH, pelvisRock: 0, chestRock: 0 };
+export const STANDING: Stance = { lift: 0.04, reach: 0.97, pelvisRock: 5 * DEG, chestRock: -3 * DEG };
 
 const dirAt = (angle: number) => v3(0, Math.sin(angle), Math.cos(angle));
 const LEFT = v3(1, 0, 0);
@@ -195,8 +205,8 @@ interface Torso {
   chest: Basis;
 }
 
-function torso(fit: BikeFit, body: Body, angle: number, rock = 0): Torso {
-  const root = offset(fit.saddle, [v3(0, 1, 0), body.hipAboveSaddle], [v3(0, 0, 1), body.hipAheadOfSaddle]);
+function torso(fit: BikeFit, body: Body, angle: number, stance: Stance, rock = 0): Torso {
+  const root = offset(fit.saddle, [v3(0, 1, 0), body.hipAboveSaddle + stance.lift], [v3(0, 0, 1), body.hipAheadOfSaddle]);
   const lumbar = offset(root, [dirAt(angle + PELVIS_EXTRA), body.pelvis]);
   const thorax = offset(lumbar, [dirAt(angle + SPINE_EXTRA), body.spine]);
   const neckBase = offset(thorax, [dirAt(angle + CHEST_EXTRA), body.chest]);
@@ -205,9 +215,9 @@ function torso(fit: BikeFit, body: Body, angle: number, rock = 0): Torso {
     lumbar,
     thorax,
     neckBase,
-    pelvis: aimBasis(sub(lumbar, root), leftRolled(PELVIS_ROCK * rock)),
+    pelvis: aimBasis(sub(lumbar, root), leftRolled(stance.pelvisRock * rock)),
     spine: aimBasis(sub(thorax, lumbar), LEFT),
-    chest: aimBasis(sub(neckBase, thorax), leftRolled(CHEST_ROCK * rock)),
+    chest: aimBasis(sub(neckBase, thorax), leftRolled(stance.chestRock * rock)),
   };
 }
 
@@ -219,14 +229,14 @@ function shoulder(t: Torso, body: Body, side: 1 | -1): V3 {
  * Angle du buste pour que les bras atteignent les cocottes un peu fléchis. Le buste qui se couche rapproche les
  * épaules des mains : la distance croît avec l'angle, une dichotomie suffit.
  */
-export function solveTorsoAngle(fit: BikeFit, body: Body = DEFAULT_BODY): number {
+export function solveTorsoAngle(fit: BikeFit, body: Body = DEFAULT_BODY, stance: Stance = SEATED): number {
   const wrist = handTargets(fit.hoodL).wrist;
-  const want = REACH * (body.upperArm + body.forearm);
+  const want = stance.reach * (body.upperArm + body.forearm);
   let lo = 5 * DEG;
   let hi = 85 * DEG;
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2;
-    if (dist(shoulder(torso(fit, body, mid), body, 1), wrist) < want) lo = mid;
+    if (dist(shoulder(torso(fit, body, mid, stance), body, 1), wrist) < want) lo = mid;
     else hi = mid;
   }
   return (lo + hi) / 2;
@@ -236,9 +246,9 @@ export function solveTorsoAngle(fit: BikeFit, body: Body = DEFAULT_BODY): number
  * Pose complète pour un angle de pédalier `crank` (radians ; 0 : pédale gauche en haut, croissant vers l'avant).
  * `torsoAngle` vient de {@link solveTorsoAngle}, calculé une fois par couple vélo et avatar.
  */
-export function solvePose(fit: BikeFit, crank: number, torsoAngle: number, body: Body = DEFAULT_BODY): Pose {
+export function solvePose(fit: BikeFit, crank: number, torsoAngle: number, body: Body = DEFAULT_BODY, stance: Stance = SEATED): Pose {
   // La jambe gauche est en haut à 0 : la hanche gauche est alors levée, elle retombe pendant la poussée.
-  const t = torso(fit, body, torsoAngle, Math.cos(crank));
+  const t = torso(fit, body, torsoAngle, stance, Math.cos(crank));
   const neckDir = dirAt(NECK_ANGLE);
   const headBase = offset(t.neckBase, [neckDir, body.neck]);
   const headTop = offset(headBase, [dirAt(HEAD_ANGLE), body.head]);

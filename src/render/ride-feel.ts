@@ -51,3 +51,58 @@ export function swayRoll(gradePct: number, cadenceRpm: number): number {
 export function swayPhaseStep(cadenceRpm: number, dtS: number): number {
   return Math.PI * (cadenceRpm / 60) * dtS;
 }
+
+/** Pente à partir de laquelle on se met en danseuse, en %, et pente en dessous de laquelle on se rassoit. */
+export const STAND_GRADE_ON = 7;
+export const STAND_GRADE_OFF = 5;
+/** Plage de cadence de la danseuse, en tr/min : on se lève en tirant sur un gros braquet, pas en moulinant. */
+export const STAND_CADENCE_MIN = 25;
+export const STAND_CADENCE_MAX = 75;
+export const STAND_CADENCE_OFF = 85;
+/** Durée pendant laquelle les conditions doivent tenir avant de changer de position, en s. */
+export const STAND_HOLD_S = 2;
+
+/** Puissance lissée à partir de laquelle on se lève pour sprinter, et en dessous de laquelle on se rassoit, en part du FTP. */
+export const STAND_SPRINT_ON = 1.4;
+export const STAND_SPRINT_OFF = 1.1;
+/** Délai pour se lever sur un pic de puissance : un sprint est bref, il ne faut pas le manquer. */
+export const STAND_SPRINT_HOLD_S = 0.5;
+/** Lissage de la puissance, en s : un pic de quelques coups de pédale compte, le bruit de mesure non. */
+export const STAND_POWER_SMOOTH_S = 1.5;
+
+export interface StandingState {
+  on: boolean;
+  /** Temps cumulé où les conditions demandent de changer de position, en s. */
+  held: number;
+  /** Puissance lissée, en W. */
+  powerW: number;
+}
+
+export const SEATED_STATE: StandingState = { on: false, held: 0, powerW: 0 };
+
+/** Mesures dont on déduit la position. */
+export interface StandingInput {
+  gradePct: number;
+  cadenceRpm: number;
+  powerW: number;
+  /** FTP du coureur, en W ; 0 si inconnu (alors seule la côte compte). */
+  ftpW: number;
+}
+
+/**
+ * Danseuse déduite des mesures, sur deux motifs, quelle que soit la pente pour le second :
+ *  - la côte raide à cadence basse (gros braquet, on pousse de tout son poids) ;
+ *  - le pic de puissance (sprint, relance), même sur le plat ou en descente.
+ * Il se rassoit quand aucun des deux ne tient plus. Des délais évitent de se lever et de se rasseoir à chaque variation.
+ */
+export function standingStep(s: StandingState, m: StandingInput, dtS: number): StandingState {
+  const powerW = s.powerW + (m.powerW - s.powerW) * (1 - Math.exp(-dtS / STAND_POWER_SMOOTH_S));
+  const sprintOn = m.ftpW > 0 && powerW >= STAND_SPRINT_ON * m.ftpW && m.cadenceRpm >= STAND_CADENCE_MIN;
+  const sprintStay = m.ftpW > 0 && powerW >= STAND_SPRINT_OFF * m.ftpW && m.cadenceRpm >= STAND_CADENCE_MIN * 0.4;
+  const climbOn = m.gradePct >= STAND_GRADE_ON && m.cadenceRpm >= STAND_CADENCE_MIN && m.cadenceRpm <= STAND_CADENCE_MAX;
+  const climbStay = m.gradePct >= STAND_GRADE_OFF && m.cadenceRpm <= STAND_CADENCE_OFF && m.cadenceRpm >= STAND_CADENCE_MIN * 0.4;
+  const wantChange = s.on ? !(climbStay || sprintStay) : climbOn || sprintOn;
+  const need = s.on || !sprintOn ? STAND_HOLD_S : STAND_SPRINT_HOLD_S;
+  const held = wantChange ? s.held + dtS : 0;
+  return held >= need ? { on: !s.on, held: 0, powerW } : { on: s.on, held, powerW };
+}
