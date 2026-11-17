@@ -227,11 +227,13 @@ function setState(s: ConnectionState, detail?: string) {
   setBlocked(rideBtn, needPowerToRide);
   setBlocked(homeRideBtn, needPowerToRide);
   refreshWorkoutButtons();
-  if (s === 'disconnected') {
-    // Trainer perdu (écran en veille, montre qui prend le relais…) : la sortie est mise en pause, pas détruite.
+  if (s === 'connected') resumeRide();
+  else {
+    // Trainer perdu (écran en veille, montre qui prend le relais…) : la sortie est mise en pause, pas détruite, et
+    // l'adaptateur retente la connexion tout seul (essais rapprochés, puis attente de son signal).
     pauseRide();
     setErgActive(false);
-  } else if (s === 'connected') resumeRide();
+  }
   if (connected && trainer) {
     const c = trainer.capabilities;
     const range = c.powerRange ? `, plage ${c.powerRange.min}–${c.powerRange.max} W` : '';
@@ -1376,7 +1378,11 @@ const sync = createSyncClient({
   log,
 });
 // Retour sur la page, retour du réseau, et toutes les deux minutes tant qu'elle est visible : les autres appareils ont pu changer quelque chose.
-document.addEventListener('visibilitychange', () => void sync.now());
+document.addEventListener('visibilitychange', () => {
+  void sync.now();
+  // Retour au premier plan avec un trainer perdu : la reconnexion est retentée sans attendre son prochain signal.
+  if (document.visibilityState === 'visible' && trainer instanceof WebBluetoothTrainer) trainer.retryNow();
+});
 addEventListener('online', () => void sync.now());
 setInterval(() => {
   if (document.visibilityState === 'visible') void sync.now();

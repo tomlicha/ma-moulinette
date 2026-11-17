@@ -100,6 +100,11 @@ export abstract class GattDevice extends Emitter {
     return this.waiting;
   }
 
+  /** Appareil perdu et en attente de son signal : tente tout de suite de s'y reconnecter (retour au premier plan, toucher). */
+  retryNow(): void {
+    if (this.waiting) this.stopWaiting?.();
+  }
+
   async disconnect(): Promise<void> {
     this.userDisconnect = true;
     this.stopWaiting?.();
