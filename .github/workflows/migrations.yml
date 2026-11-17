@@ -1,0 +1,65 @@
+# Migrations D1 appliquées à la base distante à chaque poussée.
+#   - main : base de production (ma-moulinette-logs), puis base des aperçus (ma-moulinette-previews).
+#   - autre branche : base des aperçus seulement. Jamais la production.
+# Idempotent : sans nouvelle migration, wrangler répond « No migrations to apply ». Une migration en échec met le job en
+# rouge et s'arrête ; elle est retentée à la poussée suivante, ou à la main (« Run workflow »).
+#
+# Secrets du dépôt (Settings > Secrets and variables > Actions) :
+#   CLOUDFLARE_API_TOKEN   jeton Cloudflare ; le droit « D1 : modifier » sur le compte suffit
+#   CLOUDFLARE_ACCOUNT_ID  identifiant du compte Cloudflare
+#
+# Le déploiement du Worker est fait à part, par Cloudflare, à chaque poussée sur main : les deux démarrent ensemble et ce
+# job est en général fini avant. Pour ne jamais avoir le code neuf avant sa migration : migrations additives d'abord
+# (créer, ajouter ; jamais renommer ni supprimer dans la même version que le code qui s'en passe), voir README.
+name: Migrations D1
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+# Une seule série à la fois par cible : deux poussées rapprochées ne s'appliquent pas en même temps.
+concurrency:
+  group: migrations-${{ github.ref_name == 'main' && 'production' || 'apercus' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      # Sans secrets : sur main c'est une erreur (la production ne serait pas migrée en silence) ; ailleurs on passe
+      # (poussée d'un robot de mise à jour, copie du dépôt sans secrets).
+      - name: Secrets Cloudflare présents ?
+        id: secrets
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "::error::Secrets CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID absents : la base de production n'a pas été migrée."
+            exit 1
+          else
+            echo "::notice::Secrets Cloudflare absents : migrations ignorées."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.present == 'true'
+        with:
+          node-version: 22
+
+      - name: Base de production
+        if: steps.secrets.outputs.present == 'true' && github.ref == 'refs/heads/main'
+        run: npx --yes wrangler@4 d1 migrations apply ma-moulinette-logs --remote -c wrangler.app.toml
+
+      - name: Base des aperçus
+        if: steps.secrets.outputs.present == 'true'
+        run: npx --yes wrangler@4 d1 migrations apply ma-moulinette-previews --remote -c wrangler.previews-db.toml

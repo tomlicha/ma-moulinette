@@ -1,4 +1,5 @@
-# Garde-fou de chaque poussée : types, build de production, tests, poids du JS chargé au lancement.
+# Garde-fou de chaque poussée : types, build de production, tests, poids du JS chargé au lancement, migrations D1 sur
+# une base locale vierge. Les migrations sont appliquées aux bases distantes par migrations.yml.
 name: CI
 
 on:
@@ -24,3 +25,5 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run budget
+      # Le SQL de worker/migrations/ s'applique en entier sur une base vierge (une erreur de syntaxe est vue avant main).
+      - run: npx --yes wrangler@4 d1 migrations apply ma-moulinette-logs --local --persist-to "$RUNNER_TEMP/d1" -c wrangler.app.toml
