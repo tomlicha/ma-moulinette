@@ -98,10 +98,10 @@ export function rangeText(n: NearbyRiders | undefined): string {
   return `${who} · ${formatGap((front ?? back)!.gapM)}`;
 }
 
-/** Texte d'en-tête pendant un carrefour : « Carrefour · Le Moulin · 210 m ». `null` une fois le nœud passé. */
+/** Texte d'en-tête pendant un carrefour : « Le Moulin · 210 m » (le HUD dit déjà « Carrefour »). `null` une fois le nœud passé. */
 export function junctionHeader(name: string, remainingM: number): string | null {
   if (remainingM < 0) return null;
-  return `Carrefour · ${name} · ${Math.round(remainingM / 10) * 10} m`;
+  return `${name} · ${Math.round(remainingM / 10) * 10} m`;
 }
 
 export type Tab = 'list' | 'map';

@@ -100,8 +100,8 @@ describe('textes', () => {
     expect(rangeText(undefined)).toBe('');
   });
   it('junctionHeader : arrondi à 10 m, absent une fois le nœud passé', () => {
-    expect(junctionHeader('Le Moulin', 212)).toBe('Carrefour · Le Moulin · 210 m');
-    expect(junctionHeader('Le Moulin', 0)).toBe('Carrefour · Le Moulin · 0 m');
+    expect(junctionHeader('Le Moulin', 212)).toBe('Le Moulin · 210 m');
+    expect(junctionHeader('Le Moulin', 0)).toBe('Le Moulin · 0 m');
     expect(junctionHeader('Le Moulin', -3)).toBeNull();
   });
 });
