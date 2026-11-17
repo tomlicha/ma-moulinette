@@ -12,7 +12,7 @@ import { browserUa, noBluetoothHint, noBluetoothStatus } from './sensors/bluetoo
 import type { GpuLoss, RideView } from './render/ride-view';
 import { Background } from './render/background';
 import { chooseQuality } from './render/quality';
-import { GradeThrottle } from './sim/grade-throttle';
+import { GradeSlew, GradeThrottle } from './sim/grade-throttle';
 import { gearedGradePct, trainerModelFor } from './sim/virtual-gears';
 import { setupGears } from './ui/gears';
 import { DEFAULT_RIDER } from './sim/physics';
@@ -137,6 +137,7 @@ const rideBtn = $<HTMLButtonElement>('ride-toggle');
 const massInput = $<HTMLInputElement>('mass');
 /** Sans Cog : la pente du parcours, par pas de 0,5 %. Avec : la pente corrigée suit aussi la vitesse, d'où un pas plus fin. */
 let throttle = new GradeThrottle();
+const slew = new GradeSlew();
 /** ERG engagé : la consigne de puissance prime, et l'envoi de la pente du parcours est suspendu pour ne pas la remplacer. */
 let ergActive = false;
 /** Le trajet de la page : la simulation, la vue 3D et le HUD le partagent ; il repart du village à chaque sortie. */
@@ -222,14 +223,15 @@ function setState(s: ConnectionState, detail?: string) {
           : undefined,
   );
   // La puissance seule suffit à rouler : la pente n'est envoyée que si le trainer sait la simuler.
-  const needPowerToRide = connected ? undefined : needTrainer('La sortie avance avec la puissance de ton home trainer : connecte-le d’abord.');
+  const needPowerToRide = connected || ride ? undefined : needTrainer('La sortie avance avec la puissance de ton home trainer : connecte-le d’abord.');
   setBlocked(rideBtn, needPowerToRide);
   setBlocked(homeRideBtn, needPowerToRide);
   refreshWorkoutButtons();
   if (s === 'disconnected') {
-    stopRide(false);
+    // Trainer perdu (écran en veille, montre qui prend le relais…) : la sortie est mise en pause, pas détruite.
+    pauseRide();
     setErgActive(false);
-  }
+  } else if (s === 'connected') resumeRide();
   if (connected && trainer) {
     const c = trainer.capabilities;
     const range = c.powerRange ? `, plage ${c.powerRange.min}–${c.powerRange.max} W` : '';
@@ -346,7 +348,7 @@ function tickRide() {
   const g = gears.state();
   const native = g.enabled && !!trainer?.capabilities.virtualGears;
   const model = g.enabled && !native ? trainerModelFor(ride.rider) : undefined;
-  const sentGrade = model
+  const targetGrade = model
     ? round2(gearedGradePct({
         gradePct: s.gradePct,
         speedMs: s.speedKmh / 3.6,
@@ -357,6 +359,7 @@ function tickRide() {
         trainer: model,
       }))
     : s.gradePct;
+  const sentGrade = round2(slew.next(targetGrade, now));
   if (currentState === 'connected' && trainer?.capabilities.simulation && !ergActive && throttle.shouldSend(sentGrade, now)) {
     throttle.markSent(sentGrade, now);
     hub.setSimulation({ gradePct: sentGrade, massKg: ride.rider.massKg, ...model, ...(native ? { gearRatio: g.virtualRatio } : {}) }).catch((e) => {
@@ -390,6 +393,7 @@ function startRide() {
   lastRide = ride.snapshot();
   climb.reset();
   throttle.reset();
+  slew.reset();
   lastTick = performance.now();
   rideTimer = setInterval(tickRide, 100);
   rideBtn.textContent = 'Arrêter la sortie';
@@ -399,9 +403,32 @@ function startRide() {
   log(`sortie virtuelle démarrée (${massKg} kg)`);
 }
 
+/** Sortie en pause faute de trainer : position et vitesse gardées, reprises à la reconnexion. */
+let ridePaused = false;
+
+function pauseRide() {
+  if (!ride || ridePaused) return;
+  ridePaused = true;
+  clearInterval(rideTimer);
+  view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
+  world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
+  log('trainer perdu : sortie en pause, elle reprend à la reconnexion');
+}
+
+function resumeRide() {
+  if (!ride || !ridePaused) return;
+  ridePaused = false;
+  slew.reset();
+  throttle.reset(); // le trainer reconnecté repart de zéro : on lui renvoie la pente
+  lastTick = performance.now();
+  rideTimer = setInterval(tickRide, 100);
+  log('trainer reconnecté : sortie reprise');
+}
+
 function stopRide(resetTrainer = true) {
   if (!ride) return;
   clearInterval(rideTimer);
+  ridePaused = false;
   setErgActive(false);
   view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
   world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
