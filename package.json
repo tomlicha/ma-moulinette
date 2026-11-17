@@ -12,9 +12,13 @@
     "map": "node tools/map/build.mjs",
     "logs:serve": "node tools/log-server.ts",
     "dev:api": "wrangler dev -c wrangler.app.toml --port 8787",
-    "bots": "node --experimental-transform-types --no-warnings --import ./tools/ts-resolve.mjs tools/net/bots.ts"
+    "bots": "node --experimental-transform-types --no-warnings --import ./tools/ts-resolve.mjs tools/net/bots.ts",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
@@ -26,6 +30,8 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.3.0",
+    "@capacitor/core": "^8.6.2",
     "@fontsource/barlow": "^5.3.0",
     "@fontsource/barlow-condensed": "^5.3.0",
     "@garmin/fitsdk": "^21.218.0",

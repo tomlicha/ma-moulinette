@@ -1,3 +1,4 @@
+import { installNativeBluetooth } from './sensors/native-bluetooth';
 import { HeartRateMonitor } from './sensors/heart-rate-monitor';
 import { SensorHub } from './sensors/hub';
 import { SimulatedTrainer } from './sensors/simulator';
@@ -47,6 +48,9 @@ import { blocksToWorkout } from './workout/blocks';
 import { BlockLibrary } from './workout/block-library';
 import { WorkoutLibrary } from './workout/library';
 import { SAMPLE_WORKOUTS } from './workout/samples';
+
+// Dans la coquille iOS/Android, Web Bluetooth n'existe pas : le pont natif le fournit (sinon, sans effet).
+installNativeBluetooth();
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 setupBlockedHints();
