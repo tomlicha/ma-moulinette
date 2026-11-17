@@ -24,3 +24,29 @@ export class GradeThrottle {
     this.lastSent = undefined;
   }
 }
+
+/**
+ * Lisse la pente envoyée au trainer : elle ne change pas de plus de `maxPctPerS` par seconde. Un trainer applique la
+ * pente aussitôt ; une baisse brusque (replat, épingle, braquet virtuel) donne alors quelques secondes « trop faciles »
+ * avant que l'effort ne revienne, et le cycliste ressent un décrochage plutôt qu'un relief.
+ */
+export class GradeSlew {
+  private last?: { gradePct: number; at: number };
+
+  constructor(private readonly maxPctPerS = 1.5) {}
+
+  next(targetPct: number, nowMs: number): number {
+    const last = this.last;
+    let out = targetPct;
+    if (last) {
+      const maxStep = (this.maxPctPerS * Math.max(0, nowMs - last.at)) / 1000;
+      out = last.gradePct + Math.max(-maxStep, Math.min(maxStep, targetPct - last.gradePct));
+    }
+    this.last = { gradePct: out, at: nowMs };
+    return out;
+  }
+
+  reset() {
+    this.last = undefined;
+  }
+}
