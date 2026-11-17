@@ -30,6 +30,8 @@ npx playwright install chromium     # si aucun Chromium n'est déjà installé
 
    Les iPhone sont mesurés en plein écran (844 × 390), jamais dans la fenêtre Safari.
 
+   Le serveur de comptes est simulé (`/api/auth/me`) pour que la pastille « Connect with Strava » apparaisse comme en ligne : `AUDIT_ACCOUNT=deconnecte` (défaut), `connecte`, ou `aucun` pour le mode sans compte.
+
 4. **Profil CPU du démarrage**, par fichier et par fonction (serveur de dev, pour garder les noms de modules) :
 
    ```

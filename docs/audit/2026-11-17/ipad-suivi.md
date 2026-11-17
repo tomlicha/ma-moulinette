@@ -20,6 +20,16 @@ WebGPU dans la WKWebView reste à constater sur l'appareil ; la ligne de statist
 |---|---|
 | ![](captures/suivi-ipad-chooser.jpg) | ![](captures/suivi-ipad-safari-ipad-splitview.jpg) |
 
+## Connexion Strava sur les captures
+
+La pastille « Connect with Strava » manquait sur les captures de l'audit : le build y était servi seul, sans serveur de comptes, et l'application cache alors la pastille (mode sans compte). Avec `/api/auth/me` simulé comme en ligne, elle est bien là, en haut à droite d'Accueil, Appareils et Séances, sans rien recouvrir. `tools/audit/screens.cjs` simule désormais ce serveur par défaut (`AUDIT_ACCOUNT`).
+
+| Déconnecté, Accueil | Déconnecté, Appareils | Connecté |
+|---|---|---|
+| ![](captures/suivi-strava-ipad-deconnecte-accueil.jpg) | ![](captures/suivi-strava-ipad-deconnecte-appareils.jpg) | ![](captures/suivi-strava-ipad-connecte-accueil.jpg) |
+
+Connecté, la ligne d'état dit « Connexion perdue, nouvel essai… » : la salle temps réel n'existe pas non plus sans le Worker.
+
 ## Essai sur iPad, dans l'ordre
 
 1. `npm run ios:sync`, ouvrir dans Xcode, compiler. À surveiller : les deux fichiers Swift ajoutés au projet à la main (`MoulinettePlugin.swift`, `MainViewController.swift`).

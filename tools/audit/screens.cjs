@@ -1,7 +1,11 @@
 const { chromium, devices } = require('playwright');
 const fs = require('fs'); const axeSrc = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 const OUT = process.argv[2]; const URL = process.env.AUDIT_URL ?? 'http://localhost:4173/';
-const ONLY = process.argv[4]; const PROFILES0 = [
+const ONLY = process.argv[4];
+// Le build servi seul n'a pas de serveur de comptes : sans réponse de /api/auth/me, la pastille « Connect with Strava »
+// se cache (mode sans compte). On simule donc la production : `deconnecte` (défaut), `connecte`, ou `aucun` (sans serveur).
+const ACCOUNT = { deconnecte: { user: null, methods: { strava: true, dev: false } },
+  connecte: { user: { id: 'audit', displayName: 'Tom L.', nameConfirmed: true }, methods: { strava: true, dev: false } } }[process.env.AUDIT_ACCOUNT ?? 'deconnecte']; const PROFILES0 = [
   { name: 'desktop-1280x800', ctx: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 } },
   { name: 'desktop-1920x1080', ctx: { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 } },
   { name: 'laptop-1024x640', ctx: { viewport: { width: 1024, height: 640 }, deviceScaleFactor: 1 } },
@@ -49,7 +53,9 @@ const MEASURE = () => {
   const b = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--enable-unsafe-webgpu'] });
   const report = {};
   for (const prof of PROFILES) {
-    const ctx = await b.newContext({ ...prof.ctx, locale: 'fr-FR' }); const p = await ctx.newPage();
+    const ctx = await b.newContext({ ...prof.ctx, locale: 'fr-FR' });
+    if (ACCOUNT) await ctx.route('**/api/auth/me', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(ACCOUNT) }));
+    const p = await ctx.newPage();
     const errors = []; p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`[${m.type()}] ${m.text().slice(0, 200)}`); }); p.on('pageerror', e => errors.push('[pageerror] ' + e.message.slice(0, 200)));
     const t0 = Date.now(); await p.goto(URL, { waitUntil: 'load' }); const loadMs = Date.now() - t0;
     await p.waitForTimeout(7000);
