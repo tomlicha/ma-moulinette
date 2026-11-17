@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FOV_BASE, fovFor, LOOK_FOLLOW, lookHeight, standingStep, swayPhaseStep, swayRoll, type StandingState } from './ride-feel';
+import { FOV_BASE, fovFor, LOOK_FOLLOW, lookHeight, SEATED_STATE, standingStep, swayPhaseStep, swayRoll, type StandingInput, type StandingState } from './ride-feel';
 
 describe('fovFor', () => {
   it('vaut le champ de base à plat et à vitesse tranquille', () => {
@@ -61,35 +61,54 @@ describe('swayPhaseStep', () => {
 });
 
 describe('standingStep', () => {
-  const run = (from: StandingState, grade: number, rpm: number, seconds: number) => {
+  const FTP = 250;
+  const run = (from: StandingState, m: Partial<StandingInput>, seconds: number) => {
     let s = from;
-    for (let t = 0; t < seconds; t += 0.1) s = standingStep(s, grade, rpm, 0.1);
+    for (let t = 0; t < seconds; t += 0.1) s = standingStep(s, { gradePct: 0, cadenceRpm: 90, powerW: 200, ftpW: FTP, ...m }, 0.1);
     return s;
   };
-  const seated: StandingState = { on: false, held: 0 };
 
-  it('reste assis à plat et en cadence normale', () => {
-    expect(run(seated, 0, 90, 30).on).toBe(false);
+  it('reste assis à plat à puissance normale', () => {
+    expect(run(SEATED_STATE, {}, 30).on).toBe(false);
   });
 
   it('se lève dans une côte raide à cadence basse, après un délai', () => {
-    expect(run(seated, 9, 55, 1).on).toBe(false);
-    expect(run(seated, 9, 55, 3).on).toBe(true);
+    expect(run(SEATED_STATE, { gradePct: 9, cadenceRpm: 55 }, 1).on).toBe(false);
+    expect(run(SEATED_STATE, { gradePct: 9, cadenceRpm: 55 }, 3).on).toBe(true);
   });
 
-  it('ne se lève pas quand on moulines en côte ou à l\'arrêt', () => {
-    expect(run(seated, 9, 95, 30).on).toBe(false);
-    expect(run(seated, 9, 0, 30).on).toBe(false);
+  it("ne se lève pas quand on moulines en côte ou à l'arrêt", () => {
+    expect(run(SEATED_STATE, { gradePct: 9, cadenceRpm: 95 }, 30).on).toBe(false);
+    expect(run(SEATED_STATE, { gradePct: 9, cadenceRpm: 0 }, 30).on).toBe(false);
   });
 
-  it('se rassoit quand la pente s\'adoucit, sans hésiter entre les deux seuils', () => {
-    const up = run(seated, 9, 55, 3);
-    expect(run(up, 6, 55, 30).on).toBe(true);
-    expect(run(up, 2, 55, 3).on).toBe(false);
+  it('se lève sur un pic de puissance, sur le plat comme en descente', () => {
+    expect(run(SEATED_STATE, { gradePct: 0, powerW: 700, cadenceRpm: 105 }, 3).on).toBe(true);
+    expect(run(SEATED_STATE, { gradePct: -6, powerW: 700, cadenceRpm: 105 }, 3).on).toBe(true);
+  });
+
+  it('ne se lève pas pour un pic trop bref ou trop faible', () => {
+    expect(run(SEATED_STATE, { powerW: 700, cadenceRpm: 105 }, 0.3).on).toBe(false);
+    expect(run(SEATED_STATE, { powerW: 300, cadenceRpm: 105 }, 30).on).toBe(false);
+  });
+
+  it('sans FTP connu, seule la côte compte', () => {
+    expect(run(SEATED_STATE, { powerW: 900, ftpW: 0 }, 10).on).toBe(false);
+  });
+
+  it("se rassoit quand la pente s'adoucit, sans hésiter entre les deux seuils", () => {
+    const up = run(SEATED_STATE, { gradePct: 9, cadenceRpm: 55 }, 3);
+    expect(run(up, { gradePct: 6, cadenceRpm: 55 }, 30).on).toBe(true);
+    expect(run(up, { gradePct: 2, cadenceRpm: 55 }, 4).on).toBe(false);
+  });
+
+  it('se rassoit quand le sprint retombe', () => {
+    const up = run(SEATED_STATE, { powerW: 700, cadenceRpm: 105 }, 3);
+    expect(run(up, { powerW: 200, cadenceRpm: 95 }, 5).on).toBe(false);
   });
 
   it('un bref écart ne change rien', () => {
-    const up = run(seated, 9, 55, 3);
-    expect(run(run(up, 2, 55, 1), 9, 55, 5).on).toBe(true);
+    const up = run(SEATED_STATE, { gradePct: 9, cadenceRpm: 55 }, 3);
+    expect(run(run(up, { gradePct: 2, cadenceRpm: 55 }, 1), { gradePct: 9, cadenceRpm: 55 }, 5).on).toBe(true);
   });
 });
