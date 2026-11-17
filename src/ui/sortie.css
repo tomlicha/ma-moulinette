@@ -171,7 +171,7 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 
 /*
  * Coureurs proches : jusqu'à 7 devant, le joueur, 3 derrière, de l'avant vers l'arrière. Sous le bouton du menu, au bord
- * droit ; sur téléphone couché, à gauche de la colonne de boutons. Verre léger : l'encart reste discret.
+ * droit ; sur téléphone couché, collé au bord comme le bouton du menu, et à gauche de la colonne de boutons quand elle est affichée. Verre léger : l'encart reste discret.
  */
 .ride-near {
   position: absolute; z-index: 2; top: calc(var(--edge-t) + 54px); right: var(--edge-r); width: 188px; box-sizing: border-box;
@@ -188,7 +188,9 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .rn-me { font-weight: 700; margin: 2px 0; padding: 2px 0; border-block: 1px solid rgb(255 255 255 / .22); }
 .rn-me .rn-dot { background: #5BE3C9; }
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
-  .ride-near { top: calc(var(--edge-t) + 46px); right: calc(var(--edge-r) + 52px); width: 168px; padding: 4px 8px; }
+  .ride-near { top: calc(var(--edge-t) + 46px); right: var(--edge-r); width: 168px; padding: 4px 8px; }
+  /* Commandes de séance ou sélecteur de vitesse affichés : ils occupent la colonne du bord, l'encart passe à leur gauche. */
+  .ride:has(.ride-quick:not([hidden]), .ride-gears:not([hidden])) .ride-near { right: calc(var(--edge-r) + 52px); }
   .rn-row { min-height: 19px; }
   .ride-crowd { height: 40px; }
 }

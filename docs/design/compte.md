@@ -50,7 +50,8 @@ Développement local, 16 novembre 2026 (connexion de développement et trois rob
 | Connecté, téléphone couché (écran Appareils) | ![](captures/compte-connecte-telephone.png) |
 | Menu du compte | ![](captures/compte-menu.png) |
 | Autres coureurs sur la Sortie, ordinateur (12 robots immobiles : 8 devant, 4 derrière) | ![](captures/compte-autres-coureurs-ordinateur.png) |
-| Autres coureurs sur la Sortie, téléphone couché 844 × 390 (mêmes robots) | ![](captures/compte-autres-coureurs-telephone.png) |
+| Autres coureurs sur la Sortie, téléphone couché 844 × 390 (mêmes robots), encart collé au bord | ![](captures/compte-autres-coureurs-telephone.png) |
+| Idem avec les commandes de séance affichées : l'encart passe à leur gauche | ![](captures/compte-autres-coureurs-telephone-seance.png) |
 | Boîte du nom | ![](captures/compte-nom.png) |
 
 ## Développement
