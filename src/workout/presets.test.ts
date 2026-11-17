@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BlockLibrary } from './block-library';
 import { validateBlocks, type EditorBlock } from './blocks';
-import { BLOCK_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks } from './presets';
+import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks } from './presets';
 import type { KeyValueStore } from '../sensors/device-registry';
 
 function memoryStore(): KeyValueStore {
@@ -24,6 +24,11 @@ describe('blocs préfaits', () => {
 
   it('chaque type propose au moins deux blocs', () => {
     for (const c of PRESET_CATEGORIES) expect(BLOCK_PRESETS.filter((p) => p.category === c.id).length, c.name).toBeGreaterThanOrEqual(2);
+  });
+
+  it('les blocs par zone couvrent Z1 à Z6 et sont valides', () => {
+    for (const z of ['z1', 'z2', 'z3', 'z4', 'z5', 'z6']) expect(ZONE_PRESETS.filter((p) => p.id === `zone-${z}`).length, z).toBe(1);
+    for (const p of ZONE_PRESETS) expect(validateBlocks(p.blocks), p.id).toEqual([]);
   });
 
   it('les blocs vierges couvrent les six types et sont valides', () => {

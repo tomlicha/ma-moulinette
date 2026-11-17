@@ -15,7 +15,7 @@ import type { BlockLibrary, SavedBlock } from '../workout/block-library';
 import type { SavedWorkout, WorkoutLibrary } from '../workout/library';
 import { targetWatts, type Workout } from '../workout/model';
 import { profilePeakW, profileShapes, zoneOf, type Zone } from '../workout/profile';
-import { BLOCK_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks, type PresetCategory } from '../workout/presets';
+import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks, type PresetCategory } from '../workout/presets';
 import { parseWorkout } from '../workout/runner';
 import { SAMPLE_WORKOUTS } from '../workout/samples';
 import { effortSeconds, intensityWord, timeInZones, ZONES, zoneName, zoneReading, type ZoneTimes } from '../workout/zones';
@@ -551,7 +551,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   // --- Étagère de blocs préfaits (docs/design/seances.md, piste S) ---
 
-  type ShelfTab = 'all' | PresetCategory | 'blank' | 'mine';
+  type ShelfTab = 'all' | PresetCategory | 'zones' | 'blank' | 'mine';
   interface ShelfItem {
     id: string;
     name: string;
@@ -565,6 +565,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   function shelfItems(): ShelfItem[] {
     if (shelfTab === 'blank') return blankPresets();
+    if (shelfTab === 'zones') return ZONE_PRESETS;
     if (shelfTab === 'mine') return o.blocks.list().map((b) => ({ id: b.id, name: b.name, blocks: b.blocks, mine: b }));
     return BLOCK_PRESETS.filter((p) => shelfTab === 'all' || p.category === shelfTab);
   }
@@ -588,7 +589,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
       });
       return b;
     };
-    shelfTabsEl.replaceChildren(tab('all', 'Tous'), ...PRESET_CATEGORIES.map((c) => tab(c.id, c.name, c.zone)), tab('blank', 'Vierges'), tab('mine', '★ Mes blocs'));
+    shelfTabsEl.replaceChildren(tab('all', 'Tous'), tab('zones', 'Par zone'), ...PRESET_CATEGORIES.map((c) => tab(c.id, c.name, c.zone)), tab('blank', 'Vierges'), tab('mine', '★ Mes blocs'));
 
     shelfItemsNow = shelfItems();
     const cards = shelfItemsNow.map((item, i) => {

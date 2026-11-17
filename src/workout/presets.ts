@@ -49,6 +49,23 @@ export const BLOCK_PRESETS: BlockPreset[] = [
   { id: 'cool-down', category: 'cool', name: 'Descente progressive', blocks: [{ type: 'cooldown', durationS: 480, from: 0.7, to: 0.35 }] },
 ];
 
+/** Blocs simples par zone de puissance : un seul palier constant par zone (Z1 à Z6), au milieu de la zone. */
+const ZONE_MID: [PresetCategoryInfo['zone'], string, number][] = [
+  ['z1', 'Récupération', 0.45],
+  ['z2', 'Endurance', 0.65],
+  ['z3', 'Tempo', 0.85],
+  ['z4', 'Seuil', 0.98],
+  ['z5', 'VO2max', 1.13],
+  ['z6', 'Anaérobie', 1.3],
+];
+export const ZONE_PRESETS: { id: string; name: string; blocks: EditorBlock[] }[] = ZONE_MID.flatMap(([z, name, power]) =>
+  [{ min: z === 'z6' ? 3 : z === 'z5' ? 5 : 10 }].map(({ min }) => ({
+    id: `zone-${z}`,
+    name: `${z.toUpperCase()} ${name} ${min} min`,
+    blocks: [{ type: 'steady', durationS: min * 60, power } as EditorBlock],
+  })),
+);
+
 /** Blocs vierges : les six types, avec leurs valeurs par défaut, à retoucher (ce que proposaient les anciens boutons d'ajout). */
 export const BLANK_TYPES: BlockType[] = ['warmup', 'steady', 'intervals', 'ramp', 'free', 'cooldown'];
 export const blankPresets = (): { id: string; name: string; blocks: EditorBlock[] }[] =>
