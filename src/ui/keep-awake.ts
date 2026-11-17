@@ -1,10 +1,12 @@
 /**
- * Écran allumé pendant la sortie : on ne touche pas l'écran pendant une séance ERG, et la mise en veille de l'appareil
- * suspendrait la page (enregistrement, sortie virtuelle, reconnexion).
+ * Écran allumé tant qu'on est sur l'application (tous les écrans, sur ordinateur comme sur tablette ou téléphone) : on ne
+ * touche pas l'écran pendant une séance ERG, et la mise en veille de l'appareil suspendrait la page (enregistrement,
+ * sortie virtuelle, reconnexion).
  *
  * - Coquille native : le plugin de l'application (`isIdleTimerDisabled`), qui tient tant qu'on ne le relâche pas.
- * - Navigateur : l'API Screen Wake Lock (Chrome, Safari 16.4 et plus). Le verrou tombe dès que la page passe en arrière-
- *   plan ; il est repris au retour, tant qu'on le veut encore.
+ * - Navigateur : l'API Screen Wake Lock (Chrome et Edge, Safari 16.4 et plus sur Mac, iPhone et iPad, Firefox 126 et plus).
+ *   Le verrou tombe dès que la page passe en arrière-plan (autre onglet, fenêtre réduite) ou que le système le retire
+ *   (économie d'énergie) ; il est repris au retour au premier plan et au prochain toucher, tant qu'on le veut encore.
  */
 export interface WakeEnv {
   native?: { keepAwake(o: { on: boolean }): Promise<void> };
@@ -34,9 +36,12 @@ export function createKeepAwake(env: WakeEnv) {
     await pending;
   };
 
-  env.document.addEventListener('visibilitychange', () => {
-    if (wanted && env.document.visibilityState === 'visible') void acquire();
-  });
+  const retry = () => {
+    if (wanted && !env.native && env.document.visibilityState === 'visible') void acquire();
+  };
+  env.document.addEventListener('visibilitychange', retry);
+  // Verrou retiré par le système page visible (économie d'énergie, refus) : un geste de l'utilisateur le redemande.
+  env.document.addEventListener('pointerdown', retry);
 
   return {
     /** Garder l'écran allumé (`true`) ou rendre la main au réglage de l'appareil (`false`). */

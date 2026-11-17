@@ -2,13 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { createKeepAwake, type WakeEnv } from './keep-awake';
 
 function fakeDoc() {
-  const listeners: (() => void)[] = [];
+  const listeners: Record<string, (() => void)[]> = {};
   const doc = {
     visibilityState: 'visible' as DocumentVisibilityState,
-    addEventListener: (_t: string, f: () => void) => void listeners.push(f),
+    addEventListener: (t: string, f: () => void) => void (listeners[t] ??= []).push(f),
     show(state: DocumentVisibilityState) {
       doc.visibilityState = state;
-      listeners.forEach((f) => f());
+      listeners['visibilitychange']?.forEach((f) => f());
+    },
+    touch() {
+      listeners['pointerdown']?.forEach((f) => f());
     },
   };
   return doc;
@@ -62,6 +65,36 @@ describe('createKeepAwake', () => {
     doc.show('visible');
     await flush();
     expect(wl.request).toHaveBeenCalledTimes(2);
+  });
+
+  it('navigateur : verrou retiré par le système page visible, redemandé au prochain toucher', async () => {
+    const doc = fakeDoc();
+    const wl = fakeWakeLock();
+    const k = createKeepAwake({ wakeLock: wl, document: doc } as unknown as WakeEnv);
+    await k.set(true);
+    wl.live[0]!.fire(); // économie d'énergie : la page reste visible
+    doc.touch();
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(2);
+    doc.touch(); // verrou tenu : rien à redemander
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(2);
+    await k.set(false);
+    doc.touch();
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(2);
+  });
+
+  it('coquille native : pas de Wake Lock web en doublon', async () => {
+    const doc = fakeDoc();
+    const wl = fakeWakeLock();
+    const native = { keepAwake: vi.fn(async () => {}) };
+    const k = createKeepAwake({ native, wakeLock: wl, document: doc } as unknown as WakeEnv);
+    await k.set(true);
+    doc.show('visible');
+    doc.touch();
+    await flush();
+    expect(wl.request).not.toHaveBeenCalled();
   });
 
   it('sans API : ne fait rien, sans erreur', async () => {
