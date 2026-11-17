@@ -148,3 +148,22 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
   .view-stats { right: calc(var(--edge-r) + 56px); }
   .view-stats { top: calc(var(--edge-t) + 48px); }
 }
+
+/* Autres coureurs (docs/design/compte.md) : noms posés au-dessus d'eux, sous le HUD, sans capter le toucher. */
+.rider-tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.rider-tag {
+  position: absolute; left: 0; top: 0; display: flex; align-items: baseline; gap: 6px; white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px; background: rgb(24 30 40 / .72); color: #fff;
+  font: 600 .8125rem/1.2 Barlow, system-ui, sans-serif; will-change: transform;
+}
+.rider-tag-dist { color: #D3DCE8; font-weight: 500; font-variant-numeric: tabular-nums; }
+.rider-tag.far { opacity: .7; }
+/* Pastille de la salle, à gauche du bouton du menu : dit tout de suite si les autres nous voient. */
+.ride-crowd {
+  position: absolute; z-index: 3; top: var(--edge-t); right: calc(var(--edge-r) + 52px); height: 44px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 14px; max-width: 46vw;
+  border: 1px solid rgb(255 255 255 / .14); background: rgb(24 30 40 / .78); color: #fff;
+  font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ride-crowd::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #1FE07F; }
+.ride-crowd[data-state='off']::before { background: #F08A3C; }

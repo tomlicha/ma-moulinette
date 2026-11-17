@@ -43,6 +43,7 @@ import { setupCoursePicker } from './ui/course-picker';
 import { setupCourseMap } from './ui/course-map';
 import { setupAccount } from './ui/account-chip';
 import { WorldClient } from './net/world-client';
+import { crowdLine, RiderTags } from './ui/rider-tags';
 import { controlModes } from './ui/radar-model';
 import { ClimbCounter, PowerAverage } from './ui/hud-model';
 import type { RideSnapshot } from './sim/ride';
@@ -1163,6 +1164,8 @@ async function buildView() {
   void v.firstFrame.then(() => (rideLoading.hidden = true));
   v.setActive(router.current() === 'sortie');
   v.onLost = onGpuLost;
+  v.setOthers(() => world.riders());
+  v.onTags = (tags) => riderTags.set(tags);
   v.onStats = (s) => {
     $('view-stats').textContent =
       `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +
@@ -1245,12 +1248,26 @@ const account = setupAccount({
     else world.disconnect();
   },
 });
+const riderTags = new RiderTags($('rider-tags'));
+const crowd = $('crowd');
+/** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
+function showCrowd() {
+  const s = world.status;
+  crowd.hidden = s === 'offline' || s === 'signed-out' || s === 'name-pending';
+  crowd.dataset.state = s === 'online' ? 'on' : 'off';
+  crowd.textContent = s === 'online' ? crowdLine(world.population) : s === 'connecting' ? 'Connexion…' : s === 'replaced' ? 'Connecté sur un autre appareil' : s === 'outdated' ? 'Mise à jour : recharger la page' : 'Connexion perdue, nouvel essai…';
+  if (s !== 'online') riderTags.clear();
+}
 world.onStatus = (s) => {
   account.setWorld(s, world.population);
+  showCrowd();
   log(`multijoueur : ${s}`);
 };
 world.onRoster = (event, name) => log(`multijoueur : ${name} ${event === 'join' ? 'arrive' : 'part'}`);
-setInterval(() => account.setWorld(world.status, world.population), 1000);
+setInterval(() => {
+  account.setWorld(world.status, world.population);
+  showCrowd();
+}, 1000);
 
 // En dernier : tout l'état de la page est initialisé avant la première connexion.
 setState(currentState); // chaque bouton reçoit dès le départ sa raison d'être indisponible

@@ -4,6 +4,8 @@ import { createRenderer, type Backend } from './renderer';
 import { ambianceFor, type Mood } from './ambiance';
 import { loadRiderAssets, type RiderAssets } from './assets';
 import { Rider } from './rider';
+import { OthersLayer, type RiderTag } from './others';
+import type { RemoteRiderView } from '../net/world-client';
 import { Background, BackgroundStopped } from './background';
 import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
 import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
@@ -62,6 +64,8 @@ export class RideView {
    * ressources). À l'appelant de la jeter et d'en construire une autre, sur un canevas neuf.
    */
   onLost?: (loss: GpuLoss) => void;
+  /** Noms des autres coureurs proches avec leur place à l'écran, à chaque image (pixels CSS du canevas). */
+  onTags?: (tags: RiderTag[]) => void;
   private lost?: GpuLoss;
   /** Reste du relief et du décor, complété en tâche de fond après la première image ; arrêté avec la vue. */
   private readonly fill = new Background();
@@ -69,6 +73,8 @@ export class RideView {
   private readonly camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.3, CAMERA_FAR_M);
   private readonly layout: WorldLayout;
   private readonly rider: Rider;
+  private readonly others: OthersLayer;
+  private othersSource: () => readonly RemoteRiderView[] = () => [];
   private readonly sky: THREE.Mesh;
   private readonly world: World;
   private mood: Mood = 'day';
@@ -104,7 +110,8 @@ export class RideView {
     this.sky = world.sky;
     this.world = world;
     this.gates = new IntervalGates(journey, this.layout);
-    this.scene.add(this.rider.group, this.gates.group);
+    this.others = new OthersLayer(assets, layout, LANE_M);
+    this.scene.add(this.rider.group, this.others.group, this.gates.group);
     renderer.setPixelRatio(pixelRatioFor(quality, window.devicePixelRatio));
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -210,6 +217,11 @@ export class RideView {
     if (Math.abs(s.distanceM - this.dist) > 30) this.dist = s.distanceM;
   }
 
+  /** D'où lire les autres coureurs à dessiner (déjà lissés) : appelée à chaque image. */
+  setOthers(source: () => readonly RemoteRiderView[]) {
+    this.othersSource = source;
+  }
+
   /** Porte du prochain palier de séance, ou rien hors séance. */
   setGate(g: IntervalGate | undefined) {
     this.gates.set(g);
@@ -229,6 +241,7 @@ export class RideView {
     this.fill.stop();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
+    this.others.dispose();
     removeEventListener('resize', this.onWindowResize);
     this.renderer.dispose();
   }
@@ -353,6 +366,7 @@ export class RideView {
     this.rider.group.rotateZ(this.roll * Math.sin(this.swayPhase));
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
+    const others = this.others.place(dt, this.othersSource(), this.p);
     // L'ambiance suit le parcours, qui peut changer sur l'accueil pendant que la vue tourne.
     const mood = this.journey.course?.ambiance ?? 'day';
     if (mood !== this.mood) {
@@ -361,6 +375,8 @@ export class RideView {
     }
     this.world.update(dt, this.p);
     this.follow(dt);
+    this.camera.updateMatrixWorld(); // les noms se projettent avec la caméra de cette image, pas celle de la précédente
+    this.onTags?.(this.others.tags(others, this.camera, this.size.w, this.size.h));
     this.renderer.render(this.scene, this.camera);
     if (!this.drawn) {
       this.drawn = true;
