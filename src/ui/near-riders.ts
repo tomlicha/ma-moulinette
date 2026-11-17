@@ -1,10 +1,11 @@
-import { formatGap, hueOf, type Nearby, type NearbyRiders } from '../render/others-model';
+import { formatGap, type Nearby, type NearbyRiders } from '../render/others-model';
+import { riderColor } from './ride-map';
 
 /** Rafraîchissement de l'encart, en ms : les écarts bougent doucement, inutile de toucher au DOM à chaque image. */
 const EVERY_MS = 250;
 
-/** Couleur du point d'un coureur : celle de son maillot dans la vue 3D. */
-const dotColor = (slot: number) => `hsl(${Math.round(hueOf(slot) * 360)} 70% 52%)`;
+/** Couleur du point d'un coureur : celle de son maillot dans la vue 3D, et celle de son point sur la carte. */
+const dotColor = riderColor;
 
 /** « Aspiration 22 % » à partir de 3 % d'air épargné ; rien en dessous (une aspiration trop faible ne se sent pas). */
 export function draftText(draft: number): string {
@@ -28,6 +29,11 @@ export class NearRiders {
   private readonly rows: Row[] = [];
   private signature = '';
   private last = -Infinity;
+
+  /** Vrai quand la liste a des lignes : sans coureur proche, l'encart n'a que la carte. */
+  get hasRows(): boolean {
+    return this.rows.length > 0;
+  }
 
   constructor(private readonly host: HTMLElement) {
     this.list.className = 'rn-list';

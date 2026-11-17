@@ -170,16 +170,44 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .ride-crowd[data-state='off']::before { background: #F08A3C; }
 
 /*
- * Coureurs proches : jusqu'à 7 devant, le joueur, 3 derrière, de l'avant vers l'arrière. Sous le bouton du menu, au bord
- * droit ; sur téléphone couché, collé au bord comme le bouton du menu, et à gauche de la colonne de boutons quand elle est affichée. Verre léger : l'encart reste discret.
+ * Encart : les coureurs proches (jusqu'à 7 devant, le joueur, 3 derrière, de l'avant vers l'arrière) et la carte de la
+ * position, dans le même cadre, avec une bascule Liste / Carte (ride-panel.ts). Sous le bouton du menu, au bord droit ;
+ * sur téléphone couché, collé au bord comme le bouton du menu, et à gauche de la colonne de boutons quand elle est
+ * affichée. Un toucher dessus bascule. Verre comme les panneaux du HUD (docs/design/hud.md) ; sur ordinateur il grandit
+ * avec le HUD au-delà de 1280 × 720 (--near-s, posé par hud.ts).
  */
 .ride-near {
   position: absolute; z-index: 2; top: calc(var(--edge-t) + 54px); right: var(--edge-r); width: 188px; box-sizing: border-box;
-  padding: 6px 8px; border-radius: 12px; border: 1px solid rgb(255 255 255 / .12); background: rgb(24 30 40 / .5);
-  color: #fff; font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; pointer-events: none;
+  display: flex; flex-direction: column; gap: 5px; padding: 5px; border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / .14); background: rgb(24 30 40 / .7); box-shadow: 0 8px 28px rgb(5 10 20 / .25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
+  transform: scale(var(--near-s, 1)); transform-origin: 100% 0;
+  color: #fff; font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .ride-near[hidden] { display: none; }
-.rn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+/* Écran tactile : verre sans flou, comme le reste du HUD (qualité réduite par défaut). */
+@media (pointer: coarse) { .ride-near { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgb(24 30 40 / .84); } }
+.rn-head[hidden], .rn-tabs[hidden], .rn-junction[hidden] { display: none; }
+/* L'en-tête garde la hauteur des onglets : l'encart ne bouge pas quand il passe en carrefour. */
+.rn-head { min-height: 28px; display: flex; flex-direction: column; justify-content: center; }
+.rn-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: rgb(255 255 255 / .08); }
+.rn-tab {
+  flex: 1; min-height: 24px; padding: 5px 0; border: 0; border-radius: 7px; background: transparent; color: #D3DCE8;
+  font: 600 13px/1 Barlow, system-ui, sans-serif; cursor: pointer;
+}
+.rn-tab[aria-selected='true'] { background: #5BE3C9; color: #0B1422; }
+.rn-tab:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.rn-junction { margin: 0; padding: 4px 4px 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/1.25 Barlow, system-ui, sans-serif; text-shadow: 0 1px 2px rgb(5 10 20 / .6); }
+/* Liste et carte occupent la même cellule : l'encart garde la taille de la plus haute, quel que soit l'onglet. */
+.rn-body { display: grid; }
+.rn-list-box, .rn-map-box { grid-area: 1 / 1; min-width: 0; }
+.rn-map-box { display: flex; flex-direction: column; gap: 3px; min-height: 225px; }
+.ride-near[data-tab='list'] .rn-map-box, .ride-near[data-tab='map'] .rn-list-box { visibility: hidden; }
+.rn-map { flex: 1; min-height: 0; border-radius: 9px; overflow: hidden; }
+.rn-map svg { display: block; }
+.rn-foot { margin: 0; min-height: 16px; text-align: center; color: #D3DCE8; font: 500 12.5px/1.3 Barlow, system-ui, sans-serif; white-space: nowrap; }
+.rn-list-box[hidden] { display: none; }
+.rn-list { list-style: none; margin: 0; padding: 0 3px; display: flex; flex-direction: column; gap: 1px; }
 .rn-row { display: flex; align-items: center; gap: 8px; min-height: 22px; text-shadow: 0 1px 2px rgb(5 10 20 / .6); }
 .rn-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5BE3C9; box-shadow: 0 0 0 1px rgb(255 255 255 / .55); }
 .rn-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -189,9 +217,18 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .rn-me .rn-dot { background: #5BE3C9; }
 .rn-drafting .rn-gap { color: #5BE3C9; font-weight: 700; } /* aspiration : l'air épargné derrière le coureur de devant */
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
-  .ride-near { top: calc(var(--edge-t) + 46px); right: var(--edge-r); width: 168px; padding: 4px 8px; }
+  /* Écran toujours rendu sans bordure : la colonne de droite (menu, pastille, encart, commandes) est à 6 px du haut et
+     de la droite, comme les panneaux du HUD, quelle que soit l'encoche (docs/design/sortie.md). */
+  html .ride, html[data-notch='left'] .ride { --edge-t: 6px; --edge-r: 6px; }
+  .ride-near { top: calc(var(--edge-t) + 46px); right: var(--edge-r); width: 168px; padding: 5px; transform: none; }
+  .rn-map-box { min-height: 200px; }
+  .rn-list { gap: 0; }
+  .rn-me { margin: 1px 0; padding: 1px 0; }
   /* Commandes de séance ou sélecteur de vitesse affichés : ils occupent la colonne du bord, l'encart passe à leur gauche. */
   .ride:has(.ride-quick:not([hidden]), .ride-gears:not([hidden])) .ride-near { right: calc(var(--edge-r) + 52px); }
-  .rn-row { min-height: 19px; }
-  .ride-crowd { height: 40px; }
+  .rn-row { min-height: 18px; }
+  .ride-crowd { height: 40px; right: calc(var(--edge-r) + 46px); }
+  /* Le panneau « Carrefour » du HUD s'arrête 6 px avant l'encart (hud.css) : largeur de l'encart, bord et colonne de boutons. */
+  .ride { --near-clear: calc(168px + 6px); }
+  .ride:has(.ride-quick:not([hidden]), .ride-gears:not([hidden])) { --near-clear: calc(168px + 6px + 52px); }
 }

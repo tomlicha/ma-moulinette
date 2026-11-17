@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BlockLibrary } from './block-library';
 import { validateBlocks, type EditorBlock } from './blocks';
-import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks } from './presets';
+import { zoneOf } from './profile';
+import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, mainPower, PRESET_CATEGORIES, summarizeBlocks } from './presets';
 import type { KeyValueStore } from '../sensors/device-registry';
 
 function memoryStore(): KeyValueStore {
@@ -26,9 +27,29 @@ describe('blocs préfaits', () => {
     for (const c of PRESET_CATEGORIES) expect(BLOCK_PRESETS.filter((p) => p.category === c.id).length, c.name).toBeGreaterThanOrEqual(2);
   });
 
-  it('les blocs par zone couvrent Z1 à Z6 et sont valides', () => {
-    for (const z of ['z1', 'z2', 'z3', 'z4', 'z5', 'z6']) expect(ZONE_PRESETS.filter((p) => p.id === `zone-${z}`).length, z).toBe(1);
+  it('chaque zone, de Z1 à Z6, a un bloc simple et un bloc d’intervalles, valides et dans la zone', () => {
+    for (const z of ['z1', 'z2', 'z3', 'z4', 'z5', 'z6'] as const) {
+      const simple = ZONE_PRESETS.filter((p) => p.id === `zone-${z}`);
+      const inter = ZONE_PRESETS.filter((p) => p.id === `zone-${z}-int`);
+      expect(simple, `${z} simple`).toHaveLength(1);
+      expect(inter, `${z} intervalles`).toHaveLength(1);
+      expect(simple[0]!.blocks.map((b) => b.type), z).toEqual(['steady']);
+      expect(inter[0]!.blocks.map((b) => b.type), z).toEqual(['intervals']);
+      for (const p of [...simple, ...inter]) expect(zoneOf(mainPower(p.blocks[0]!)!), p.id).toBe(z);
+    }
+    expect(ZONE_PRESETS).toHaveLength(12);
     for (const p of ZONE_PRESETS) expect(validateBlocks(p.blocks), p.id).toEqual([]);
+  });
+
+  it('dans un bloc d’intervalles par zone, la récupération est plus basse que l’effort et le nom dit le format', () => {
+    for (const p of ZONE_PRESETS.filter((q) => q.id.endsWith('-int'))) {
+      const b = p.blocks[0]!;
+      if (b.type !== 'intervals') throw new Error(p.id);
+      expect(b.offPower, p.id).toBeLessThan(b.onPower);
+      expect(p.name, p.id).toContain(`${b.repeat}×`);
+    }
+    expect(ZONE_PRESETS.find((p) => p.id === 'zone-z6-int')!.name).toBe('Z6 Anaérobie 8×30 s');
+    expect(ZONE_PRESETS.find((p) => p.id === 'zone-z4-int')!.name).toBe('Z4 Seuil 3×8 min');
   });
 
   it('les blocs vierges couvrent les six types et sont valides', () => {

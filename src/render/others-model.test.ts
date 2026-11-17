@@ -61,6 +61,12 @@ describe('nearby', () => {
     expect(n.behind[0]!.gapM).toBe(-30);
   });
 
+  it('garde la position de chaque coureur, pour le placer sur la carte', () => {
+    const n = nearby(self, [at(1, 50, 7), at(2, -30, -4)]);
+    expect(n.ahead[0]).toMatchObject({ x: 50, z: 7 });
+    expect(n.behind[0]).toMatchObject({ x: -30, z: -4 });
+  });
+
   it(`garde les ${AHEAD_SHOWN} plus proches devant et les ${BEHIND_SHOWN} plus proches derrière`, () => {
     const riders = [
       ...Array.from({ length: 12 }, (_, i) => at(i, 10 * (i + 1))),

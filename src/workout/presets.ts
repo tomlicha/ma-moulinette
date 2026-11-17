@@ -49,22 +49,25 @@ export const BLOCK_PRESETS: BlockPreset[] = [
   { id: 'cool-down', category: 'cool', name: 'Descente progressive', blocks: [{ type: 'cooldown', durationS: 480, from: 0.7, to: 0.35 }] },
 ];
 
-/** Blocs simples par zone de puissance : un seul palier constant par zone (Z1 à Z6), au milieu de la zone. */
-const ZONE_MID: [PresetCategoryInfo['zone'], string, number][] = [
-  ['z1', 'Récupération', 0.45],
-  ['z2', 'Endurance', 0.65],
-  ['z3', 'Tempo', 0.85],
-  ['z4', 'Seuil', 0.98],
-  ['z5', 'VO2max', 1.13],
-  ['z6', 'Anaérobie', 1.3],
+/**
+ * Blocs par zone de puissance (onglet « Par zone »), Z1 à Z6 : pour chaque zone **un bloc simple** (un palier constant au
+ * milieu de la zone) et **un bloc d'intervalles** dont l'effort est dans la même zone. Les récupérations sont plus basses.
+ * Colonnes : zone, nom, palier simple (puissance, minutes), intervalles (répétitions, effort en s, puissance, récupération en s, puissance).
+ */
+const ZONE_BLOCKS: [PresetCategoryInfo['zone'], string, [number, number], [number, number, number, number, number]][] = [
+  ['z1', 'Récupération', [0.45, 10], [6, 120, 0.5, 60, 0.35]],
+  ['z2', 'Endurance', [0.65, 10], [4, 300, 0.68, 120, 0.45]],
+  ['z3', 'Tempo', [0.85, 10], [3, 480, 0.85, 180, 0.5]],
+  ['z4', 'Seuil', [0.98, 10], [3, 480, 0.98, 240, 0.5]],
+  ['z5', 'VO2max', [1.13, 5], [5, 180, 1.13, 180, 0.5]],
+  ['z6', 'Anaérobie', [1.3, 3], [8, 30, 1.3, 90, 0.45]],
 ];
-export const ZONE_PRESETS: { id: string; name: string; blocks: EditorBlock[] }[] = ZONE_MID.flatMap(([z, name, power]) =>
-  [{ min: z === 'z6' ? 3 : z === 'z5' ? 5 : 10 }].map(({ min }) => ({
-    id: `zone-${z}`,
-    name: `${z.toUpperCase()} ${name} ${min} min`,
-    blocks: [{ type: 'steady', durationS: min * 60, power } as EditorBlock],
-  })),
-);
+/** « 3 min » ou « 30 s » : la durée d'un effort, dans le nom du bloc. */
+const effortText = (s: number) => (s % 60 === 0 ? `${s / 60} min` : `${s} s`);
+export const ZONE_PRESETS: { id: string; name: string; blocks: EditorBlock[] }[] = ZONE_BLOCKS.flatMap(([z, name, [power, min], [repeat, onS, onPower, offS, offPower]]) => [
+  { id: `zone-${z}`, name: `${z.toUpperCase()} ${name} ${min} min`, blocks: [{ type: 'steady', durationS: min * 60, power } as EditorBlock] },
+  { id: `zone-${z}-int`, name: `${z.toUpperCase()} ${name} ${repeat}×${effortText(onS)}`, blocks: [intervals(repeat, onS, onPower, offS, offPower)] },
+]);
 
 /** Blocs vierges : les six types, avec leurs valeurs par défaut, à retoucher (ce que proposaient les anciens boutons d'ajout). */
 export const BLANK_TYPES: BlockType[] = ['warmup', 'steady', 'intervals', 'ramp', 'free', 'cooldown'];
