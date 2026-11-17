@@ -172,8 +172,8 @@ const REACH = 0.9;
  * Déhanchement : le bassin bascule vers la jambe qui pousse, les épaules compensent un peu en sens inverse, la
  * tête reste droite. Nul à l'angle de référence (manivelles à l'horizontale), où le modèle est lié au squelette.
  */
-const PELVIS_ROCK = 4 * DEG;
-const CHEST_ROCK = -2.2 * DEG;
+const PELVIS_ROCK = 0; // 4° auparavant : le bassin et les épaules restent fixes
+const CHEST_ROCK = 0;
 
 const dirAt = (angle: number) => v3(0, Math.sin(angle), Math.cos(angle));
 const LEFT = v3(1, 0, 0);
@@ -238,7 +238,7 @@ export function solveTorsoAngle(fit: BikeFit, body: Body = DEFAULT_BODY): number
  */
 export function solvePose(fit: BikeFit, crank: number, torsoAngle: number, body: Body = DEFAULT_BODY): Pose {
   // La jambe gauche est en haut à 0 : la hanche gauche est alors levée, elle retombe pendant la poussée.
-  const t = torso(fit, body, torsoAngle, Math.cos(crank));
+  const t = torso(fit, body, torsoAngle);
   const neckDir = dirAt(NECK_ANGLE);
   const headBase = offset(t.neckBase, [neckDir, body.neck]);
   const headTop = offset(headBase, [dirAt(HEAD_ANGLE), body.head]);
