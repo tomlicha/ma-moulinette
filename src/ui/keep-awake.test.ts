@@ -38,6 +38,35 @@ function fakeWakeLock() {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('createKeepAwake', () => {
+  it('navigateur : retrait en boucle par le système, trois reprises puis on attend un geste', async () => {
+    const doc = fakeDoc();
+    const wl = fakeWakeLock();
+    const k = createKeepAwake({ wakeLock: wl, document: doc } as unknown as WakeEnv);
+    await k.set(true);
+    for (let i = 0; i < 6; i++) {
+      wl.live.at(-1)!.fire();
+      await flush();
+    }
+    expect(wl.request).toHaveBeenCalledTimes(4);
+    doc.touch();
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(5);
+  });
+
+  it("navigateur : l'événement de retrait arrive après le retour au premier plan, le verrou est quand même repris", async () => {
+    const doc = fakeDoc();
+    const wl = fakeWakeLock();
+    const k = createKeepAwake({ wakeLock: wl, document: doc } as unknown as WakeEnv);
+    await k.set(true);
+    doc.show('hidden');
+    doc.show('visible');
+    await flush();
+    wl.live[0]!.fire(); // retrait tardif de l'ancien verrou : le nouveau ne doit pas être perdu
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(2);
+    expect(wl.live[1]!.released).toBe(false);
+  });
+
   it('coquille native : passe par le plugin', async () => {
     const native = { keepAwake: vi.fn(async () => {}) };
     const k = createKeepAwake({ native, document: fakeDoc() } as unknown as WakeEnv);
@@ -72,8 +101,7 @@ describe('createKeepAwake', () => {
     const wl = fakeWakeLock();
     const k = createKeepAwake({ wakeLock: wl, document: doc } as unknown as WakeEnv);
     await k.set(true);
-    wl.live[0]!.fire(); // économie d'énergie : la page reste visible
-    doc.touch();
+    wl.live[0]!.fire(); // économie d'énergie : la page reste visible, le verrou est redemandé aussitôt
     await flush();
     expect(wl.request).toHaveBeenCalledTimes(2);
     doc.touch(); // verrou tenu : rien à redemander
@@ -83,6 +111,35 @@ describe('createKeepAwake', () => {
     doc.touch();
     await flush();
     expect(wl.request).toHaveBeenCalledTimes(2);
+  });
+
+  it('navigateur : retrait en boucle par le système, trois reprises puis on attend un geste', async () => {
+    const doc = fakeDoc();
+    const wl = fakeWakeLock();
+    const k = createKeepAwake({ wakeLock: wl, document: doc } as unknown as WakeEnv);
+    await k.set(true);
+    for (let i = 0; i < 6; i++) {
+      wl.live.at(-1)!.fire();
+      await flush();
+    }
+    expect(wl.request).toHaveBeenCalledTimes(4);
+    doc.touch();
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(5);
+  });
+
+  it("navigateur : l'événement de retrait arrive après le retour au premier plan, le verrou est quand même repris", async () => {
+    const doc = fakeDoc();
+    const wl = fakeWakeLock();
+    const k = createKeepAwake({ wakeLock: wl, document: doc } as unknown as WakeEnv);
+    await k.set(true);
+    doc.show('hidden');
+    doc.show('visible');
+    await flush();
+    wl.live[0]!.fire(); // retrait tardif de l'ancien verrou : le nouveau ne doit pas être perdu
+    await flush();
+    expect(wl.request).toHaveBeenCalledTimes(2);
+    expect(wl.live[1]!.released).toBe(false);
   });
 
   it('coquille native : pas de Wake Lock web en doublon', async () => {

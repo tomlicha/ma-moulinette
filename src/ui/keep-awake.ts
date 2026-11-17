@@ -19,6 +19,8 @@ export function createKeepAwake(env: WakeEnv) {
   let wanted = false;
   let sentinel: { release(): Promise<void> } | undefined;
   let pending: Promise<void> | undefined;
+  /** Reprises automatiques d'affilée après un retrait par le système ; remises à zéro au retour ou au toucher. */
+  let autoRetries = 0;
 
   const acquire = async () => {
     if (!env.wakeLock || sentinel || pending || env.document.visibilityState !== 'visible') return;
@@ -28,7 +30,10 @@ export function createKeepAwake(env: WakeEnv) {
         if (!wanted) return void s.release().catch(() => {});
         sentinel = s;
         s.addEventListener('release', () => {
-          if (sentinel === s) sentinel = undefined;
+          if (sentinel !== s) return;
+          sentinel = undefined;
+          // Retiré par le système page visible (économie d'énergie) : on le redemande aussitôt, sans boucler.
+          if (wanted && !env.native && autoRetries++ < 3) void acquire();
         });
       })
       .catch((e: unknown) => env.log?.(`écran allumé : refusé (${e instanceof Error ? e.message : e})`))
@@ -37,10 +42,21 @@ export function createKeepAwake(env: WakeEnv) {
   };
 
   const retry = () => {
+    autoRetries = 0;
     if (wanted && !env.native && env.document.visibilityState === 'visible') void acquire();
   };
-  env.document.addEventListener('visibilitychange', retry);
-  // Verrou retiré par le système page visible (économie d'énergie, refus) : un geste de l'utilisateur le redemande.
+  env.document.addEventListener('visibilitychange', () => {
+    if (env.document.visibilityState === 'hidden') {
+      // Le navigateur retire le verrou d'une page en arrière-plan (c'est dans la norme, on ne peut pas le garder).
+      // On l'oublie tout de suite : le retour au premier plan en redemande un neuf sans attendre l'événement de retrait.
+      const s = sentinel;
+      sentinel = undefined;
+      void s?.release().catch(() => {});
+      return;
+    }
+    retry();
+  });
+  // Verrou refusé ou retiré à répétition : un geste de l'utilisateur le redemande.
   env.document.addEventListener('pointerdown', retry);
 
   return {
