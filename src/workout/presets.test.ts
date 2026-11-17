@@ -27,6 +27,13 @@ describe('blocs préfaits', () => {
     for (const c of PRESET_CATEGORIES) expect(BLOCK_PRESETS.filter((p) => p.category === c.id).length, c.name).toBeGreaterThanOrEqual(2);
   });
 
+  it('chaque type d’effort (Endurance à Sprint) a un bloc d’intervalles et un bloc simple continu', () => {
+    for (const c of PRESET_CATEGORIES.filter((q) => !['warm', 'cool'].includes(q.id))) {
+      const types = BLOCK_PRESETS.filter((p) => p.category === c.id).map((p) => p.blocks.map((b) => b.type).join('+'));
+      expect(types.sort(), c.name).toEqual(['intervals', 'steady']);
+    }
+  });
+
   it('chaque zone, de Z1 à Z6, a un bloc simple et un bloc d’intervalles, valides et dans la zone', () => {
     for (const z of ['z1', 'z2', 'z3', 'z4', 'z5', 'z6'] as const) {
       const simple = ZONE_PRESETS.filter((p) => p.id === `zone-${z}`);
