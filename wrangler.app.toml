@@ -41,7 +41,7 @@ crons = ["30 3 * * *"]
 [[previews.d1_databases]]
 binding = "DB"
 database_name = "ma-moulinette-previews"
-database_id = "A_REMPLIR"
+database_id = "f379dee9-5904-4d6c-a1a0-dac0fc638f19"
 migrations_dir = "worker/migrations"
 
 [[previews.durable_objects.bindings]]

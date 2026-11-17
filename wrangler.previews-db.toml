@@ -1,7 +1,7 @@
 # Base D1 des aperçus de branche (bloc [previews] de wrangler.app.toml). Ce fichier ne déploie rien : il ne sert qu'à
 # appliquer les migrations à cette base, que `wrangler d1 migrations` ne trouve pas dans le bloc [previews].
 #
-#   npx wrangler d1 create ma-moulinette-previews          # une fois ; reporter l'identifiant ici et dans wrangler.app.toml
+#   npx wrangler d1 create ma-moulinette-previews          # fait le 17 novembre 2026 (identifiant ci-dessous et dans wrangler.app.toml)
 #   npx wrangler d1 migrations apply ma-moulinette-previews --remote -c wrangler.previews-db.toml
 #
 # À relancer après chaque nouvelle migration de worker/migrations/, comme pour la base de production.
@@ -10,5 +10,5 @@ name = "ma-moulinette-previews-db"
 [[d1_databases]]
 binding = "DB"
 database_name = "ma-moulinette-previews"
-database_id = "A_REMPLIR"
+database_id = "f379dee9-5904-4d6c-a1a0-dac0fc638f19"
 migrations_dir = "worker/migrations"
