@@ -357,15 +357,14 @@ function setErgActive(on: boolean) {
   if (!on) throttle.reset(); // en sortie, la prochaine mise à jour renvoie la pente du parcours
 }
 
-// Écran allumé tant qu'on est sur la Sortie ou qu'une sortie tourne : pendant une séance ERG, on ne touche pas l'écran.
+// Écran allumé tant qu'on est sur l'application, quel que soit l'écran : pendant une séance ERG, on ne touche pas l'écran.
 const keepAwake = createKeepAwake({
   native: isNativeShell() ? Moulinette : undefined,
   wakeLock: (navigator as Navigator & { wakeLock?: Parameters<typeof createKeepAwake>[0]['wakeLock'] }).wakeLock,
   document,
   log: (m) => log(m),
 });
-/** Lit l'ancre plutôt que le routeur : appelée aussi avant sa création. */
-const syncAwake = () => void keepAwake.set(location.hash === '#sortie' || !!ride);
+void keepAwake.set(true);
 
 function startRide() {
   autoStart = false;
@@ -382,7 +381,6 @@ function startRide() {
   massInput.title = 'La masse se règle avant de démarrer la sortie.';
   setState(currentState, trainer?.name);
   log(`sortie virtuelle démarrée (${massKg} kg)`);
-  syncAwake();
 }
 
 function stopRide(resetTrainer = true) {
@@ -396,7 +394,6 @@ function stopRide(resetTrainer = true) {
   massInput.readOnly = false;
   massInput.title = '';
   log('sortie virtuelle arrêtée');
-  syncAwake();
   if (resetTrainer && currentState === 'connected') void hub.setSimulation({ gradePct: 0 }).catch(() => {});
   setState(currentState, trainer?.name);
 }
@@ -911,7 +908,6 @@ const recap = setupRecap($<HTMLDialogElement>('recap'), {
 
 const router = setupRouter((v) => {
   view?.setActive(v === 'sortie');
-  syncAwake();
   if (v === 'sortie') {
     viewBuild.hurry();
     startViewBuild(); // si le temps mort n'est pas encore venu
