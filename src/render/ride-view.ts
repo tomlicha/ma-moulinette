@@ -11,7 +11,7 @@ import { Background, BackgroundStopped } from './background';
 import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
 import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
 import { IntervalGates } from './interval-gate';
-import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, swayPhaseStep, swayRoll } from './ride-feel';
+import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight } from './ride-feel';
 import type { IntervalGate } from '../workout/gate';
 import { pixelRatioFor, type Quality } from './quality';
 
@@ -98,7 +98,6 @@ export class RideView {
   private heading = 0;
   private headingReady = false;
   private fov = FOV_BASE;
-  private swayPhase = 0;
 
   private constructor(
     private readonly renderer: THREE.WebGPURenderer,
@@ -282,7 +281,6 @@ export class RideView {
   private readonly fwd = new THREE.Vector3();
   private readonly camTarget = new THREE.Vector3();
   private readonly look = new THREE.Vector3();
-  private roll = 0;
 
   /**
    * Pose le cycliste à la distance `d` du trajet, incliné par la pente (celle du relief exagéré, pas celle de la
@@ -361,10 +359,6 @@ export class RideView {
     this.dist += speedMs * dt;
     this.dist += (this.state.distanceM - this.dist) * Math.min(1, dt * 3); // recalage doux sur la simulation
     this.place(this.dist, dt);
-    // Le coureur se balance au rythme du pédalage, d'autant plus que la côte est raide et la cadence basse.
-    this.swayPhase += swayPhaseStep(this.state.cadenceRpm, dt);
-    this.roll = swayRoll(this.journey.gradeAt(this.dist), this.state.cadenceRpm);
-    this.rider.group.rotateZ(this.roll * Math.sin(this.swayPhase));
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
     const riders = this.othersSource();
