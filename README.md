@@ -147,8 +147,15 @@ Le récepteur (`receiver.ts`) reste un gestionnaire `Request` vers `Response` in
 
 ## Coquille iOS (iPad, iPhone)
 
-Safari n'a pas Web Bluetooth : `ios/` est une coquille Capacitor dont le Bluetooth passe par le plugin natif (`src/sensors/native-bluetooth.ts`). La coquille charge l'application depuis le serveur (`server.url` de `capacitor.config.ts`), pour que `/api/...`, le cookie de session et le WebSocket gardent l'origine du Worker. Autre serveur : `CAP_SERVER_URL=https://… npx cap sync ios`.
+Safari n'a pas Web Bluetooth : `ios/` est une coquille Capacitor dont le Bluetooth passe par le plugin natif (`src/sensors/native-bluetooth.ts`). La coquille charge l'application depuis le serveur (`server.url` de `capacitor.config.ts`), pour que `/api/...`, le cookie de session et le WebSocket gardent l'origine du Worker. Autre serveur : `CAP_SERVER_URL=https://… npm run ios:sync`.
 
 ```
-npm run ios:sync   # puis, sur un Mac : npm run ios:open, signer, lancer sur l'appareil
+npm run ios:sync   # build, cap sync, puis tools/ios/sync.mjs ; sur un Mac : npm run ios:open, signer, lancer sur l'appareil
 ```
+
+- **Bluetooth** : un seul balayage, partagé entre les appareils qui attendent leur signal et le sélecteur (le plugin n'en a qu'un). Le sélecteur est celui de l'application (`src/ui/device-chooser.ts`), trié avec les règles de Chrome : un trainer annoncé par son seul nom y apparaît, KICKR CLIMB et HEADWIND n'y apparaissent pas.
+- **Plugin de l'application** (`ios/App/App/MoulinettePlugin.swift`, enregistré par `MainViewController.swift`) : écran gardé allumé pendant la sortie, et connexion Strava dans une session d'authentification système (Google refuse les WebView intégrées). Le retour `moulinette://auth?ticket=…` porte un ticket à usage unique, valable 2 minutes, que la page échange contre sa session (`POST /api/auth/redeem`).
+- **Hors ligne** : `WKAppBoundDomains` (Info.plist) donne le service worker à la WKWebView ; au tout premier lancement sans réseau, la page embarquée `offline.html` attend le retour du réseau. `tools/ios/sync.mjs` accorde ces deux réglages à l'adresse du serveur.
+- **iPad** : paysage seulement, sans écran partagé (`UIRequiresFullScreen`). Dans Safari sur iPad, une fenêtre partagée demande d'élargir la fenêtre plutôt que de tourner l'appareil.
+
+Vérifié ici : tests du pont, du sélecteur, du ticket et de l'écran allumé ; rendu simulé dans Chromium. Pas encore vérifié : la compilation Xcode et un vrai iPad (voir [l'audit iPad](docs/audit/2026-11-17/ipad.md) et [son suivi](docs/audit/2026-11-17/ipad-suivi.md)).
