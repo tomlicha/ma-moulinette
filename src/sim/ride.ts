@@ -43,7 +43,7 @@ export class Ride {
   ) {}
 
   /**
-   * Part de la traînée de l'air épargnée par l'abri derrière un autre coureur (0 à 1), à rafraîchir quand les autres
+   * Part de la traînée de l'air épargnée par l'aspiration derrière un autre coureur (0 à 1), à rafraîchir quand les autres
    * bougent. Elle reste appliquée aux pas suivants : mettre 0 pour la rouler seul.
    */
   setDraft(reduction: number): void {

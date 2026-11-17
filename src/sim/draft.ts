@@ -1,6 +1,6 @@
 /**
  * Aspiration : derrière un autre coureur, on économise une part de la traînée de l'air. Calcul pur, du côté de chaque
- * client (le serveur ne simule rien) : le coureur local regarde les autres qu'il reçoit et en déduit son abri.
+ * client (le serveur ne simule rien) : le coureur local regarde les autres qu'il reçoit et en déduit son aspiration.
  *
  * Modèle simple, tiré des ordres de grandeur de la littérature (souffleries et simulations de peloton : environ 30 à
  * 40 % de traînée en moins pour le deuxième coureur à une roue d'écart, de l'ordre de 10 % vers 10 m, négligeable
@@ -16,7 +16,7 @@
 export const DRAFT_MAX = 0.35;
 /** Décroissance avec l'écart, en m. */
 export const DRAFT_DECAY_M = 6;
-/** Au-delà, pas d'abri, en m (de centre à centre). */
+/** Au-delà, pas d'aspiration, en m (de centre à centre). */
 export const DRAFT_RANGE_M = 25;
 /** Écart latéral toléré avec la trajectoire du meneur, en m : même file sur la même route. */
 export const DRAFT_LATERAL_M = 2.5;
@@ -42,7 +42,7 @@ export interface DraftLeader extends DraftSelf {
 export interface Draft {
   /** Part de la traînée épargnée, 0 à `DRAFT_MAX`. */
   reduction: number;
-  /** Écart de roues avec le meneur, en m ; `undefined` sans abri. */
+  /** Écart de roues avec le meneur, en m ; `undefined` sans aspiration. */
   gapM?: number;
 }
 
@@ -52,7 +52,7 @@ const wrapPi = (a: number) => {
   return x - Math.PI;
 };
 
-/** Abri d'un coureur placé en `self`, vis-à-vis des autres : le meilleur parmi ceux qui roulent juste devant lui. */
+/** Aspiration d'un coureur placé en `self`, vis-à-vis des autres : le meilleur parmi ceux qui roulent juste devant lui. */
 export function draftFrom(self: DraftSelf, others: readonly DraftLeader[]): Draft {
   const fx = Math.cos(self.heading);
   const fz = Math.sin(self.heading);

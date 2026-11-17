@@ -52,17 +52,17 @@ Derrière un autre coureur, on économise une part de la **traînée de l'air** 
 
 Les ordres de grandeur viennent de la littérature (soufflerie et simulation de peloton : environ 30 à 40 % de traînée en moins pour le deuxième coureur à une roue, de l'ordre de 10 % vers 10 m). **Ce ne sont pas des mesures de notre part : à régler à l'usage.**
 
-Qui compte comme meneur ([`draft.ts`](../../src/sim/draft.ts)) : un coureur dont la sortie est en cours, plus rapide que 2 m/s, **devant** à moins de 25 m, dans la même file (écart latéral d'au plus 2,5 m), allant dans le même sens (écart de cap d'au plus 30°). Seul le meilleur abri compte : pas de bonus de file, pas de vent.
+Qui compte comme meneur ([`draft.ts`](../../src/sim/draft.ts)) : un coureur dont la sortie est en cours, plus rapide que 2 m/s, **devant** à moins de 25 m, dans la même file (écart latéral d'au plus 2,5 m), allant dans le même sens (écart de cap d'au plus 30°). Seule la meilleure aspiration compte : pas de bonus de file, pas de vent.
 
 Effets :
 
-- À 250 W sur le plat (coureur de 80 kg, calcul du modèle), 30 % d'air en moins fait passer de 37,1 à 41,5 km/h ; à 150 W, de 30,7 à 34,2 km/h. En côte raide, l'air pèse peu : l'abri aide peu (à 2 m/s en 10 %, moins de 2 % de la résistance).
+- À 250 W sur le plat (coureur de 80 kg, calcul du modèle), 30 % d'air en moins fait passer de 37,1 à 41,5 km/h ; à 150 W, de 30,7 à 34,2 km/h. En côte raide, l'air pèse peu : l'aspiration aide peu (à 2 m/s en 10 %, moins de 2 % de la résistance).
 - Le trainer n'est pas touché : sa résistance suit la pente (SIM) ou la consigne (ERG) ; seule la vitesse virtuelle change, comme dans les autres applications.
-- L'encart des proches montre « Abri 23 % » en vert sur la ligne « Toi » à partir de 3 %.
-- Rien n'est envoyé au serveur : l'abri est une conséquence de ce que chaque client voit.
+- L'encart des proches montre « Aspiration 23 % » en vert sur la ligne « Toi » à partir de 3 %.
+- Rien n'est envoyé au serveur : l'aspiration est une conséquence de ce que chaque client voit.
 
-Pas fait (volontairement) : aspiration à plusieurs de front ou en file longue, vent, abri des coureurs de devant par une route différente (carrefour : le cap et l'écart latéral le gèrent grossièrement), et tout contrôle côté serveur (un client qui tricherait sur sa vitesse est borné par `MAX_SPEED_MS`).
+Pas fait (volontairement) : aspiration à plusieurs de front ou en file longue, vent, aspiration derrière les coureurs de devant par une route différente (carrefour : le cap et l'écart latéral le gèrent grossièrement), et tout contrôle côté serveur (un client qui tricherait sur sa vitesse est borné par `MAX_SPEED_MS`).
 
 | | |
 |---|---|
-| Abri derrière des coureurs devant, téléphone couché 844 × 390 (25 coureurs sur place) | ![](captures/aspiration-ordinateur-telephone.png) |
+| Aspiration derrière des coureurs devant, téléphone couché 844 × 390 (150 coureurs sur place : l’encart n’en montre que 7 devant) | ![](captures/aspiration-ordinateur-telephone.png) |

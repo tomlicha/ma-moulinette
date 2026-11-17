@@ -6,10 +6,10 @@ const EVERY_MS = 250;
 /** Couleur du point d'un coureur : celle de son maillot dans la vue 3D. */
 const dotColor = (slot: number) => `hsl(${Math.round(hueOf(slot) * 360)} 70% 52%)`;
 
-/** « Abri 22 % » à partir de 3 % d'air épargné ; rien en dessous (un abri trop faible ne se sent pas). */
+/** « Aspiration 22 % » à partir de 3 % d'air épargné ; rien en dessous (une aspiration trop faible ne se sent pas). */
 export function draftText(draft: number): string {
   const pct = Math.round(draft * 100);
-  return pct >= 3 ? `Abri ${pct} %` : '';
+  return pct >= 3 ? `Aspiration ${pct} %` : '';
 }
 
 interface Row {
@@ -34,7 +34,7 @@ export class NearRiders {
     host.append(this.list);
   }
 
-  /** `draft` : part de la traînée de l'air épargnée par l'abri (0 à 1), montrée sur la ligne du joueur. */
+  /** `draft` : part de la traînée de l'air épargnée par l'aspiration (0 à 1), montrée sur la ligne du joueur. */
   set(n: NearbyRiders, draft = 0, now = performance.now()): void {
     if (now - this.last < EVERY_MS) return;
     this.last = now;

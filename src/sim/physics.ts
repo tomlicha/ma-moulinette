@@ -4,7 +4,7 @@
  *   η P = v (m g Crr cosθ + m g sinθ + ½ ρ CdA (v + vw)²) + m v dv/dt
  *
  * Aucune dépendance au DOM ni à l'horloge : mêmes entrées, mêmes sorties, côté client comme côté serveur.
- * L'aspiration (abri derrière un autre coureur) réduit la part de l'air (`draft`, voir `draft.ts`). Pas inclus à ce stade :
+ * L'aspiration (derrière un autre coureur) réduit la part de l'air (`draft`, voir `draft.ts`). Pas inclus à ce stade :
  * inertie des roues, limite d'adhérence.
  */
 export interface RiderParams {
@@ -35,7 +35,7 @@ const V_MIN = 1;
 
 /**
  * Résistance à l'avancement (N) à la vitesse v, pente en %, vent de face positif en m/s. `draft` (0 à 1) est la part de la
- * traînée de l'air qu'épargne l'abri derrière un autre coureur ; le roulement et la gravité n'en dépendent pas.
+ * traînée de l'air qu'épargne l'aspiration derrière un autre coureur ; le roulement et la gravité n'en dépendent pas.
  */
 export function resistanceForce(v: number, gradePct: number, p: RiderParams, headwindMs = 0, draft = 0): number {
   const theta = Math.atan(gradePct / 100);

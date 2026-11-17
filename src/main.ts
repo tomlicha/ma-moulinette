@@ -281,10 +281,10 @@ const fmtTime = (s: number) => formatDuration(Math.floor(s));
 /** Les protocoles portent la pente au centième de pourcent. */
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-/** Part de la traînée de l'air épargnée en ce moment par l'abri derrière un autre coureur (0 : seul). */
+/** Part de la traînée de l'air épargnée en ce moment par l'aspiration derrière un autre coureur (0 : seul). */
 let currentDraft = 0;
 
-/** Abri derrière les coureurs que la salle montre : recalculé à chaque pas, avec la position du coureur local. */
+/** Aspiration derrière les coureurs que la salle montre : recalculé à chaque pas, avec la position du coureur local. */
 function updateDraft(distanceM: number) {
   const others = world.riders();
   if (!ride || others.length === 0) {

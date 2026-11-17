@@ -9,7 +9,7 @@ const self = { x: 0, z: 0, heading: 0 };
 const leader = (over: Partial<DraftLeader> = {}): DraftLeader => ({ x: 4, z: 0, heading: 0, speedMs: 9, riding: true, ...over });
 
 describe('draftFrom', () => {
-  it('abrite un coureur placé juste devant, d’autant plus qu’il est proche', () => {
+  it('profite d’un coureur placé juste devant, d’autant plus qu’il est proche', () => {
     const near = draftFrom(self, [leader({ x: 3 })]);
     const far = draftFrom(self, [leader({ x: 12 })]);
     expect(near.reduction).toBeGreaterThan(0.25);
@@ -19,7 +19,7 @@ describe('draftFrom', () => {
     expect(near.gapM).toBeCloseTo(3 - 1.8, 5);
   });
 
-  it('ne protège pas : derrière, à côté, trop loin, à contresens, à l’arrêt ou immobile', () => {
+  it('ne profite pas : derrière, à côté, trop loin, à contresens, à l’arrêt ou immobile', () => {
     expect(draftFrom(self, [leader({ x: -4 })]).reduction).toBe(0); // derrière
     expect(draftFrom(self, [leader({ x: 6, z: 4 })]).reduction).toBe(0); // dans une autre file
     expect(draftFrom(self, [leader({ x: DRAFT_RANGE_M + 1 })]).reduction).toBe(0); // trop loin
@@ -29,7 +29,7 @@ describe('draftFrom', () => {
     expect(draftFrom(self, [])).toEqual({ reduction: 0 });
   });
 
-  it('prend le meilleur abri parmi plusieurs coureurs, sans les additionner', () => {
+  it('prend la meilleure aspiration parmi plusieurs coureurs, sans les additionner', () => {
     const one = draftFrom(self, [leader({ x: 4 })]).reduction;
     const two = draftFrom(self, [leader({ x: 4 }), leader({ x: 7 })]).reduction;
     expect(two).toBe(one);
@@ -42,7 +42,7 @@ describe('draftFrom', () => {
   });
 });
 
-describe('physique avec abri', () => {
+describe('physique avec aspiration', () => {
   const p = DEFAULT_RIDER;
 
   it('ne change que la part de l’air', () => {
@@ -50,18 +50,18 @@ describe('physique avec abri', () => {
     const drafted = resistanceForce(10, 0, p, 0, 0.3);
     const air = 0.5 * p.airDensity * p.cdA * 100;
     expect(flat - drafted).toBeCloseTo(0.3 * air, 6);
-    // En forte côte, à faible vitesse, l'air pèse peu : l'abri aide peu (c'est le comportement attendu).
+    // En forte côte, à faible vitesse, l'air pèse peu : l'aspiration aide peu (c'est le comportement attendu).
     const climb = resistanceForce(2, 10, p);
     expect((climb - resistanceForce(2, 10, p, 0, 0.3)) / climb).toBeLessThan(0.02);
   });
 
   it('fait rouler plus vite à puissance égale, sur le plat surtout', () => {
     const solo = steadySpeed(250, 0, p);
-    const abri = steadySpeed(250, 0, p, 0.3);
-    expect(abri).toBeGreaterThan(solo * 1.1);
+    const aspire = steadySpeed(250, 0, p, 0.3);
+    expect(aspire).toBeGreaterThan(solo * 1.1);
     let v = solo;
     for (let i = 0; i < 2000; i++) v = step(v, 250, 0, 0.05, p, 0, 0, 0.3).v;
-    expect(v).toBeCloseTo(abri, 1);
+    expect(v).toBeCloseTo(aspire, 1);
   });
 
   it('borne la réduction entre 0 et 1', () => {
@@ -70,10 +70,10 @@ describe('physique avec abri', () => {
   });
 });
 
-describe('Ride avec abri', () => {
+describe('Ride avec aspiration', () => {
   const flat: Course = { gradeAt: () => 0, altitudeAt: () => 0 } as unknown as Course;
 
-  it('avance plus loin avec abri ; une réduction négative est sans effet', () => {
+  it('avance plus loin avec aspiration ; une réduction négative est sans effet', () => {
     const run = (draft: number) => {
       const r = new Ride(flat);
       r.setDraft(draft);
