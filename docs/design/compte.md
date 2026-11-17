@@ -30,6 +30,12 @@ Référence permanente du compte : connexion avec Strava, nom montré aux autres
 
 États de la ligne en ligne (`worldLine`) : « En ligne · seul pour l'instant », « En ligne · N autres coureurs », « Connexion… », « Connexion perdue, nouvel essai… », « Connecté sur un autre appareil », « Mise à jour : recharger la page », « Session expirée », « Hors ligne ».
 
+## Autres coureurs sur la Sortie
+
+- Code : [`src/render/others.ts`](../../src/render/others.ts) (coureurs dans la scène), [`others-model.ts`](../../src/render/others-model.ts) (voie, noms sans chevauchement), [`src/ui/rider-tags.ts`](../../src/ui/rider-tags.ts) (étiquettes et pastille).
+- Les 16 plus proches, à moins de 220 m, sont dessinés ; leur nom et leur distance s'affichent jusqu'à 140 m, six étiquettes au plus, le plus proche gardant la sienne quand deux se recouvrent. Teinte du maillot et du vélo selon la place dans la salle.
+- Pastille à gauche du bouton du menu : « En ligne · N autres coureurs », cachée sans compte. Texte de 13 px (le minimum du projet est 12 px).
+
 ## Captures
 
 Développement local, 16 novembre 2026 (connexion de développement et trois robots, `npm run bots`).
@@ -41,6 +47,8 @@ Développement local, 16 novembre 2026 (connexion de développement et trois rob
 | Connecté, ordinateur | ![](captures/compte-connecte-ordinateur.png) |
 | Connecté, téléphone couché (écran Appareils) | ![](captures/compte-connecte-telephone.png) |
 | Menu du compte | ![](captures/compte-menu.png) |
+| Autres coureurs sur la Sortie, ordinateur (quatre robots immobiles) | ![](captures/compte-autres-coureurs-ordinateur.png) |
+| Autres coureurs sur la Sortie, téléphone couché 844 × 390 (robots en mouvement) | ![](captures/compte-autres-coureurs-telephone.png) |
 | Boîte du nom | ![](captures/compte-nom.png) |
 
 ## Développement

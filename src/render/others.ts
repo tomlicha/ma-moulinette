@@ -3,7 +3,10 @@ import type { RemoteRiderView } from '../net/world-client';
 import type { RiderAssets } from './assets';
 import { Rider } from './rider';
 import type { Kit } from './region-material';
+import { declutter, laneOf } from './others-model';
 import { forwardOf, sideOf, type WorldLayout } from './world-layout';
+
+export { laneOf } from './others-model';
 
 /** Au-delà de cette distance du joueur, un autre coureur n'est plus dessiné, en m. */
 export const SHOW_WITHIN_M = 220;
@@ -14,7 +17,7 @@ export const TAG_WITHIN_M = 140;
 /** Raideur du suivi du cap, en 1/s (comme le joueur local). */
 const HEADING_RATE = 5;
 /** Hauteur du nom au-dessus de la route, en m. */
-const TAG_HEIGHT_M = 2.15;
+const TAG_HEIGHT_M = 2;
 const GOLDEN = 0.618033988749895;
 
 /** Nom d'un coureur et sa place à l'écran, pour le HUD (pixels CSS du canevas). */
@@ -32,11 +35,6 @@ const wrapPi = (a: number) => {
   if (x < 0) x += 2 * Math.PI;
   return x - Math.PI;
 };
-
-/** Voie du coureur : proche de celle du joueur sans la recouvrir, étalée selon sa place pour que deux autres ne se confondent pas. */
-export function laneOf(slot: number, baseM: number): number {
-  return baseM + (((slot * 7) % 5) - 2) * 0.32;
-}
 
 /** Maillot d'un coureur : une teinte par place, espacées par le nombre d'or pour que deux voisins se distinguent. */
 export function kitFor(slot: number): Kit {
@@ -142,7 +140,7 @@ export class OthersLayer {
         distanceM: p.distanceM,
       });
     }
-    return tags;
+    return declutter(tags); // `placed` va du plus proche au plus loin : le proche garde son nom
   }
 
   dispose() {
