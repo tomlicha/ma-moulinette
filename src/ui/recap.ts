@@ -111,7 +111,7 @@ const TEMPLATE = `
       <span class="rc-count" data-r="count"><span class="rc-count-long">envoi seul dans <span data-r="secs"></span> s</span><span class="rc-count-short"><span data-r="secs2"></span> s</span></span>
       <span class="rc-drain" data-r="drain" aria-hidden="true"></span>
     </button>
-    <a class="rc-ghost rc-view" data-r="view" target="_blank" rel="noopener">${ICON.out}<span>Voir sur Strava</span></a>
+    <a class="rc-ghost rc-view" data-r="view" hidden href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">${ICON.out}<span>Voir sur Strava</span></a>
     <button type="button" class="rc-ghost rc-continue" data-r="continue">${ICON.ride}<span data-r="continueLabel">Continuer à rouler</span></button>
     <div class="rc-bottom">
       <div class="rc-name" data-r="nameRow">
@@ -163,8 +163,9 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
     el('badge').innerHTML = s === 'error' ? ICON.warn : ICON.check;
     set('statusTitle', info?.title ?? '');
     set('statusSub', info?.sub ?? '');
+    // Masqué tant que l'activité n'a pas d'adresse ; le lien par défaut (journal d'entraînement) n'est là que pour qu'il
+    // reste un vrai lien (robots, audit SEO « crawlable-anchors »).
     if (info?.url) viewLink.href = info.url;
-    else viewLink.removeAttribute('href');
     // Ce qui ne sert pas dans l'état courant est masqué ; la disposition suit `data-state` (recap.css).
     const show: Record<string, State[]> = {
       status: ['sent', 'error'],

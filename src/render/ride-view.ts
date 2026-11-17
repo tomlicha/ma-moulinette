@@ -4,14 +4,24 @@ import { createRenderer, type Backend } from './renderer';
 import { ambianceFor, type Mood } from './ambiance';
 import { loadRiderAssets, type RiderAssets } from './assets';
 import { Rider } from './rider';
-import { Background } from './background';
+import { OthersLayer, type RiderTag } from './others';
+import { nearby, type NearbyRiders } from './others-model';
+import type { RemoteRiderView } from '../net/world-client';
+import { Background, BackgroundStopped } from './background';
 import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
 import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
 import { IntervalGates } from './interval-gate';
 import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, swayPhaseStep, swayRoll } from './ride-feel';
 import type { IntervalGate } from '../workout/gate';
+import { pixelRatioFor, type Quality } from './quality';
 
-export type Quality = 'high' | 'low';
+export type { Quality } from './quality';
+
+/** Perte du GPU : pilote réinitialisé, mémoire reprise par le système, onglet longtemps en arrière-plan… */
+export interface GpuLoss {
+  api: string;
+  message: string;
+}
 
 export interface ViewState {
   /** Distance parcourue donnée par la simulation, en m. */
@@ -29,6 +39,8 @@ export interface RenderStats {
   drawCalls: number;
 }
 
+/** Calcul des coureurs proches, en ms. */
+const NEARBY_EVERY_MS = 250;
 const FRAME_WINDOW = 240;
 const STATS_EVERY_MS = 500;
 /** Plafond du pas de temps d'animation : un onglet qui reprend ne doit pas téléporter le cycliste. */
@@ -50,10 +62,25 @@ const percentile = (sorted: number[], p: number) =>
 /** Vue 3D de la sortie : monde, cycliste et caméra de poursuite pilotés par l'état de la simulation. */
 export class RideView {
   onStats?: (s: RenderStats) => void;
+  /**
+   * Appelée une fois si le GPU est perdu : la vue ne dessine plus et ne peut pas reprendre (three.js ne recrée pas ses
+   * ressources). À l'appelant de la jeter et d'en construire une autre, sur un canevas neuf.
+   */
+  onLost?: (loss: GpuLoss) => void;
+  /** Noms des autres coureurs proches avec leur place à l'écran, à chaque image (pixels CSS du canevas). */
+  onTags?: (tags: RiderTag[]) => void;
+  /** Coureurs proches devant et derrière le joueur, quatre fois par seconde. */
+  onNearby?: (n: NearbyRiders) => void;
+  private lastNearby = 0;
+  private lost?: GpuLoss;
+  /** Reste du relief et du décor, complété en tâche de fond après la première image ; arrêté avec la vue. */
+  private readonly fill = new Background();
 
   private readonly camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.3, CAMERA_FAR_M);
   private readonly layout: WorldLayout;
   private readonly rider: Rider;
+  private readonly others: OthersLayer;
+  private othersSource: () => readonly RemoteRiderView[] = () => [];
   private readonly sky: THREE.Mesh;
   private readonly world: World;
   private mood: Mood = 'day';
@@ -89,8 +116,9 @@ export class RideView {
     this.sky = world.sky;
     this.world = world;
     this.gates = new IntervalGates(journey, this.layout);
-    this.scene.add(this.rider.group, this.gates.group);
-    renderer.setPixelRatio(quality === 'high' ? Math.min(window.devicePixelRatio, 2) : 1);
+    this.others = new OthersLayer(assets, layout, LANE_M);
+    this.scene.add(this.rider.group, this.others.group, this.gates.group);
+    renderer.setPixelRatio(pixelRatioFor(quality, window.devicePixelRatio));
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     addEventListener('resize', this.onWindowResize); // écran masqué : le canevas ne change pas, la fenêtre si (rotation)
@@ -131,12 +159,23 @@ export class RideView {
     progress(0.29, 'Coureur et moteur 3D');
     const [{ renderer, backend }, assets] = await ready;
     performance.mark('ride:renderer');
+    // Perte du GPU pendant la construction : on finit quand même (les appels sur un moteur perdu ne font rien), puis on
+    // échoue, pour que l'appelant reprenne sur un canevas neuf. Après, c'est la vue qui prévient (`onLost`).
+    let view: RideView | undefined;
+    let lostEarly: GpuLoss | undefined;
+    const base = renderer.onDeviceLost.bind(renderer);
+    renderer.onDeviceLost = (info) => {
+      base(info); // journalise et arrête les rendus de three.js
+      const loss = { api: info.api, message: info.message };
+      if (view) view.handleLoss(loss);
+      else lostEarly ??= loss;
+    };
     progress(0.31, 'Routes, villages et décor');
     const scene = new THREE.Scene();
     const world = await background.run(buildWorldSteps(layout, scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets));
     performance.mark('ride:world');
     progress(0.44, 'Abords du départ');
-    const view = new RideView(renderer, backend, canvas, journey, quality, assets, scene, layout, world);
+    view = new RideView(renderer, backend, canvas, journey, quality, assets, scene, layout, world);
     // Avant la première image, seulement les abords du départ ; le reste du relief et du décor (jusqu'à 1,2 km) suit en
     // tâche de fond, sans presser, même si l'écran de sortie est ouvert : il ne doit pas voler d'images.
     await background.run(world.primeSteps(view.p.x, view.p.z, true));
@@ -149,10 +188,16 @@ export class RideView {
     const compiled = (e: ProgressEvent) => progress(0.6 + (0.3 * e.loaded) / Math.max(1, e.total), 'Lumières et matériaux');
     await renderer.compileAsync(scene, view.camera, null, compiled).catch((e: unknown) => console.warn('rendu 3D : précompilation des shaders impossible', e));
     performance.mark('ride:compile');
+    if (lostEarly) {
+      view.dispose();
+      throw new GpuLostError(lostEarly);
+    }
     progress(0.9, 'Première image');
     view.raf = requestAnimationFrame((t) => view.frame(t));
     view.warmUpWhenIdle();
-    void new Background().run(world.fillSteps(view.p.x, view.p.z)).catch((e: unknown) => console.warn('rendu 3D : décor lointain incomplet', e));
+    void view.fill.run(world.fillSteps(view.p.x, view.p.z)).catch((e: unknown) => {
+      if (!(e instanceof BackgroundStopped)) console.warn('rendu 3D : décor lointain incomplet', e);
+    });
     return view;
   }
 
@@ -163,7 +208,7 @@ export class RideView {
    */
   private warmUpWhenIdle() {
     const warm = () => {
-      if (this.drawn || this.disposed) return; // la sortie a déjà dessiné : plus rien à préparer
+      if (this.drawn || this.disposed || this.lost) return; // la sortie a déjà dessiné : plus rien à préparer
       this.follow(0);
       this.renderer.render(this.scene, this.camera);
       performance.mark('ride:warm');
@@ -178,15 +223,31 @@ export class RideView {
     if (Math.abs(s.distanceM - this.dist) > 30) this.dist = s.distanceM;
   }
 
+  /** D'où lire les autres coureurs à dessiner (déjà lissés) : appelée à chaque image. */
+  setOthers(source: () => readonly RemoteRiderView[]) {
+    this.othersSource = source;
+  }
+
   /** Porte du prochain palier de séance, ou rien hors séance. */
   setGate(g: IntervalGate | undefined) {
     this.gates.set(g);
   }
 
+  private handleLoss(loss: GpuLoss) {
+    if (this.lost || this.disposed) return;
+    this.lost = loss;
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.onLost?.(loss);
+  }
+
   dispose() {
+    if (this.disposed) return;
     this.disposed = true;
+    this.fill.stop();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
+    this.others.dispose();
     removeEventListener('resize', this.onWindowResize);
     this.renderer.dispose();
   }
@@ -285,14 +346,14 @@ export class RideView {
   /** Hors de l'écran de sortie, la vue ne dessine plus : inutile de faire chauffer le GPU pour un canevas caché. */
   setActive(on: boolean) {
     this.active = on;
-    if (on && !this.raf) {
+    if (on && !this.raf && !this.lost && !this.disposed) {
       this.lastFrame = 0;
       this.raf = requestAnimationFrame((t) => this.frame(t));
     }
   }
 
   private frame(now: number) {
-    if (!this.active) {
+    if (!this.active || this.lost || this.disposed) {
       this.raf = 0;
       return;
     }
@@ -311,6 +372,12 @@ export class RideView {
     this.rider.group.rotateZ(this.roll * Math.sin(this.swayPhase));
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
+    const riders = this.othersSource();
+    const others = this.others.place(dt, riders, this.p);
+    if (this.onNearby && now - this.lastNearby >= NEARBY_EVERY_MS) {
+      this.lastNearby = now;
+      this.onNearby(nearby({ x: this.p.x, z: this.p.z, heading: this.heading }, riders.map((r) => ({ slot: r.slot, name: r.name, x: r.point.x, z: r.point.z }))));
+    }
     // L'ambiance suit le parcours, qui peut changer sur l'accueil pendant que la vue tourne.
     const mood = this.journey.course?.ambiance ?? 'day';
     if (mood !== this.mood) {
@@ -319,6 +386,8 @@ export class RideView {
     }
     this.world.update(dt, this.p);
     this.follow(dt);
+    this.camera.updateMatrixWorld(); // les noms se projettent avec la caméra de cette image, pas celle de la précédente
+    this.onTags?.(this.others.tags(others, this.camera, this.size.w, this.size.h));
     this.renderer.render(this.scene, this.camera);
     if (!this.drawn) {
       this.drawn = true;
@@ -342,5 +411,13 @@ export class RideView {
         drawCalls: info.drawCalls,
       });
     }
+  }
+}
+
+/** Le GPU a été perdu pendant la construction de la vue. */
+export class GpuLostError extends Error {
+  constructor(readonly loss: GpuLoss) {
+    super(`GPU perdu (${loss.api}) : ${loss.message}`);
+    this.name = 'GpuLostError';
   }
 }

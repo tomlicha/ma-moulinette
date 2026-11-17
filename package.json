@@ -14,7 +14,8 @@
     "dev:api": "wrangler dev -c wrangler.app.toml --port 8787",
     "bots": "node --experimental-transform-types --no-warnings --import ./tools/ts-resolve.mjs tools/net/bots.ts",
     "ios:sync": "npm run build && cap sync ios",
-    "ios:open": "cap open ios"
+    "ios:open": "cap open ios",
+    "budget": "node tools/ci/bundle-budget.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.2",

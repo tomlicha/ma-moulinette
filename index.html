@@ -9,8 +9,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Ma Moulinette" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Ma Moulinette</title>
+    <title>Ma Moulinette — home trainer 3D et séances structurées</title>
+    <meta name="description" content="Roule sur ton home trainer connecté dans un monde 3D : vélo et capteurs en Bluetooth, séances structurées en mode ERG, export FIT et envoi à Strava. Directement dans le navigateur." />
+    <!-- Aperçu des liens partagés. %SITE_URL% : adresse publique, donnée au build (vite.config.ts, siteUrl). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ma Moulinette" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:title" content="Ma Moulinette — home trainer 3D et séances structurées" />
+    <meta property="og:description" content="Roule sur ton home trainer connecté dans un monde 3D, avec tes séances structurées. Directement dans le navigateur." />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Un cycliste roule sur une route bordée d'arbres, montagnes au coucher du soleil." />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <!-- Icône de l'application installée sur l'écran d'accueil d'un iPhone (iOS n'accepte pas le SVG). -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="stylesheet" href="/src/style.css" />
@@ -280,7 +294,7 @@
               <svg class="wo-profile" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true"><g id="home-wo-shapes"></g></svg>
               <div class="row">
                 <button id="home-wo-start" type="button" disabled>Démarrer la séance</button>
-                <a href="#seances">Créer ou modifier</a>
+                <a href="#seances" class="home-wo-link">Créer ou modifier</a>
               </div>
             </section>
           </aside>
@@ -302,6 +316,9 @@
               <div class="rl-bar" role="progressbar" aria-labelledby="ride-loading-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
             </div>
           </div>
+          <div id="rider-tags" class="rider-tags" aria-hidden="true"></div>
+          <div id="crowd" class="ride-crowd" role="status" hidden></div>
+          <aside id="near" class="ride-near" aria-label="Coureurs à proximité" hidden></aside>
           <div id="hud"></div>
           <div id="view-stats" class="view-stats" hidden>rendu : initialisation…</div>
           <button id="ride-menu-open" class="ride-menu-open" type="button" aria-haspopup="dialog" aria-controls="ride-menu" aria-label="Menu de la sortie">
@@ -427,8 +444,8 @@
                 <summary>Moteur de rendu</summary>
                 <p class="note">
                   <a href="?renderer=webgl2">Forcer WebGL2</a> · <a href="?">WebGPU si disponible</a> ·
-                  <a href="?quality=low">Qualité réduite</a><br />
-                  Recharge la page et repasse par les appareils.
+                  <a href="?quality=low">Qualité réduite</a> · <a href="?quality=high">Qualité complète</a><br />
+                  Par défaut : réduite sur écran tactile, complète sinon. Recharge la page et repasse par les appareils.
                 </p>
               </details>
 

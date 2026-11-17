@@ -114,7 +114,8 @@ button[aria-disabled='true'] { opacity: .45; cursor: help; }
 /* --- Mode application sur mobile : plein écran, paysage, mêmes écrans que sur ordinateur --- */
 /* L'invite est un voile translucide : l'application reste visible, floutée, derrière une carte de verre. */
 #rotate-hint, #install-hint {
-  --glass: #5BE3C9; --glass-on: #0B1422;
+  /* Jetons du thème « Doux » : l'accent orange, comme les autres boutons principaux. */
+  --glass: var(--accent); --glass-on: var(--on-accent);
   position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
   padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   color: var(--fg); text-align: center;

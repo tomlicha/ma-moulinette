@@ -4,8 +4,10 @@ import { SensorHub } from './sensors/hub';
 import { SimulatedTrainer } from './sensors/simulator';
 import { WebBluetoothTrainer } from './sensors/web-bluetooth';
 import { webBluetoothAvailable } from './sensors/gatt-device';
-import { RideView } from './render/ride-view';
+// Vue 3D chargée à la demande (`buildView`) : three.js n'est pas dans le JS du lancement.
+import type { GpuLoss, RideView } from './render/ride-view';
 import { Background } from './render/background';
+import { chooseQuality } from './render/quality';
 import { GradeThrottle } from './sim/grade-throttle';
 import { gearedGradePct, trainerModelFor } from './sim/virtual-gears';
 import { setupGears } from './ui/gears';
@@ -35,12 +37,15 @@ import { setupRideMenu } from './ui/ride-menu';
 import { setupRecap } from './ui/recap';
 import { summarize } from './ui/recap-model';
 import { createRadar } from './ui/radar';
+import portraitFallback from './assets/rider-portrait.jpg';
 import { setupHomeBackground } from './ui/home-background';
 import { HOME_SCENES } from './ui/home-scenes';
 import { setupCoursePicker } from './ui/course-picker';
 import { setupCourseMap } from './ui/course-map';
 import { setupAccount } from './ui/account-chip';
 import { WorldClient } from './net/world-client';
+import { crowdLine, RiderTags } from './ui/rider-tags';
+import { NearRiders } from './ui/near-riders';
 import { controlModes } from './ui/radar-model';
 import { ClimbCounter, PowerAverage } from './ui/hud-model';
 import type { RideSnapshot } from './sim/ride';
@@ -131,7 +136,7 @@ let lastRide: RideSnapshot | undefined;
 let lastWoState: WorkoutState | undefined;
 let view: RideView | undefined;
 /** Construction du monde 3D, en tâche de fond dès l'ouverture : elle ne presse que si l'on ouvre la sortie avant la fin. */
-const viewBuild = new Background();
+let viewBuild = new Background();
 let currentState: ConnectionState = 'disconnected';
 
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join(' ');
@@ -871,7 +876,10 @@ const recap = setupRecap($<HTMLDialogElement>('recap'), {
 
 const router = setupRouter((v) => {
   view?.setActive(v === 'sortie');
-  if (v === 'sortie') viewBuild.hurry();
+  if (v === 'sortie') {
+    viewBuild.hurry();
+    startViewBuild(); // si le temps mort n'est pas encore venu
+  } else viewBuild.calm(); // on a quitté la sortie avant la fin : la construction repasse derrière l'interface
   if (v !== 'sortie') {
     rideMenu.close();
     recap.close();
@@ -920,7 +928,7 @@ const radars = [
   createRadar($('radar-home'), 'mini'),
 ];
 const riderAvatar = $<HTMLImageElement>('rider-avatar');
-riderAvatar.src = `${import.meta.env.BASE_URL}assets/rider-portrait.jpg`;
+riderAvatar.src = portraitFallback;
 void import('./render/rider-portrait')
   .then((m) => m.riderPortrait())
   .then((url) => { riderAvatar.src = url; })
@@ -1092,7 +1100,9 @@ if (webBluetoothAvailable()) {
 const params = new URLSearchParams(location.search);
 
 // HUD posé sur la vue 3D (docs/design/hud.md). En qualité réduite, panneaux sans flou.
-const hud = new RideHud($('hud'), journey, { flat: params.get('quality') === 'low' });
+/** Profil de rendu : `?quality=high|low`, sinon `low` sur écran tactile (src/render/quality.ts). Le HUD le suit (sans flou en `low`). */
+const quality = chooseQuality(params.get('quality'), matchMedia('(pointer: coarse)').matches);
+const hud = new RideHud($('hud'), journey, { flat: quality === 'low' });
 const fresh = (at: number) => performance.now() - at <= POWER_STALE_MS;
 function renderHud() {
   if (router.current() !== 'sortie') return;
@@ -1127,7 +1137,6 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   if (journey.choose(Math.min(p.options.length - 1, Math.max(0, p.selected + by)))) renderHud();
 });
-if (router.current() === 'sortie') viewBuild.hurry(); // ouverture directe sur la sortie : on attend la vue
 /** Écran de chargement de la sortie (index.html, sortie.css) : visible tant que la vue 3D n'a pas dessiné sa première image. */
 const rideLoading = $('ride-loading');
 const rideLoadingBar = rideLoading.querySelector<HTMLElement>('.rl-bar')!;
@@ -1136,33 +1145,95 @@ const showRideProgress = (done: number, step: string) => {
   rideLoadingBar.style.setProperty('--p', String(done));
   rideLoadingBar.setAttribute('aria-valuenow', String(Math.round(done * 100)));
 };
-RideView.create($<HTMLCanvasElement>('view'), journey, {
-  onProgress: showRideProgress,
-  forceWebGL: params.get('renderer') === 'webgl2',
-  quality: params.get('quality') === 'low' ? 'low' : 'high',
-  // `?relief=1` : relief réel ; `?relief=2` : plus marqué. Par défaut 1,6 : un 6 % se voit comme un 10 %.
-  ...(Number.isFinite(Number(params.get('relief'))) && params.get('relief') ? { relief: Math.min(3, Math.max(1, Number(params.get('relief')))) } : {}),
-}, viewBuild)
-  .then((v) => {
-    performance.mark('view-ready'); // relevé par tools/audit/startup.cjs
-    view = v;
-    void v.firstFrame.then(() => (rideLoading.hidden = true));
-    v.setActive(router.current() === 'sortie');
-    v.onStats = (s) => {
-      $('view-stats').textContent =
-        `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +
-        `p50 ${s.frameP50Ms.toFixed(1)} ms · p95 ${s.frameP95Ms.toFixed(1)} ms · ` +
-        `${(s.triangles / 1000).toFixed(0)} k triangles · ${s.drawCalls} appels`;
-    };
-    log(`rendu 3D : ${v.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'}`);
-  })
-  .catch((e) => {
-    $('view-stats').textContent = 'rendu 3D indisponible';
-    rideLoading.dataset.state = 'error';
-    $('ride-loading-title').textContent = 'Vue 3D indisponible';
-    $('ride-loading-step').textContent = 'La sortie fonctionne sans elle : mesures, profil et séance restent affichés.';
-    log(`rendu 3D indisponible : ${e instanceof Error ? e.message : e}`);
+// `?relief=1` : relief réel ; `?relief=2` : plus marqué. Par défaut 1,6 : un 6 % se voit comme un 10 %.
+const reliefParam = Number(params.get('relief'));
+const relief = params.get('relief') && Number.isFinite(reliefParam) ? Math.min(3, Math.max(1, reliefParam)) : undefined;
+/** Pertes du GPU déjà subies : la deuxième fait passer en WebGL2, au-delà de `MAX_GPU_LOSSES` on renonce à la vue. */
+let gpuLosses = 0;
+const MAX_GPU_LOSSES = 3;
+
+/**
+ * Construit la vue 3D (en tâche de fond : `viewBuild`) et l'installe. Après une perte du GPU, on recommence sur un
+ * canevas neuf : un canevas garde le contexte qu'il a perdu, et three.js ne recrée pas ses ressources.
+ */
+async function buildView() {
+  const { RideView } = await import('./render/ride-view');
+  const v = await RideView.create($<HTMLCanvasElement>('view'), journey, {
+    onProgress: showRideProgress,
+    forceWebGL: params.get('renderer') === 'webgl2' || gpuLosses >= 2,
+    quality,
+    ...(relief !== undefined ? { relief } : {}),
+  }, viewBuild);
+  performance.mark('view-ready'); // relevé par tools/audit/startup.cjs
+  view = v;
+  void v.firstFrame.then(() => (rideLoading.hidden = true));
+  v.setActive(router.current() === 'sortie');
+  v.onLost = onGpuLost;
+  v.setOthers(() => world.riders());
+  v.onTags = (tags) => riderTags.set(tags);
+  v.onNearby = (n) => nearRiders.set(n);
+  v.onStats = (s) => {
+    $('view-stats').textContent =
+      `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +
+      `p50 ${s.frameP50Ms.toFixed(1)} ms · p95 ${s.frameP95Ms.toFixed(1)} ms · ` +
+      `${(s.triangles / 1000).toFixed(0)} k triangles · ${s.drawCalls} appels`;
+  };
+  log(`rendu 3D : ${v.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · qualité ${quality}${gpuLosses ? ` · reprise n° ${gpuLosses}` : ''}`);
+}
+
+function onGpuLost(loss: GpuLoss) {
+  gpuLosses++;
+  log(`rendu 3D : GPU perdu (${loss.api} : ${loss.message}), reprise ${gpuLosses}/${MAX_GPU_LOSSES}`);
+  view?.dispose();
+  view = undefined;
+  if (gpuLosses > MAX_GPU_LOSSES) return viewUnavailable(new Error('GPU perdu trop souvent'));
+  const old = $<HTMLCanvasElement>('view');
+  const fresh = old.cloneNode(false) as HTMLCanvasElement;
+  old.replaceWith(fresh);
+  rideLoading.hidden = false;
+  showRideProgress(0, 'Reprise de la vue 3D');
+  viewBuild = new Background();
+  if (router.current() === 'sortie') viewBuild.hurry();
+  viewBuildState = 'none';
+  startViewBuild();
+}
+
+function viewUnavailable(e: unknown) {
+  $('view-stats').textContent = 'rendu 3D indisponible';
+  rideLoading.hidden = false;
+  rideLoading.dataset.state = 'error';
+  $('ride-loading-title').textContent = 'Vue 3D indisponible';
+  $('ride-loading-step').textContent = 'La sortie fonctionne sans elle : mesures, profil et séance restent affichés.';
+  log(`rendu 3D indisponible : ${e instanceof Error ? e.message : e}`);
+}
+
+/** `none` : rien de lancé (ou vue perdue, à refaire) ; ensuite une seule construction, jusqu'à la vue ou l'échec. */
+let viewBuildState: 'none' | 'building' | 'done' = 'none';
+/** Lance la construction : au premier temps mort après l'affichage, ou à l'ouverture de la sortie si elle vient avant. */
+function startViewBuild() {
+  if (viewBuildState !== 'none') return;
+  viewBuildState = 'building';
+  buildView().then(
+    () => (viewBuildState = 'done'),
+    (e: unknown) => {
+      viewBuildState = 'done';
+      // GPU perdu pendant la construction : même reprise qu'après.
+      if (e instanceof Error && e.name === 'GpuLostError') onGpuLost((e as Error & { loss: GpuLoss }).loss);
+      else viewUnavailable(e);
+    },
+  );
+}
+// three.js (~1 Mio) n'est demandé qu'après le premier affichage, pendant un temps mort : l'accueil répond tout de suite.
+if (typeof requestIdleCallback === 'function') requestIdleCallback(startViewBuild, { timeout: 2000 });
+else setTimeout(startViewBuild, 300);
+
+// Service worker (build de production seulement) : relancement instantané et hors ligne. Il est généré au build avec la
+// liste des fichiers de la version (tools/offline/). En développement, il servirait des fichiers périmés.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e: unknown) => log(`hors ligne indisponible : ${e instanceof Error ? e.message : e}`));
   });
+}
 
 // Aperçu du récapitulatif sans rouler, en développement seulement (voir ui/recap-demo.ts) : ?recap, ?recap=libre…
 if (import.meta.env.DEV && params.has('recap')) {
@@ -1183,12 +1254,30 @@ const account = setupAccount({
     else world.disconnect();
   },
 });
+const riderTags = new RiderTags($('rider-tags'));
+const nearRiders = new NearRiders($('near'));
+const crowd = $('crowd');
+/** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
+function showCrowd() {
+  const s = world.status;
+  crowd.hidden = s === 'offline' || s === 'signed-out' || s === 'name-pending';
+  crowd.dataset.state = s === 'online' ? 'on' : 'off';
+  crowd.textContent = s === 'online' ? crowdLine(world.population) : s === 'connecting' ? 'Connexion…' : s === 'replaced' ? 'Connecté sur un autre appareil' : s === 'outdated' ? 'Mise à jour : recharger la page' : 'Connexion perdue, nouvel essai…';
+  if (s !== 'online') {
+    riderTags.clear();
+    nearRiders.clear();
+  }
+}
 world.onStatus = (s) => {
   account.setWorld(s, world.population);
+  showCrowd();
   log(`multijoueur : ${s}`);
 };
 world.onRoster = (event, name) => log(`multijoueur : ${name} ${event === 'join' ? 'arrive' : 'part'}`);
-setInterval(() => account.setWorld(world.status, world.population), 1000);
+setInterval(() => {
+  account.setWorld(world.status, world.population);
+  showCrowd();
+}, 1000);
 
 // En dernier : tout l'état de la page est initialisé avant la première connexion.
 setState(currentState); // chaque bouton reçoit dès le départ sa raison d'être indisponible

@@ -1,5 +1,5 @@
 /**
- * Contrat entre les modèles 3D (`public/assets/*.glb`) et le moteur. Un modèle fait dans Blender peut remplacer
+ * Contrat entre les modèles 3D (`src/assets/*.glb`) et le moteur. Un modèle fait dans Blender peut remplacer
  * un modèle généré s'il respecte ce contrat.
  *
  * Repère : mètres, +Y en haut, +Z vers l'avant du vélo, +X à gauche du cycliste ; origine au sol sous le pédalier.

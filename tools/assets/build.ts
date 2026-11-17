@@ -1,12 +1,12 @@
 /**
- * Génère les modèles 3D du projet dans `public/assets/` (fichiers versionnés).
+ * Génère les modèles 3D du projet dans `src/assets/` (fichiers versionnés ; Vite les publie sous un nom à empreinte).
  * Lancer : `npm run assets`.
  */
 import { mkdir } from 'node:fs/promises';
 import { buildAvatar } from './avatar.ts';
 import { buildBike } from './bike.ts';
 
-const OUT = new URL('../../public/assets/', import.meta.url);
+const OUT = new URL('../../src/assets/', import.meta.url);
 await mkdir(OUT, { recursive: true });
 
 const kb = (n: number) => `${(n / 1024).toFixed(0)} Ko`;

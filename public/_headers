@@ -1,0 +1,9 @@
+# En-têtes des fichiers statiques (Cloudflare Workers Static Assets, même syntaxe que Pages).
+# Tout ce qui est sous /assets/ porte une empreinte dans son nom (JS, CSS, polices, modèles 3D, portrait de repli) :
+# un fichier modifié change de nom, on peut donc le garder un an sans jamais redemander au serveur.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Le service worker doit toujours être revérifié : c'est lui qui annonce une nouvelle version.
+/sw.js
+  Cache-Control: no-cache

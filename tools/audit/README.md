@@ -44,3 +44,9 @@ npx playwright install chromium     # si aucun Chromium n'est déjà installé
    ```
 
 Sans GPU (machine d'intégration, conteneur), Chromium rend en logiciel : les images par seconde ne sont pas significatives, les triangles et appels de dessin le sont. Pour la Sortie, utiliser `?renderer=webgl2`.
+
+6. **Budget du lancement** (aussi lancé par la CI) : poids compressé du JS et du CSS que `index.html` charge avant tout affichage.
+
+   ```
+   npm run build && npm run budget
+   ```

@@ -47,14 +47,36 @@ const CALM_SLICE_MS = 8;
 /** Quand on attend le résultat (l'écran de sortie est ouvert), des tranches plus longues : on finit plus tôt. */
 const HURRIED_SLICE_MS = 40;
 
-/** File de travail de fond. `hurry` la passe en priorité haute quand l'utilisateur attend le résultat. */
+/** `Background.run` interrompu par `stop()`. */
+export class BackgroundStopped extends Error {
+  constructor() {
+    super('travail de fond arrêté');
+    this.name = 'BackgroundStopped';
+  }
+}
+
+/**
+ * File de travail de fond. `hurry` la passe en priorité haute quand l'utilisateur attend le résultat, `calm` la remet
+ * en arrière-plan quand il ne l'attend plus ; `stop` l'abandonne avant la prochaine étape.
+ */
 export class Background {
   private sliceMs = CALM_SLICE_MS;
   private priority: Priority = 'background';
+  private stopped = false;
 
   hurry() {
     this.sliceMs = HURRIED_SLICE_MS;
     this.priority = 'user-visible';
+  }
+
+  calm() {
+    this.sliceMs = CALM_SLICE_MS;
+    this.priority = 'background';
+  }
+
+  /** Les `run` en cours (et à venir) rejettent avec `BackgroundStopped` avant leur prochaine étape. */
+  stop() {
+    this.stopped = true;
   }
 
   get hurried(): boolean {
@@ -64,6 +86,10 @@ export class Background {
   async run<T>(steps: Steps<T>): Promise<T> {
     let start = performance.now();
     for (;;) {
+      if (this.stopped) {
+        steps.return(undefined as T);
+        throw new BackgroundStopped();
+      }
       const r = steps.next();
       if (r.done) return r.value;
       if (performance.now() - start >= this.sliceMs) {
