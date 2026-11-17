@@ -11,7 +11,7 @@ import { Background, BackgroundStopped } from './background';
 import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
 import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
 import { IntervalGates } from './interval-gate';
-import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight } from './ride-feel';
+import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, standingStep, type StandingState } from './ride-feel';
 import type { IntervalGate } from '../workout/gate';
 import { pixelRatioFor, type Quality } from './quality';
 
@@ -97,6 +97,7 @@ export class RideView {
   private cameraReady = false;
   private heading = 0;
   private headingReady = false;
+  private standing: StandingState = { on: false, held: 0 };
   private fov = FOV_BASE;
 
   private constructor(
@@ -359,7 +360,8 @@ export class RideView {
     this.dist += speedMs * dt;
     this.dist += (this.state.distanceM - this.dist) * Math.min(1, dt * 3); // recalage doux sur la simulation
     this.place(this.dist, dt);
-    this.rider.animate(dt, this.state.cadenceRpm, speedMs);
+    this.standing = standingStep(this.standing, this.journey.gradeAt(this.dist), this.state.cadenceRpm, dt);
+    this.rider.animate(dt, this.state.cadenceRpm, speedMs, this.standing.on);
     this.gates.update(dt, this.dist);
     const riders = this.othersSource();
     const others = this.others.place(dt, riders, this.p);

@@ -51,3 +51,32 @@ export function swayRoll(gradePct: number, cadenceRpm: number): number {
 export function swayPhaseStep(cadenceRpm: number, dtS: number): number {
   return Math.PI * (cadenceRpm / 60) * dtS;
 }
+
+/** Pente à partir de laquelle on se met en danseuse, en %, et pente en dessous de laquelle on se rassoit. */
+export const STAND_GRADE_ON = 7;
+export const STAND_GRADE_OFF = 5;
+/** Plage de cadence de la danseuse, en tr/min : on se lève en tirant sur un gros braquet, pas en moulinant. */
+export const STAND_CADENCE_MIN = 25;
+export const STAND_CADENCE_MAX = 75;
+export const STAND_CADENCE_OFF = 85;
+/** Durée pendant laquelle les conditions doivent tenir avant de changer de position, en s. */
+export const STAND_HOLD_S = 2;
+
+export interface StandingState {
+  on: boolean;
+  /** Temps cumulé où les conditions demandent de changer de position, en s. */
+  held: number;
+}
+
+/**
+ * Danseuse déduite des mesures : le coureur se lève dans une côte raide quand la cadence tombe (gros braquet, on
+ * pousse de tout son poids) ; il se rassoit quand la pente s'adoucit ou que la cadence remonte. Un délai évite de
+ * se lever et de se rasseoir à chaque variation de la pente ou de la cadence.
+ */
+export function standingStep(s: StandingState, gradePct: number, cadenceRpm: number, dtS: number): StandingState {
+  const wantChange = s.on
+    ? gradePct < STAND_GRADE_OFF || cadenceRpm > STAND_CADENCE_OFF || cadenceRpm < STAND_CADENCE_MIN * 0.4
+    : gradePct >= STAND_GRADE_ON && cadenceRpm >= STAND_CADENCE_MIN && cadenceRpm <= STAND_CADENCE_MAX;
+  const held = wantChange ? s.held + dtS : 0;
+  return held >= STAND_HOLD_S ? { on: !s.on, held: 0 } : { on: s.on, held };
+}

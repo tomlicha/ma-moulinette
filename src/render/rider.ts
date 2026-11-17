@@ -3,7 +3,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { BIKE_NODE } from './asset-contract';
 import type { RiderAssets } from './assets';
 import { RegionMaterial, type Kit } from './region-material';
-import { footPitch, SKELETON, solvePose, solveTorsoAngle, type Basis, type BikeFit } from './rider-pose';
+import { footPitch, SKELETON, solvePose, solveTorsoAngle, SEATED, STANDING, type Basis, type BikeFit, type Stance } from './rider-pose';
 
 /** Poses précalculées par tour de pédale : 5° d'écart, interpolées entre deux échantillons. */
 const SAMPLES = 72;
@@ -20,6 +20,12 @@ interface PoseTable {
 }
 
 const tables = new WeakMap<RiderAssets, PoseTable>();
+const standingTables = new WeakMap<RiderAssets, PoseTable>();
+
+/** Inclinaison latérale du vélo à chaque coup de pédale en danseuse, en radians. */
+const STAND_LEAN = (4 * Math.PI) / 180;
+/** Vitesse de transition entre assis et danseuse, en 1/s (environ 0,4 s). */
+const STAND_RATE = 2.5;
 
 function nodePos(root: THREE.Object3D, name: string): THREE.Vector3 {
   const node = root.getObjectByName(name);
@@ -42,11 +48,11 @@ export function readBikeFit(bike: THREE.Object3D): BikeFit {
   };
 }
 
-function buildTable(fit: BikeFit): PoseTable {
+function buildTable(fit: BikeFit, stance: Stance): PoseTable {
   const n = SKELETON.length;
   const quats = new Float32Array(SAMPLES * n * 4);
   const roots = new Float32Array(SAMPLES * 3);
-  const torso = solveTorsoAngle(fit);
+  const torso = solveTorsoAngle(fit, undefined, stance);
   const m = new THREE.Matrix4();
   const world = SKELETON.map(() => new THREE.Quaternion());
   const local = new THREE.Quaternion();
@@ -54,7 +60,7 @@ function buildTable(fit: BikeFit): PoseTable {
     out.setFromRotationMatrix(m.makeBasis(new THREE.Vector3(b.x.x, b.x.y, b.x.z), new THREE.Vector3(b.y.x, b.y.y, b.y.z), new THREE.Vector3(b.z.x, b.z.y, b.z.z)));
   const index = Object.fromEntries(SKELETON.map((b, i) => [b.bone, i]));
   for (let k = 0; k < SAMPLES; k++) {
-    const pose = solvePose(fit, (k / SAMPLES) * TAU, torso);
+    const pose = solvePose(fit, (k / SAMPLES) * TAU, torso, undefined, stance);
     SKELETON.forEach((def, i) => {
       toQuat(pose.bases[def.bone], world[i]!);
       if (def.parent) local.copy(world[index[def.parent]!]!).invert().multiply(world[i]!);
@@ -77,6 +83,10 @@ export class Rider {
   /** Vélo et avatar : penché autour de la ligne de contact des pneus, sans toucher au placement de `group`. */
   private readonly rig = new THREE.Group();
   private crank = Math.PI / 2;
+  /** Part de danseuse, 0 assis à 1 debout sur les pédales. */
+  private stand = 0;
+  private standTable: PoseTable | null = null;
+  private readonly assets: RiderAssets;
   private readonly frontWheel: THREE.Object3D;
   private readonly rearWheel: THREE.Object3D;
   private readonly crankset: THREE.Object3D;
@@ -87,8 +97,10 @@ export class Rider {
   private readonly wheelRadius: number;
   private readonly qa = new THREE.Quaternion();
   private readonly qb = new THREE.Quaternion();
+  private readonly qc = new THREE.Quaternion();
 
   constructor(assets: RiderAssets, kit?: Kit) {
+    this.assets = assets;
     const bike = assets.bike.clone(true);
     const avatar = cloneSkinned(assets.avatar) as THREE.Group;
     this.material = new RegionMaterial(kit);
@@ -118,15 +130,23 @@ export class Rider {
     this.wheelRadius = this.frontWheel.position.y;
 
     let table = tables.get(assets);
-    if (!table) tables.set(assets, (table = buildTable(readBikeFit(assets.bike))));
+    if (!table) tables.set(assets, (table = buildTable(readBikeFit(assets.bike), SEATED)));
     this.table = table;
     this.pose();
   }
 
   /** Fait tourner pédalier et roues : `cadenceRpm` en tours par minute, `speedMs` en m/s. */
-  animate(dtS: number, cadenceRpm: number, speedMs: number) {
+  animate(dtS: number, cadenceRpm: number, speedMs: number, standing = false) {
     this.crank = (this.crank + (cadenceRpm / 60) * TAU * dtS) % TAU;
-    // Le vélo reste droit : aucun balancement latéral.
+    // Assis, le vélo reste droit. En danseuse, il penche à l'opposé de la jambe qui pousse, au rythme du pédalage.
+    const want = standing ? 1 : 0;
+    this.stand += Math.sign(want - this.stand) * Math.min(Math.abs(want - this.stand), dtS * STAND_RATE);
+    if (this.stand > 0 && !this.standTable) {
+      let t = standingTables.get(this.assets);
+      if (!t) standingTables.set(this.assets, (t = buildTable(readBikeFit(this.assets.bike), STANDING)));
+      this.standTable = t;
+    }
+    this.rig.rotation.z = -STAND_LEAN * this.stand * Math.sin(this.crank);
     const spin = (speedMs / this.wheelRadius) * dtS;
     this.frontWheel.rotation.x += spin;
     this.rearWheel.rotation.x += spin;
@@ -151,18 +171,34 @@ export class Rider {
     const k1 = (k0 + 1) % SAMPLES;
     const t = f - Math.floor(f);
     const n = this.bones.length;
-    const { quats, roots } = this.table;
+    const st = this.stand > 0 ? this.standTable : null;
+    const w = st ? this.stand : 0;
     for (let i = 0; i < n; i++) {
-      this.qa.fromArray(quats, (k0 * n + i) * 4);
-      this.qb.fromArray(quats, (k1 * n + i) * 4);
-      this.bones[i]!.quaternion.slerpQuaternions(this.qa, this.qb, t);
+      this.qa.fromArray(this.table.quats, (k0 * n + i) * 4);
+      this.qb.fromArray(this.table.quats, (k1 * n + i) * 4);
+      this.qa.slerp(this.qb, t);
+      if (st) {
+        this.qc.fromArray(st.quats, (k0 * n + i) * 4);
+        this.qb.fromArray(st.quats, (k1 * n + i) * 4);
+        this.qc.slerp(this.qb, t);
+        this.qa.slerp(this.qc, w);
+      }
+      this.bones[i]!.quaternion.copy(this.qa);
     }
     const r0 = k0 * 3;
     const r1 = k1 * 3;
-    this.bones[0]!.position.set(
+    const { roots } = this.table;
+    const p = this.bones[0]!.position;
+    p.set(
       roots[r0]! + (roots[r1]! - roots[r0]!) * t,
       roots[r0 + 1]! + (roots[r1 + 1]! - roots[r0 + 1]!) * t,
       roots[r0 + 2]! + (roots[r1 + 2]! - roots[r0 + 2]!) * t,
     );
+    if (st) {
+      const sr = st.roots;
+      p.x += (sr[r0]! + (sr[r1]! - sr[r0]!) * t - p.x) * w;
+      p.y += (sr[r0 + 1]! + (sr[r1 + 1]! - sr[r0 + 1]!) * t - p.y) * w;
+      p.z += (sr[r0 + 2]! + (sr[r1 + 2]! - sr[r0 + 2]!) * t - p.z) * w;
+    }
   }
 }

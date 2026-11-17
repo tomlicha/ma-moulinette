@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FOV_BASE, fovFor, LOOK_FOLLOW, lookHeight, swayPhaseStep, swayRoll } from './ride-feel';
+import { FOV_BASE, fovFor, LOOK_FOLLOW, lookHeight, standingStep, swayPhaseStep, swayRoll, type StandingState } from './ride-feel';
 
 describe('fovFor', () => {
   it('vaut le champ de base à plat et à vitesse tranquille', () => {
@@ -57,5 +57,39 @@ describe('swayPhaseStep', () => {
   it('fait un tour de balancement en deux tours de pédalier', () => {
     // 60 tr/min pendant 2 s = 2 tours de pédalier = 2π de phase.
     expect(swayPhaseStep(60, 2)).toBeCloseTo(2 * Math.PI, 9);
+  });
+});
+
+describe('standingStep', () => {
+  const run = (from: StandingState, grade: number, rpm: number, seconds: number) => {
+    let s = from;
+    for (let t = 0; t < seconds; t += 0.1) s = standingStep(s, grade, rpm, 0.1);
+    return s;
+  };
+  const seated: StandingState = { on: false, held: 0 };
+
+  it('reste assis à plat et en cadence normale', () => {
+    expect(run(seated, 0, 90, 30).on).toBe(false);
+  });
+
+  it('se lève dans une côte raide à cadence basse, après un délai', () => {
+    expect(run(seated, 9, 55, 1).on).toBe(false);
+    expect(run(seated, 9, 55, 3).on).toBe(true);
+  });
+
+  it('ne se lève pas quand on moulines en côte ou à l\'arrêt', () => {
+    expect(run(seated, 9, 95, 30).on).toBe(false);
+    expect(run(seated, 9, 0, 30).on).toBe(false);
+  });
+
+  it('se rassoit quand la pente s\'adoucit, sans hésiter entre les deux seuils', () => {
+    const up = run(seated, 9, 55, 3);
+    expect(run(up, 6, 55, 30).on).toBe(true);
+    expect(run(up, 2, 55, 3).on).toBe(false);
+  });
+
+  it('un bref écart ne change rien', () => {
+    const up = run(seated, 9, 55, 3);
+    expect(run(run(up, 2, 55, 1), 9, 55, 5).on).toBe(true);
   });
 });
