@@ -6,6 +6,12 @@ const EVERY_MS = 250;
 /** Couleur du point d'un coureur : celle de son maillot dans la vue 3D. */
 const dotColor = (slot: number) => `hsl(${Math.round(hueOf(slot) * 360)} 70% 52%)`;
 
+/** « Abri 22 % » à partir de 3 % d'air épargné ; rien en dessous (un abri trop faible ne se sent pas). */
+export function draftText(draft: number): string {
+  const pct = Math.round(draft * 100);
+  return pct >= 3 ? `Abri ${pct} %` : '';
+}
+
 interface Row {
   el: HTMLElement;
   name: HTMLElement;
@@ -28,7 +34,8 @@ export class NearRiders {
     host.append(this.list);
   }
 
-  set(n: NearbyRiders, now = performance.now()): void {
+  /** `draft` : part de la traînée de l'air épargnée par l'abri (0 à 1), montrée sur la ligne du joueur. */
+  set(n: NearbyRiders, draft = 0, now = performance.now()): void {
     if (now - this.last < EVERY_MS) return;
     this.last = now;
     if (!n.ahead.length && !n.behind.length) return this.clear();
@@ -37,7 +44,12 @@ export class NearRiders {
     if (signature !== this.signature) this.rebuild(lines, signature);
     lines.forEach((l, i) => {
       const row = this.rows[i]!;
-      if (l === 'me') return;
+      if (l === 'me') {
+        const text = draftText(draft);
+        if (row.gap.textContent !== text) row.gap.textContent = text;
+        row.el.classList.toggle('rn-drafting', text !== '');
+        return;
+      }
       if (row.name.textContent !== l.name) row.name.textContent = l.name;
       const g = formatGap(l.gapM);
       if (row.gap.textContent !== g) row.gap.textContent = g;

@@ -187,6 +187,7 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 /* Le joueur : repère au milieu de la liste, un trait au-dessus et au-dessous. */
 .rn-me { font-weight: 700; margin: 2px 0; padding: 2px 0; border-block: 1px solid rgb(255 255 255 / .22); }
 .rn-me .rn-dot { background: #5BE3C9; }
+.rn-drafting .rn-gap { color: #5BE3C9; font-weight: 700; } /* abri : l'air épargné derrière le coureur de devant */
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .ride-near { top: calc(var(--edge-t) + 46px); right: var(--edge-r); width: 168px; padding: 4px 8px; }
   /* Commandes de séance ou sélecteur de vitesse affichés : ils occupent la colonne du bord, l'encart passe à leur gauche. */

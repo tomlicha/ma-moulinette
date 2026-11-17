@@ -38,7 +38,7 @@ Le protocole Wahoo est repris du code de GoldenCheetah, sans documentation offic
 
 ### Sortie virtuelle et physique
 
-`src/sim/` : modèle physique vélo (puissance, pente, air, roulement, inertie), parcours bouclé et sortie à pas fixe de 50 ms, déterministe et sans dépendance au DOM, donc réutilisable côté serveur. Sur la page, « Démarrer la sortie » fait avancer ce modèle avec la puissance mesurée et renvoie la pente du parcours au trainer en mode SIM. Aspiration, inertie des roues et limite d'adhérence ne sont pas encore modélisées.
+`src/sim/` : modèle physique vélo (puissance, pente, air, roulement, inertie), parcours bouclé et sortie à pas fixe de 50 ms, déterministe et sans dépendance au DOM, donc réutilisable côté serveur. Sur la page, « Démarrer la sortie » fait avancer ce modèle avec la puissance mesurée et renvoie la pente du parcours au trainer en mode SIM. L'aspiration derrière les autres coureurs est modélisée ([docs/design/salle.md](docs/design/salle.md)) ; l'inertie des roues et la limite d'adhérence ne le sont pas encore.
 
 `src/sensors/hub.ts` fusionne le trainer et la ceinture cardio ; les deux se reconnectent seuls après une coupure (60 s maximum).
 
@@ -101,6 +101,8 @@ npm run bots -- --count 5 --watch --url ws://localhost:5173/api/world/ws   # 5 r
 ```
 
 En ligne : `npx wrangler d1 migrations apply ma-moulinette-logs --remote -c wrangler.app.toml`, les secrets `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET` (`npx wrangler secret put … -c wrangler.app.toml`), puis `npm run deploy:app`. Dans les réglages de l'application Strava, « Authorization Callback Domain » doit être le domaine de l'application. L'application Strava est limitée à 10 athlètes ; au-delà, il faut une revue de Strava.
+
+Gestion d'intérêt : au-delà de 33 coureurs, chacun ne reçoit que ses 32 voisins les plus proches (20 kbit/s par client quelle que soit la salle) ; mesures avec `npm run load`, décisions et limites dans [docs/design/salle.md](docs/design/salle.md).
 
 Vérifié : tests unitaires (dont deux clients reliés par une salle, sans réseau), et `wrangler dev` avec un vrai Durable Object : robots connectés directement et à travers Vite, refus lisibles sans session et pour une mauvaise version. Validé en ligne : la vraie connexion Strava. Déployé le 17 novembre 2026 sur https://ma-moulinette-ride.moulinette-ride.workers.dev (migration `0003` appliquée à la base de production). Les autres coureurs sont dessinés dans la vue 3D, avec un encart des 7 coureurs devant et 3 derrière ; pas encore essayé avec deux vrais comptes en ligne en même temps, ni sur un vrai GPU.
 

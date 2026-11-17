@@ -99,6 +99,9 @@ export function nearby(
 export function formatGap(gapM: number): string {
   const sign = gapM < 0 ? '−' : '+';
   const a = Math.abs(gapM);
-  if (a < 1000) return `${sign}${Math.round(a / 5) * 5} m`;
+  if (a < 1000) {
+    const m = Math.round(a / 5) * 5;
+    return m === 0 ? '0 m' : `${sign}${m} m`; // pas de « −0 m » pour un coureur à côté
+  }
   return `${sign}${(a / 1000).toFixed(1).replace('.', ',')} km`;
 }

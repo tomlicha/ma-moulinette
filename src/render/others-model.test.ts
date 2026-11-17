@@ -95,5 +95,7 @@ describe('formatGap', () => {
     expect(formatGap(998)).toBe('+1000 m');
     expect(formatGap(1234)).toBe('+1,2 km');
     expect(formatGap(-2500)).toBe('−2,5 km');
+    expect(formatGap(-1)).toBe('0 m');
+    expect(formatGap(2)).toBe('0 m');
   });
 });

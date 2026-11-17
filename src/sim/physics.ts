@@ -4,7 +4,8 @@
  *   η P = v (m g Crr cosθ + m g sinθ + ½ ρ CdA (v + vw)²) + m v dv/dt
  *
  * Aucune dépendance au DOM ni à l'horloge : mêmes entrées, mêmes sorties, côté client comme côté serveur.
- * Pas inclus à ce stade : aspiration, inertie des roues, limite d'adhérence.
+ * L'aspiration (abri derrière un autre coureur) réduit la part de l'air (`draft`, voir `draft.ts`). Pas inclus à ce stade :
+ * inertie des roues, limite d'adhérence.
  */
 export interface RiderParams {
   /** Masse cycliste + vélo, en kg. */
@@ -32,11 +33,15 @@ export const G = 9.80665;
 /** Sous cette vitesse, la force de traction est bornée : évite la division par zéro au départ arrêté. */
 const V_MIN = 1;
 
-/** Résistance à l'avancement (N) à la vitesse v, pente en %, vent de face positif en m/s. */
-export function resistanceForce(v: number, gradePct: number, p: RiderParams, headwindMs = 0): number {
+/**
+ * Résistance à l'avancement (N) à la vitesse v, pente en %, vent de face positif en m/s. `draft` (0 à 1) est la part de la
+ * traînée de l'air qu'épargne l'abri derrière un autre coureur ; le roulement et la gravité n'en dépendent pas.
+ */
+export function resistanceForce(v: number, gradePct: number, p: RiderParams, headwindMs = 0, draft = 0): number {
   const theta = Math.atan(gradePct / 100);
   const vr = v + headwindMs;
-  return p.massKg * G * (p.crr * Math.cos(theta) + Math.sin(theta)) + 0.5 * p.airDensity * p.cdA * vr * Math.abs(vr);
+  const air = 0.5 * p.airDensity * p.cdA * vr * Math.abs(vr) * (1 - Math.min(1, Math.max(0, draft)));
+  return p.massKg * G * (p.crr * Math.cos(theta) + Math.sin(theta)) + air;
 }
 
 /**
@@ -51,18 +56,19 @@ export function step(
   p: RiderParams,
   headwindMs = 0,
   brakeMs2 = 0,
+  draft = 0,
 ): { v: number; dist: number } {
   const drive = (p.efficiency * Math.max(0, powerW)) / Math.max(v, V_MIN);
-  const a = (drive - resistanceForce(v, gradePct, p, headwindMs)) / p.massKg - (v > 0 ? brakeMs2 : 0);
+  const a = (drive - resistanceForce(v, gradePct, p, headwindMs, draft)) / p.massKg - (v > 0 ? brakeMs2 : 0);
   const next = Math.max(0, v + a * dt);
   return { v: next, dist: 0.5 * (v + next) * dt };
 }
 
-/** Vitesse d'équilibre (m/s) pour une puissance et une pente constantes, sans vent. */
-export function steadySpeed(powerW: number, gradePct: number, p: RiderParams): number {
+/** Vitesse d'équilibre (m/s) pour une puissance et une pente constantes, sans vent, avec une part `draft` d'air épargnée. */
+export function steadySpeed(powerW: number, gradePct: number, p: RiderParams, draft = 0): number {
   const theta = Math.atan(gradePct / 100);
   const a = p.massKg * G * (p.crr * Math.cos(theta) + Math.sin(theta));
-  const b = 0.5 * p.airDensity * p.cdA;
+  const b = 0.5 * p.airDensity * p.cdA * (1 - Math.min(1, Math.max(0, draft)));
   const target = p.efficiency * Math.max(0, powerW);
   // v·(a + b v²) croît à partir de la vitesse où la résistance s'annule (descente), d'où cette borne basse.
   let lo = a < 0 ? Math.sqrt(-a / b) : 0;

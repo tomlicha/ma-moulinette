@@ -46,6 +46,7 @@ import { setupAccount } from './ui/account-chip';
 import { WorldClient } from './net/world-client';
 import { crowdLine, RiderTags } from './ui/rider-tags';
 import { NearRiders } from './ui/near-riders';
+import { draftFrom } from './sim/draft';
 import { controlModes } from './ui/radar-model';
 import { ClimbCounter, PowerAverage } from './ui/hud-model';
 import type { RideSnapshot } from './sim/ride';
@@ -280,10 +281,28 @@ const fmtTime = (s: number) => formatDuration(Math.floor(s));
 /** Les protocoles portent la pente au centième de pourcent. */
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
+/** Part de la traînée de l'air épargnée en ce moment par l'abri derrière un autre coureur (0 : seul). */
+let currentDraft = 0;
+
+/** Abri derrière les coureurs que la salle montre : recalculé à chaque pas, avec la position du coureur local. */
+function updateDraft(distanceM: number) {
+  const others = world.riders();
+  if (!ride || others.length === 0) {
+    currentDraft = 0;
+    ride?.setDraft(0);
+    return;
+  }
+  const me = journey.pointAt(distanceM);
+  const leaders = others.map((r) => ({ x: r.point.x, z: r.point.z, heading: r.point.heading, speedMs: r.speedMs, riding: r.riding }));
+  currentDraft = draftFrom({ x: me.x, z: me.z, heading: me.heading }, leaders).reduction;
+  ride.setDraft(currentDraft);
+}
+
 function tickRide() {
   if (!ride) return;
   const now = performance.now();
   const power = now - lastPower.at > POWER_STALE_MS ? 0 : lastPower.w;
+  updateDraft(lastRide?.distanceM ?? 0);
   const s = ride.advance((now - lastTick) / 1000, power);
   exporter.onRide(s);
   lastTick = now;
@@ -1171,7 +1190,7 @@ async function buildView() {
   v.onLost = onGpuLost;
   v.setOthers(() => world.riders());
   v.onTags = (tags) => riderTags.set(tags);
-  v.onNearby = (n) => nearRiders.set(n);
+  v.onNearby = (n) => nearRiders.set(n, ride ? currentDraft : 0);
   v.onStats = (s) => {
     $('view-stats').textContent =
       `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +

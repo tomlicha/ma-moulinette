@@ -187,3 +187,79 @@ describe('client ↔ salle ↔ client', () => {
     expect(lea.population).toBe(1);
   });
 });
+
+describe('gestion d’intérêt', () => {
+  const edges = [...COL_DES_ERABLES.edges.values()];
+
+  /** Génère un monde de `n` coureurs répartis au hasard sur le réseau (graine fixe), chacun avec sa connexion. */
+  function crowd(n: number, opts: { interestK: number; rangeM?: number }) {
+    let seed = 12345;
+    const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+    const room = new Room(COL_DES_ERABLES, () => 1000, opts);
+    const riders = Array.from({ length: n }, (_, i) => {
+      const edge = edges[Math.floor(rnd() * edges.length)]!;
+      const s = rnd() * edge.lengthM;
+      const conn = new FakeConn();
+      const slot = room.join({ id: `u${i}`, name: `C${i}` }, conn);
+      const p = edge.pointAt(s);
+      room.receive(slot, codec.encodeState(state({ pos: { edgeId: edge.id, forward: true, s } })));
+      return { slot, conn, x: p.x, z: p.z };
+    });
+    return { room, riders };
+  }
+
+  /** Numéros reçus au dernier instantané ; vide si personne n'est à portée (alors rien n'est envoyé). */
+  const lastSlots = (conn: FakeConn) => new Set((conn.snapshots().at(-1) ?? []).map((e) => e.slot));
+
+  it('envoie à chacun ses K plus proches voisins, lui exclu, comme un calcul exhaustif', () => {
+    const K = 6;
+    const rangeM = 4000;
+    const { room, riders } = crowd(60, { interestK: K, rangeM });
+    room.tick();
+    for (const r of riders) {
+      const expected = riders
+        .filter((o) => o !== r)
+        .map((o) => ({ slot: o.slot, d: Math.hypot(o.x - r.x, o.z - r.z) }))
+        .filter((o) => o.d <= rangeM)
+        .sort((a, b) => a.d - b.d)
+        .slice(0, K);
+      const got = lastSlots(r.conn);
+      expect(got.size).toBe(expected.length);
+      expect(got.has(r.slot)).toBe(false);
+      // Les éventuelles égalités de distance mises à part, ce sont les mêmes coureurs.
+      for (const e of expected) expect(got.has(e.slot)).toBe(true);
+    }
+  });
+
+  it('ne dépasse jamais K coureurs par message, quelle que soit la taille de la salle', () => {
+    const { room, riders } = crowd(300, { interestK: 10 });
+    room.tick();
+    for (const r of riders) expect(r.conn.snapshots().at(-1)!.length).toBeLessThanOrEqual(10);
+  });
+
+  it('écarte les coureurs hors de portée', () => {
+    const { room, riders } = crowd(40, { interestK: 5, rangeM: 150 });
+    room.tick();
+    for (const r of riders) {
+      for (const slot of lastSlots(r.conn)) {
+        const o = riders.find((x) => x.slot === slot)!;
+        expect(Math.hypot(o.x - r.x, o.z - r.z)).toBeLessThanOrEqual(150);
+      }
+    }
+  });
+
+  it('petite salle : tout le monde reçoit tout, soi-même compris (comme avant)', () => {
+    const { room, riders } = crowd(5, { interestK: 10 });
+    room.tick();
+    for (const r of riders) expect(lastSlots(r.conn).size).toBe(5);
+  });
+
+  it('un coureur qui n’a pas encore donné de position ne reçoit rien, sans gêner les autres', () => {
+    const { room, riders } = crowd(20, { interestK: 4 });
+    const late = new FakeConn();
+    room.join({ id: 'late', name: 'Retard' }, late);
+    room.tick();
+    expect(late.snapshots()).toHaveLength(0);
+    expect(riders[0]!.conn.snapshots().at(-1)!.length).toBeLessThanOrEqual(4);
+  });
+});

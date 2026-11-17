@@ -35,11 +35,20 @@ export class Ride {
   private steps = 0;
   private idleSteps = 0;
   private accMs = 0;
+  private draft = 0;
 
   constructor(
     readonly route: Course,
     readonly rider: RiderParams = DEFAULT_RIDER,
   ) {}
+
+  /**
+   * Part de la traînée de l'air épargnée par l'abri derrière un autre coureur (0 à 1), à rafraîchir quand les autres
+   * bougent. Elle reste appliquée aux pas suivants : mettre 0 pour la rouler seul.
+   */
+  setDraft(reduction: number): void {
+    this.draft = Math.min(1, Math.max(0, reduction));
+  }
 
   /** Fait avancer la simulation de `dtS` secondes réelles avec la puissance maintenue `powerW`. */
   advance(dtS: number, powerW: number): RideSnapshot {
@@ -49,7 +58,7 @@ export class Ride {
       const grade = this.route.gradeAt(this.dist);
       this.idleSteps = powerW <= IDLE_POWER_W ? this.idleSteps + 1 : 0;
       const idle = this.idleSteps * STEP_S >= IDLE_DELAY_S && grade > DESCENT_GRADE_PCT;
-      const r = step(this.v, powerW, grade, STEP_S, this.rider, 0, idle ? IDLE_BRAKE_MS2 : 0);
+      const r = step(this.v, powerW, grade, STEP_S, this.rider, 0, idle ? IDLE_BRAKE_MS2 : 0, this.draft);
       this.v = r.v;
       this.dist += r.dist;
       this.steps++;

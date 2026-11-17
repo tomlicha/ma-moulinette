@@ -16,6 +16,8 @@ export const MAX_SHOWN = 16;
 export const TAG_WITHIN_M = 140;
 /** Raideur du suivi du cap, en 1/s (comme le joueur local). */
 const HEADING_RATE = 5;
+/** Un nom plus près de la caméra que cela, ou derrière elle, n'est pas montré, en m. */
+const NEAR_TAG_M = 0.5;
 /** Hauteur du nom au-dessus de la route, en m. */
 const TAG_HEIGHT_M = 2;
 
@@ -129,8 +131,12 @@ export class OthersLayer {
     const tags: RiderTag[] = [];
     for (const p of placed) {
       if (p.distanceM > TAG_WITHIN_M) continue;
-      this.tmp.set(p.x, p.y + TAG_HEIGHT_M, p.z).project(camera);
-      if (this.tmp.z <= 0 || this.tmp.z >= 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
+      // Profondeur dans le repère de la caméra d'abord : `project` renvoie des coordonnées inversées, et pas toujours
+      // hors de [−1, 1], pour un point derrière la caméra (un coureur qu'on vient de dépasser).
+      this.tmp.set(p.x, p.y + TAG_HEIGHT_M, p.z).applyMatrix4(camera.matrixWorldInverse);
+      if (this.tmp.z > -NEAR_TAG_M) continue;
+      this.tmp.applyMatrix4(camera.projectionMatrix);
+      if (Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
       tags.push({
         slot: p.slot,
         name: p.name,

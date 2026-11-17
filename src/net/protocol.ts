@@ -18,6 +18,14 @@ import type { NetPosition } from '../sim/track';
 
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * Gestion d'intérêt : au-delà de `INTEREST_K + 1` coureurs, la salle n'envoie à chacun que ses `INTEREST_K` plus proches
+ * voisins, dans un rayon de `INTEREST_RANGE_M`. Le trafic d'un client ne grandit plus avec la salle (voir docs/design/salle.md).
+ * Le rayon est celui de l'encart des coureurs proches : tout ce qu'il peut montrer arrive.
+ */
+export const INTEREST_K = 32;
+export const INTEREST_RANGE_M = 1500;
+
 export const MSG_STATE = 0x01;
 export const MSG_SNAPSHOT = 0x81;
 
