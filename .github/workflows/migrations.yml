@@ -39,6 +39,8 @@ jobs:
       - name: Secrets Cloudflare présents ?
         id: secrets
         run: |
+          # Longueurs seulement, jamais les valeurs : 0 caractère = secret absent, vide ou hors de portée du dépôt.
+          echo "CLOUDFLARE_API_TOKEN : ${#CLOUDFLARE_API_TOKEN} caractères ; CLOUDFLARE_ACCOUNT_ID : ${#CLOUDFLARE_ACCOUNT_ID} caractères"
           if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
