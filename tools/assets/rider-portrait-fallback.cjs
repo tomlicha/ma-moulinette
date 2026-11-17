@@ -1,5 +1,5 @@
 /**
- * Image de repli du portrait du coureur (public/assets/rider-portrait.jpg), refaite d'après l'avatar 3D actuel.
+ * Image de repli du portrait du coureur (src/assets/rider-portrait.jpg), refaite d'après l'avatar 3D actuel.
  *
  * L'application rend le portrait au premier lancement d'une version (src/render/rider-portrait.ts) ; d'ici là, ou si le
  * rendu échoue (pas de WebGL), c'est cette image qui s'affiche dans le médaillon du radar. Elle doit donc montrer le même
@@ -15,7 +15,7 @@ const fs = require('fs');
 
 const PORT = process.env.PORT ?? '5199';
 const SIZE = 512;
-const OUT = 'public/assets/rider-portrait.jpg';
+const OUT = 'src/assets/rider-portrait.jpg';
 
 (async () => {
   const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });

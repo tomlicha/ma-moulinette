@@ -5,6 +5,7 @@ import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './home.css';
 import { radarTag, type RadarDevice, type RadarRole, type RadarTone } from './radar-model';
+import portraitFallback from '../assets/rider-portrait.jpg'; // repli tant que le portrait n'est pas rendu
 
 /** `mini` : tuile de l'accueil (rôle et nom). `large` : tuile de l'écran Appareils, avec l'état en plus. */
 export type RadarVariant = 'mini' | 'large';
@@ -79,7 +80,7 @@ export function createRadar(root: HTMLElement, variant: RadarVariant, opts: Rada
   }
   const img = el('img', '', core);
   // Image de repli le temps du rendu (ou si WebGL/WebGPU est indisponible) ; remplacée par le rendu du vrai avatar.
-  img.src = `${import.meta.env.BASE_URL}assets/rider-portrait.jpg`;
+  img.src = portraitFallback;
   img.alt = '';
   img.decoding = 'async';
   void import('../render/rider-portrait')

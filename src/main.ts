@@ -36,6 +36,7 @@ import { setupRideMenu } from './ui/ride-menu';
 import { setupRecap } from './ui/recap';
 import { summarize } from './ui/recap-model';
 import { createRadar } from './ui/radar';
+import portraitFallback from './assets/rider-portrait.jpg';
 import { setupHomeBackground } from './ui/home-background';
 import { HOME_SCENES } from './ui/home-scenes';
 import { setupCoursePicker } from './ui/course-picker';
@@ -921,7 +922,7 @@ const radars = [
   createRadar($('radar-home'), 'mini'),
 ];
 const riderAvatar = $<HTMLImageElement>('rider-avatar');
-riderAvatar.src = `${import.meta.env.BASE_URL}assets/rider-portrait.jpg`;
+riderAvatar.src = portraitFallback;
 void import('./render/rider-portrait')
   .then((m) => m.riderPortrait())
   .then((url) => { riderAvatar.src = url; })
@@ -1216,6 +1217,14 @@ function startViewBuild() {
 // three.js (~1 Mio) n'est demandé qu'après le premier affichage, pendant un temps mort : l'accueil répond tout de suite.
 if (typeof requestIdleCallback === 'function') requestIdleCallback(startViewBuild, { timeout: 2000 });
 else setTimeout(startViewBuild, 300);
+
+// Service worker (build de production seulement) : relancement instantané et hors ligne. Il est généré au build avec la
+// liste des fichiers de la version (tools/offline/). En développement, il servirait des fichiers périmés.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e: unknown) => log(`hors ligne indisponible : ${e instanceof Error ? e.message : e}`));
+  });
+}
 
 // Aperçu du récapitulatif sans rouler, en développement seulement (voir ui/recap-demo.ts) : ?recap, ?recap=libre…
 if (import.meta.env.DEV && params.has('recap')) {

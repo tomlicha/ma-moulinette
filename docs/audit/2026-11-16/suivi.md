@@ -12,7 +12,7 @@
 | 4 | Qualité automatique sur mobile | **Premier palier** | Écran tactile → qualité réduite : décor allégé, ombres 1024 px, HUD sans flou, densité de pixels ≤ 1,5 (`src/render/quality.ts`). `?quality=high` force la complète (lien dans le menu de la Sortie). Reste : résolution dynamique pilotée par le p95 |
 | 5 | Reprise après perte du GPU | **Fait** | `RideView.onLost` : la vue est jetée et reconstruite sur un canevas neuf, en WebGL2 à partir de la 2ᵉ perte, abandon après 3 ; perte pendant la construction comprise (`GpuLostError`). Chaque perte est journalisée |
 | 6 | Description, `robots.txt`, Open Graph, icônes PNG | **Fait** | `index.html`, `public/robots.txt`, `public/og-image.jpg` (1200 × 630), icônes 192, 512 et `maskable` ; images refaites par `tools/assets/share-images.cjs`. **À faire au déploiement** : donner `SITE_URL` (adresse publique) au build, sinon l'image de partage reste en chemin relatif, que WhatsApp ou Slack n'affichent pas |
-| 7 | `_headers` immuable, GLB versionnés, service worker | À faire | — |
+| 7 | `_headers` immuable, GLB versionnés, service worker | **Fait** | Modèles et portrait de repli dans `src/assets/`, publiés avec une empreinte ; `public/_headers` : `/assets/*` gardé un an ; service worker généré au build (`tools/offline/`), précache de toute la version. Vérifié : relancement hors ligne en 138 ms, Sortie et vue 3D hors ligne, mise à jour pendant qu'une page est ouverte (elle garde sa version). **À vérifier au déploiement** : que Cloudflare applique `_headers` (`curl -I …/assets/<fichier>.js` doit montrer `max-age=31536000, immutable`) |
 | 8 | Textes ≥ 12 px, cibles ≥ 44 px, radar sans interactif imbriqué | **Fait** (cibles : 38 à 44 px) | Voir « Lisibilité » ci-dessous |
 | 9 | Découper `main.ts` et `workout-editor.ts`, tests de l'UI | À faire | `main.ts` : 1 248 lignes (la reprise après perte du GPU y a ajouté une soixantaine) |
 | 10 | `tsconfig` par cible, cartes de sources cachées | À faire | — |
@@ -52,6 +52,5 @@ Pixel 7 couché (émulé) : HUD sans flou, 874 k triangles, canevas à 1,5 pixel
 
 1. **Mesurer sur un vrai téléphone** (Pixel, iPhone 13 en plein écran) : temps de blocage au lancement, ouverture de la Sortie, i/s en qualité réduite, et une perte du GPU après une mise en arrière-plan.
 2. **`SITE_URL` au déploiement** (action 6), sinon les aperçus de liens restent sans image.
-3. **Cache et hors ligne** (action 7) : `public/_headers` immuable pour `/assets/*`, GLB importés par le code pour être versionnés, service worker.
-4. **Maintenabilité** (actions 9 et 10) : `tsconfig` pour `worker/` et `tools/`, cartes de sources cachées, `$` qui lève si l'id manque, découpage de `main.ts` et `workout-editor.ts`, polices importées une seule fois (`hud.ts`, `radar.ts`), linter.
-5. **Rendu** : résolution dynamique ; portrait produit au build ; passes d'ombre compilées à la première image ; `setInterval(renderHud, 250)` qui tourne hors de la Sortie ; envoi des textures en WebGPU (tâche de 9,7 s sans GPU, à vérifier sur appareil).
+3. **Maintenabilité** (actions 9 et 10) : `tsconfig` pour `worker/` et `tools/`, cartes de sources cachées, `$` qui lève si l'id manque, découpage de `main.ts` et `workout-editor.ts`, polices importées une seule fois (`hud.ts`, `radar.ts`), linter.
+4. **Rendu** : résolution dynamique ; portrait produit au build ; passes d'ombre compilées à la première image ; `setInterval(renderHud, 250)` qui tourne hors de la Sortie ; envoi des textures en WebGPU (tâche de 9,7 s sans GPU, à vérifier sur appareil).

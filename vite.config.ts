@@ -7,6 +7,7 @@ import { createFileStore } from './tools/logs/file-store.ts';
 import { serveWith } from './tools/logs/node-http.ts';
 import { createLogReceiver, PREFIX as LOGS_PREFIX } from './src/telemetry/receiver.ts';
 import { LIMITS } from './src/telemetry/report.ts';
+import { serviceWorker } from './tools/offline/service-worker.ts';
 
 /**
  * Empreinte de ce qui dessine le portrait du coureur : les modèles, tout le code de rendu et la version de three.js.
@@ -17,7 +18,7 @@ import { LIMITS } from './src/telemetry/report.ts';
 function riderPortraitKey(): string {
   const hash = createHash('sha256');
   const render = readdirSync('src/render').filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')).sort();
-  for (const f of ['public/assets/avatar.glb', 'public/assets/bike.glb', ...render.map((f) => `src/render/${f}`), 'node_modules/three/package.json']) {
+  for (const f of ['src/assets/avatar.glb', 'src/assets/bike.glb', ...render.map((f) => `src/render/${f}`), 'node_modules/three/package.json']) {
     hash.update(f).update(readFileSync(f));
   }
   return hash.digest('hex').slice(0, 16);
@@ -68,6 +69,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     logReceiver(loadEnv(mode, process.cwd(), ['LOG_'])),
     siteUrl(loadEnv(mode, process.cwd(), ['SITE_'])),
+    serviceWorker(),
   ],
   server: {
     // Comptes, envoi à Strava et salle temps réel : servis par le Worker lancé à côté (`npm run dev:api`, wrangler dev

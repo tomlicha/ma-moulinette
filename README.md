@@ -104,6 +104,14 @@ En ligne : `npx wrangler d1 migrations apply ma-moulinette-logs --remote -c wran
 
 Vérifié : tests unitaires (dont deux clients reliés par une salle, sans réseau), et `wrangler dev` avec un vrai Durable Object : robots connectés directement et à travers Vite, refus lisibles sans session et pour une mauvaise version. Non vérifié : la vraie connexion Strava, et un déploiement.
 
+### Hors ligne et cache
+
+Au garage, le réseau est souvent faible : l'application se lance depuis le navigateur sans attendre le réseau, et roule hors ligne (sans compte ni envoi à Strava, qui passent par `/api/`).
+
+- **Service worker** (build de production seulement) : `dist/sw.js` est généré au build avec la liste des fichiers de la version (page, JS, CSS, polices woff2, modèles 3D, icônes : ~1 Mio compressé). Tout est téléchargé à la première visite ; ensuite la page et les fichiers viennent du cache. Gabarit et règles : [`tools/offline/sw.js`](tools/offline/sw.js) ; génération : [`tools/offline/service-worker.ts`](tools/offline/service-worker.ts).
+- **Mise à jour** : le navigateur revérifie `sw.js` à chaque lancement. Une nouvelle version s'installe en arrière-plan et prend le relais au lancement suivant, une fois l'application fermée : une page ouverte garde tous les fichiers de sa version, même ceux qu'elle charge plus tard. Sur iPhone, l'application installée peut rester en mémoire : la nouvelle version arrive alors après l'avoir fermée depuis le sélecteur d'apps.
+- **Cache HTTP** : tout ce qui est sous `/assets/` porte une empreinte dans son nom (y compris `avatar.glb`, `bike.glb` et le portrait de repli, importés depuis `src/assets/`), et [`public/_headers`](public/_headers) le garde un an (`immutable`).
+
 ### Journaux d'erreurs à distance
 
 `src/telemetry/` : tout ce que la page écrit dans son journal (connexion au trainer, reconnexions, échecs de commande, erreurs non gérées du navigateur) est gardé en mémoire (300 dernières lignes). Dès qu'une ligne ressemble à une erreur, la page envoie le tampon au récepteur, 5 s plus tard pour y embarquer les essais de reconnexion qui suivent, avec le contexte (navigateur, trainer, état de connexion, capacités). Chaque ligne n'est envoyée qu'une fois ; au plus un envoi toutes les 30 s et vingt par session. Hors ligne, l'envoi repart au retour du réseau ou à la fermeture de la page. Les envois ne font jamais d'erreur visible et ne sont jamais journalisés eux-mêmes.
