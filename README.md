@@ -142,3 +142,11 @@ npx wrangler deploy                         # affiche https://ma-moulinette-logs
 Puis `VITE_LOG_ENDPOINT=https://ma-moulinette-logs.<compte>.workers.dev/api/logs/ingest` au build de l'application, et `ALLOWED_ORIGIN` de `wrangler.toml` au domaine de l'application. La relecture par `curl` est la même que ci-dessus. Le jeton d'envoi étant public, une règle de limitation de débit (Cloudflare, tableau de bord > Sécurité > WAF) protège le quota gratuit d'un envoi massif. Vérifié en local avec `wrangler dev` (D1 simulé) et par tests ; pas encore déployé sur un vrai compte.
 
 Le récepteur (`receiver.ts`) reste un gestionnaire `Request` vers `Response` indépendant de Node et de Cloudflare : un autre `LogStore` suffit pour l'héberger ailleurs. Les rapports contiennent le nom de l'appareil Bluetooth et le navigateur, pas de position ni de compte ; le rapport est lisible par quiconque détient le jeton de lecture. Vérifié : tests unitaires, serveur autonome et serveur de dev avec `curl`. Non vérifié : un envoi réel depuis la page avec un vrai trainer.
+
+## Coquille iOS (iPad, iPhone)
+
+Safari n'a pas Web Bluetooth : `ios/` est une coquille Capacitor dont le Bluetooth passe par le plugin natif (`src/sensors/native-bluetooth.ts`). La coquille charge l'application depuis le serveur (`server.url` de `capacitor.config.ts`), pour que `/api/...`, le cookie de session et le WebSocket gardent l'origine du Worker. Autre serveur : `CAP_SERVER_URL=https://… npx cap sync ios`.
+
+```
+npm run ios:sync   # puis, sur un Mac : npm run ios:open, signer, lancer sur l'appareil
+```
