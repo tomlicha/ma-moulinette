@@ -102,7 +102,7 @@ npm run bots -- --count 5 --watch --url ws://localhost:5173/api/world/ws   # 5 r
 
 En ligne : `npx wrangler d1 migrations apply ma-moulinette-logs --remote -c wrangler.app.toml`, les secrets `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET` (`npx wrangler secret put … -c wrangler.app.toml`), puis `npm run deploy:app`. Dans les réglages de l'application Strava, « Authorization Callback Domain » doit être le domaine de l'application. L'application Strava est limitée à 10 athlètes ; au-delà, il faut une revue de Strava.
 
-Vérifié : tests unitaires (dont deux clients reliés par une salle, sans réseau), et `wrangler dev` avec un vrai Durable Object : robots connectés directement et à travers Vite, refus lisibles sans session et pour une mauvaise version. Non vérifié : la vraie connexion Strava, et un déploiement.
+Vérifié : tests unitaires (dont deux clients reliés par une salle, sans réseau), et `wrangler dev` avec un vrai Durable Object : robots connectés directement et à travers Vite, refus lisibles sans session et pour une mauvaise version. Validé en ligne : la vraie connexion Strava. Déployé le 17 novembre 2026 sur https://ma-moulinette-ride.moulinette-ride.workers.dev (migration `0003` appliquée à la base de production). Les autres coureurs sont dessinés dans la vue 3D, avec un encart des 7 coureurs devant et 3 derrière ; pas encore essayé avec deux vrais comptes en ligne en même temps, ni sur un vrai GPU.
 
 ### Hors ligne et cache
 
