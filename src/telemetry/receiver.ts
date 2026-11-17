@@ -1,3 +1,4 @@
+import { DEVICE_LIMITS, parseDeviceReport, type DeviceReport, type StoredDevice } from './device.ts';
 import { LIMITS, parseReport, type StoredReport } from './report.ts';
 
 export const PREFIX = '/api/logs/';
@@ -8,8 +9,17 @@ export interface LogStore {
   read(opts: { since?: number; limit: number }): Promise<StoredReport[]>;
 }
 
+/** Fiches trainer : une par installation, jamais purgées. */
+export interface DeviceStore {
+  /** Crée la fiche ou la remplace si le trainer a changé ; ne fait rien d'autre (pas de purge, pas de doublon). */
+  upsert(report: DeviceReport, now: number): Promise<{ created: boolean; changed: boolean }>;
+  list(opts: { limit: number }): Promise<StoredDevice[]>;
+}
+
 export interface ReceiverOptions {
   store: LogStore;
+  /** Absent : la route `device` répond « non configuré » et les rapports de journal fonctionnent comme avant. */
+  devices?: DeviceStore;
   /** Jeton exigé pour déposer un rapport. Absent : dépôt ouvert (développement local). */
   ingestToken?: string;
   /** Jeton exigé pour lire. Absent : la lecture répond « non configuré ». */
@@ -69,6 +79,32 @@ export function createLogReceiver(opts: ReceiverOptions) {
       if (!parsed) return json({ error: 'invalid_report' }, 400, cors);
       await opts.store.append({ ...parsed, receivedAt: now() });
       return json({ ok: true }, 200, cors);
+    }
+
+    if (route === 'device') {
+      if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+      if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, cors);
+      if (opts.ingestToken && !sameToken(bearer(req), opts.ingestToken)) return json({ error: 'forbidden' }, 403, cors);
+      if (!opts.devices) return json({ error: 'not_configured' }, 503, cors);
+      const body = await req.text();
+      if (body.length > DEVICE_LIMITS.bodyBytes) return json({ error: 'too_large' }, 413, cors);
+      let parsed;
+      try {
+        parsed = parseDeviceReport(JSON.parse(body));
+      } catch {
+        parsed = undefined;
+      }
+      if (!parsed) return json({ error: 'invalid_device' }, 400, cors);
+      const { created, changed } = await opts.devices.upsert(parsed, now());
+      return json({ ok: true, created, changed }, 200, cors);
+    }
+
+    if (route === 'devices' && req.method === 'GET') {
+      if (!opts.readToken) return json({ error: 'not_configured' }, 503);
+      if (!opts.devices) return json({ error: 'not_configured' }, 503);
+      if (!sameToken(bearer(req), opts.readToken)) return json({ error: 'forbidden' }, 403);
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 100, 1), 1000);
+      return json({ devices: await opts.devices.list({ limit }) });
     }
 
     if (route === 'reports' && req.method === 'GET') {

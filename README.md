@@ -128,6 +128,15 @@ Au garage, le réseau est souvent faible : l'application se lance depuis le navi
   puis construire l'application avec `VITE_LOG_ENDPOINT=https://hôte/api/logs/ingest` et `VITE_LOG_TOKEN=<LOG_INGEST_TOKEN>`. Sans `VITE_LOG_ENDPOINT`, un build de production n'envoie rien. Le jeton d'envoi est visible dans le code de la page : il écarte le bruit, il ne protège pas un secret. Seul `LOG_READ_TOKEN` donne accès aux rapports, il ne va jamais dans l'application. Restreindre `LOG_ALLOWED_ORIGIN` au domaine de l'application.
 - **Relire** : `curl -H "Authorization: Bearer $LOG_READ_TOKEN" "https://hôte/api/logs/reports?limit=20&since=<ms>"` (JSON, du plus ancien au plus récent).
 
+#### Fiche du trainer (hors erreur)
+
+Les rapports ci-dessus ne partent qu'en cas d'erreur : un essai réussi ne laisse aucune trace. Pour savoir quels trainers l'application a vus, la page envoie aussi, **sans erreur**, la fiche du trainer connecté à `…/api/logs/device` (même adresse que `ingest`, même jeton d'envoi) : famille reconnue, fabricant, modèle, firmware, matériel, protocole de pilotage retenu, services Bluetooth. On suppose un trainer par utilisateur : le récepteur garde **une seule fiche par installation**, créée au premier appairage et **remplacée si le trainer change** (autre appareil, firmware mis à jour, autre protocole choisi). L'application n'envoie qu'à la première connexion et quand l'empreinte de la fiche change ; un envoi raté repart à la connexion suivante.
+
+- **Identifiant d'installation** : tiré au hasard au premier envoi et gardé dans le navigateur (`mm.install`). Ni compte, ni nom, ni adresse Bluetooth, ni nom d'appareil (il contient un fragment de numéro de série). Effacer les données du site crée une nouvelle fiche.
+- **Stockage** : table D1 `trainers` (migration `0005`, **à appliquer** : `npx wrangler d1 migrations apply ma-moulinette-logs --remote`), jamais purgée ; en dev et avec `logs:serve`, `.logs/trainers.json`.
+- **Relire** : `curl -H "Authorization: Bearer $LOG_READ_TOKEN" "https://hôte/api/logs/devices?limit=100"` (fiches, `firstSeen`, `updatedAt`, `changes`). Ou, en D1 : `SELECT profile, manufacturer, model, firmware, protocol, updated_at FROM trainers`.
+- `VITE_LOG_ENDPOINT` doit finir par `/ingest` : l'adresse de la fiche en est déduite.
+
 #### Récepteur gratuit sur Cloudflare (Workers + D1)
 
 `worker/` rejoue le même récepteur (`src/telemetry/receiver.ts`) dans un Worker, avec D1 pour stockage : pas de serveur à maintenir, HTTPS inclus, offre gratuite largement suffisante pour quelques rapports par session. D1 plutôt que KV : KV ne liste pas du plus récent au plus ancien, et un Worker gratuit ne fait qu'environ 50 appels par requête, ce qui limiterait la relecture. Les rapports de plus de 30 jours sont purgés chaque nuit.

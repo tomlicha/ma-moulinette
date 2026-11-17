@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { loadEnv, type Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { createFileDeviceStore } from './tools/logs/device-store.ts';
 import { createFileStore } from './tools/logs/file-store.ts';
 import { serveWith } from './tools/logs/node-http.ts';
 import { createLogReceiver, PREFIX as LOGS_PREFIX } from './src/telemetry/receiver.ts';
@@ -35,6 +36,7 @@ function logReceiver(env: Record<string, string>): Plugin {
       await mkdir('.logs', { recursive: true });
       const receiver = createLogReceiver({
         store: createFileStore('.logs/reports.jsonl'),
+        devices: createFileDeviceStore('.logs/trainers.json'),
         // Dépôt ouvert : le serveur de dev n'écoute que sur localhost. Seule la lecture exige un jeton.
         readToken: env.LOG_READ_TOKEN,
       });

@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import type { StoredReport } from '../src/telemetry/report.ts';
-import { createD1Store, type D1Database } from './d1-store.ts';
+import { createD1DeviceStore, createD1Store, type D1Database } from './d1-store.ts';
 
 /** D1 simulé avec le SQLite intégré à Node : exécute la vraie migration et le vrai SQL du magasin. */
 function fakeD1(): D1Database {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(new URL('./migrations/0001_init.sql', import.meta.url), 'utf8'));
+  for (const m of ['0001_init', '0005_trainers']) db.exec(readFileSync(new URL(`./migrations/${m}.sql`, import.meta.url), 'utf8'));
   return {
     prepare: (sql) => ({
       bind: (...values) => ({
@@ -47,5 +47,28 @@ describe('magasin D1', () => {
     for (const t of [10, 20, 30]) await store.append(row(t));
     await store.purge(25);
     expect((await store.read({ limit: 10 })).map((r) => r.receivedAt)).toEqual([30]);
+  });
+});
+
+describe('fiches trainer D1', () => {
+  const kickr = { profile: 'wahoo-kickr', brand: 'wahoo', model: 'KICKR CORE', firmware: '1.5.36', protocol: 'wahoo', services: ['a'] };
+
+  it('une ligne par installation : créée, inchangée, remplacée', async () => {
+    const db = fakeD1();
+    const devices = createD1DeviceStore(db);
+    expect(await devices.upsert({ install: 'i', trainer: kickr }, 10)).toEqual({ created: true, changed: false });
+    expect(await devices.upsert({ install: 'i', trainer: { ...kickr, services: ['a'] } }, 20)).toEqual({ created: false, changed: false });
+    expect(await devices.upsert({ install: 'i', trainer: { ...kickr, firmware: '2.0' } }, 30)).toEqual({ created: false, changed: true });
+    await devices.upsert({ install: 'j', trainer: { profile: 'tacx-neo', services: [] } }, 40);
+    const all = await devices.list({ limit: 10 });
+    expect(all.map((d) => d.install)).toEqual(['j', 'i']);
+    expect(all[1]).toMatchObject({ firstSeen: 10, updatedAt: 30, changes: 1, trainer: { firmware: '2.0' } });
+  });
+
+  it('survit à la purge des journaux', async () => {
+    const db = fakeD1();
+    await createD1DeviceStore(db).upsert({ install: 'i', trainer: kickr }, 1);
+    await createD1Store(db).purge(1e12);
+    expect(await createD1DeviceStore(db).list({ limit: 10 })).toHaveLength(1);
   });
 });

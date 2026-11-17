@@ -234,6 +234,7 @@ function setState(s: ConnectionState, detail?: string) {
     const c = trainer.capabilities;
     const range = c.powerRange ? `, plage ${c.powerRange.min}–${c.powerRange.max} W` : '';
     const id = trainer instanceof WebBluetoothTrainer ? trainer.identity : undefined;
+    if (id) telemetry.trainer({ profile: id.profile.id, brand: id.profile.brand, label: id.profile.label, ...id.info, protocol: id.protocol, services: id.services });
     const model = id ? `${id.profile.label}${id.info.firmware ? ` (firmware ${id.info.firmware})` : ''} · pilotage ${id.protocol ? PROTOCOL_LABEL[id.protocol] : 'aucun'} · ` : '';
     $('caps').textContent = `${model}ERG : ${c.targetPower ? 'oui' : 'non'} · SIM : ${c.simulation ? 'oui' : 'non'}${range}${id?.advice ? `. ${id.advice}` : ''}`;
   }

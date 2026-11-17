@@ -1,3 +1,5 @@
+import { createDeviceReporter } from './device-reporter';
+import type { TrainerRecord } from './device';
 import { LogBuffer } from './log-buffer';
 import { createReporter } from './reporter';
 
@@ -20,9 +22,9 @@ function endpoint(): string | undefined {
 
 const reason = (e: unknown) => (e instanceof Error ? `${e.name} : ${e.message}` : String(e));
 
-export function setupTelemetry(opts: TelemetryOptions): { record(msg: string): void } {
+export function setupTelemetry(opts: TelemetryOptions): { record(msg: string): void; trainer(t: TrainerRecord): void } {
   const url = endpoint();
-  if (!url) return { record() {} };
+  if (!url) return { record() {}, trainer() {} };
 
   const buffer = new LogBuffer();
   const reporter = createReporter(buffer, {
@@ -46,9 +48,16 @@ export function setupTelemetry(opts: TelemetryOptions): { record(msg: string): v
   addEventListener('error', (e) => opts.log(`erreur non gérée : ${e.message} (${e.filename}:${e.lineno})`));
   addEventListener('unhandledrejection', (e) => opts.log(`erreur non gérée (promesse) : ${reason(e.reason)}`));
 
+  // La fiche du trainer part même sans erreur, une fois, puis quand elle change (src/telemetry/device-reporter.ts).
+  const token = (import.meta.env.VITE_LOG_TOKEN as string | undefined) || undefined;
+  const devices = createDeviceReporter({ endpoint: url.replace(/ingest$/, 'device'), token, userAgent: navigator.userAgent });
+
   return {
     record(msg) {
       reporter.notify(buffer.add(msg));
+    },
+    trainer(t) {
+      void devices.report(t);
     },
   };
 }
