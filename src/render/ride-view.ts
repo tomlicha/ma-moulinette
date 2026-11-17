@@ -5,6 +5,7 @@ import { ambianceFor, type Mood } from './ambiance';
 import { loadRiderAssets, type RiderAssets } from './assets';
 import { Rider } from './rider';
 import { OthersLayer, type RiderTag } from './others';
+import { nearby, type NearbyRiders } from './others-model';
 import type { RemoteRiderView } from '../net/world-client';
 import { Background, BackgroundStopped } from './background';
 import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
@@ -38,6 +39,8 @@ export interface RenderStats {
   drawCalls: number;
 }
 
+/** Calcul des coureurs proches, en ms. */
+const NEARBY_EVERY_MS = 250;
 const FRAME_WINDOW = 240;
 const STATS_EVERY_MS = 500;
 /** Plafond du pas de temps d'animation : un onglet qui reprend ne doit pas téléporter le cycliste. */
@@ -66,6 +69,9 @@ export class RideView {
   onLost?: (loss: GpuLoss) => void;
   /** Noms des autres coureurs proches avec leur place à l'écran, à chaque image (pixels CSS du canevas). */
   onTags?: (tags: RiderTag[]) => void;
+  /** Coureurs proches devant et derrière le joueur, quatre fois par seconde. */
+  onNearby?: (n: NearbyRiders) => void;
+  private lastNearby = 0;
   private lost?: GpuLoss;
   /** Reste du relief et du décor, complété en tâche de fond après la première image ; arrêté avec la vue. */
   private readonly fill = new Background();
@@ -366,7 +372,12 @@ export class RideView {
     this.rider.group.rotateZ(this.roll * Math.sin(this.swayPhase));
     this.rider.animate(dt, this.state.cadenceRpm, speedMs);
     this.gates.update(dt, this.dist);
-    const others = this.others.place(dt, this.othersSource(), this.p);
+    const riders = this.othersSource();
+    const others = this.others.place(dt, riders, this.p);
+    if (this.onNearby && now - this.lastNearby >= NEARBY_EVERY_MS) {
+      this.lastNearby = now;
+      this.onNearby(nearby({ x: this.p.x, z: this.p.z, heading: this.heading }, riders.map((r) => ({ slot: r.slot, name: r.name, x: r.point.x, z: r.point.z }))));
+    }
     // L'ambiance suit le parcours, qui peut changer sur l'accueil pendant que la vue tourne.
     const mood = this.journey.course?.ambiance ?? 'day';
     if (mood !== this.mood) {

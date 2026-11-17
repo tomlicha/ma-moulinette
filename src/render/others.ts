@@ -3,7 +3,7 @@ import type { RemoteRiderView } from '../net/world-client';
 import type { RiderAssets } from './assets';
 import { Rider } from './rider';
 import type { Kit } from './region-material';
-import { declutter, laneOf } from './others-model';
+import { declutter, hueOf, laneOf } from './others-model';
 import { forwardOf, sideOf, type WorldLayout } from './world-layout';
 
 export { laneOf } from './others-model';
@@ -18,7 +18,6 @@ export const TAG_WITHIN_M = 140;
 const HEADING_RATE = 5;
 /** Hauteur du nom au-dessus de la route, en m. */
 const TAG_HEIGHT_M = 2;
-const GOLDEN = 0.618033988749895;
 
 /** Nom d'un coureur et sa place à l'écran, pour le HUD (pixels CSS du canevas). */
 export interface RiderTag {
@@ -38,7 +37,7 @@ const wrapPi = (a: number) => {
 
 /** Maillot d'un coureur : une teinte par place, espacées par le nombre d'or pour que deux voisins se distinguent. */
 export function kitFor(slot: number): Kit {
-  const hue = (slot * GOLDEN) % 1;
+  const hue = hueOf(slot);
   const jersey = new THREE.Color().setHSL(hue, 0.7, 0.52).getHex();
   const frame = new THREE.Color().setHSL((hue + 0.5) % 1, 0.55, 0.42).getHex();
   return { jersey: { color: jersey }, frame: { color: frame } };

@@ -153,11 +153,12 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .rider-tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
 .rider-tag {
   position: absolute; left: 0; top: 0; display: flex; align-items: baseline; gap: 6px; white-space: nowrap;
-  padding: 3px 9px; border-radius: 999px; background: rgb(24 30 40 / .72); color: #fff;
+  padding: 2px 8px; border-radius: 999px; background: rgb(24 30 40 / .34); color: #fff;
   font: 600 .8125rem/1.2 Barlow, system-ui, sans-serif; will-change: transform;
+  text-shadow: 0 1px 2px rgb(5 10 20 / .75); /* le fond est léger : l'ombre garde le nom lisible sur le ciel */
 }
-.rider-tag-dist { color: #D3DCE8; font-weight: 500; font-variant-numeric: tabular-nums; }
-.rider-tag.far { opacity: .7; }
+.rider-tag-dist { color: #E3EAF3; font-weight: 500; font-variant-numeric: tabular-nums; }
+.rider-tag.far { opacity: .6; }
 /* Pastille de la salle, à gauche du bouton du menu : dit tout de suite si les autres nous voient. */
 .ride-crowd {
   position: absolute; z-index: 3; top: var(--edge-t); right: calc(var(--edge-r) + 52px); height: 44px; box-sizing: border-box;
@@ -167,3 +168,27 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 }
 .ride-crowd::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #1FE07F; }
 .ride-crowd[data-state='off']::before { background: #F08A3C; }
+
+/*
+ * Coureurs proches : jusqu'à 7 devant, le joueur, 3 derrière, de l'avant vers l'arrière. Sous le bouton du menu, au bord
+ * droit ; sur téléphone couché, à gauche de la colonne de boutons. Verre léger : l'encart reste discret.
+ */
+.ride-near {
+  position: absolute; z-index: 2; top: calc(var(--edge-t) + 54px); right: var(--edge-r); width: 188px; box-sizing: border-box;
+  padding: 6px 8px; border-radius: 12px; border: 1px solid rgb(255 255 255 / .12); background: rgb(24 30 40 / .5);
+  color: #fff; font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; pointer-events: none;
+}
+.ride-near[hidden] { display: none; }
+.rn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.rn-row { display: flex; align-items: center; gap: 8px; min-height: 22px; text-shadow: 0 1px 2px rgb(5 10 20 / .6); }
+.rn-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5BE3C9; box-shadow: 0 0 0 1px rgb(255 255 255 / .55); }
+.rn-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-gap { flex: none; color: #D3DCE8; font-variant-numeric: tabular-nums; }
+/* Le joueur : repère au milieu de la liste, un trait au-dessus et au-dessous. */
+.rn-me { font-weight: 700; margin: 2px 0; padding: 2px 0; border-block: 1px solid rgb(255 255 255 / .22); }
+.rn-me .rn-dot { background: #5BE3C9; }
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .ride-near { top: calc(var(--edge-t) + 46px); right: calc(var(--edge-r) + 52px); width: 168px; padding: 4px 8px; }
+  .rn-row { min-height: 19px; }
+  .ride-crowd { height: 40px; }
+}

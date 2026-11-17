@@ -34,6 +34,8 @@ Référence permanente du compte : connexion avec Strava, nom montré aux autres
 
 - Code : [`src/render/others.ts`](../../src/render/others.ts) (coureurs dans la scène), [`others-model.ts`](../../src/render/others-model.ts) (voie, noms sans chevauchement), [`src/ui/rider-tags.ts`](../../src/ui/rider-tags.ts) (étiquettes et pastille).
 - Les 16 plus proches, à moins de 220 m, sont dessinés ; leur nom et leur distance s'affichent jusqu'à 140 m, six étiquettes au plus, le plus proche gardant la sienne quand deux se recouvrent. Teinte du maillot et du vélo selon la place dans la salle.
+- Encart des coureurs proches, au bord droit sous le bouton du menu (sur téléphone couché, à gauche de la colonne de boutons) : jusqu'à **7 coureurs devant**, « Toi », puis **3 derrière**, de l'avant vers l'arrière, avec un point de la couleur de leur maillot et l'écart à vol d'oiseau (+45 m, −140 m ; par 5 m, puis en km). « Devant » se décide par le cap du joueur ; portée 1,5 km. Les pistes des coureurs n'ont pas de repère commun : un écart de trajet n'existe pas. Verre léger, sans toucher. Code : [`near-riders.ts`](../../src/ui/near-riders.ts), calcul dans `others-model.ts` (`nearby`).
+- Étiquettes de nom : fond à 34 % d'opacité et ombre portée du texte, pour rester discrètes (72 % avant le 17 novembre).
 - Pastille à gauche du bouton du menu : « En ligne · N autres coureurs », cachée sans compte. Texte de 13 px (le minimum du projet est 12 px).
 
 ## Captures
@@ -47,8 +49,8 @@ Développement local, 16 novembre 2026 (connexion de développement et trois rob
 | Connecté, ordinateur | ![](captures/compte-connecte-ordinateur.png) |
 | Connecté, téléphone couché (écran Appareils) | ![](captures/compte-connecte-telephone.png) |
 | Menu du compte | ![](captures/compte-menu.png) |
-| Autres coureurs sur la Sortie, ordinateur (quatre robots immobiles) | ![](captures/compte-autres-coureurs-ordinateur.png) |
-| Autres coureurs sur la Sortie, téléphone couché 844 × 390 (robots en mouvement) | ![](captures/compte-autres-coureurs-telephone.png) |
+| Autres coureurs sur la Sortie, ordinateur (12 robots immobiles : 8 devant, 4 derrière) | ![](captures/compte-autres-coureurs-ordinateur.png) |
+| Autres coureurs sur la Sortie, téléphone couché 844 × 390 (mêmes robots) | ![](captures/compte-autres-coureurs-telephone.png) |
 | Boîte du nom | ![](captures/compte-nom.png) |
 
 ## Développement

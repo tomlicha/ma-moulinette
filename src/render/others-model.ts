@@ -37,3 +37,68 @@ export function declutter<T extends TagBox>(tags: readonly T[]): T[] {
   }
   return kept;
 }
+
+const GOLDEN = 0.618033988749895;
+
+/** Teinte (0 à 1) du maillot d'un coureur : espacées par le nombre d'or pour que deux places voisines se distinguent. */
+export function hueOf(slot: number): number {
+  return (slot * GOLDEN) % 1;
+}
+
+/** Coureurs montrés par l'encart de proximité : devant et derrière le joueur. */
+export const AHEAD_SHOWN = 7;
+export const BEHIND_SHOWN = 3;
+/** Au-delà de cette distance, un coureur n'est plus « à proximité », en m. */
+export const NEARBY_RANGE_M = 1500;
+
+export interface Nearby {
+  slot: number;
+  name: string;
+  /** Écart au joueur, en m : positif devant, négatif derrière. */
+  gapM: number;
+}
+
+export interface NearbyRiders {
+  /** Du plus éloigné au plus proche : la liste se lit de l'avant vers le joueur. */
+  ahead: Nearby[];
+  /** Du plus proche au plus éloigné. */
+  behind: Nearby[];
+}
+
+/**
+ * Les coureurs proches du joueur : les `ahead` plus proches devant lui et les `behind` plus proches derrière. « Devant »
+ * se décide par le cap du joueur (un coureur sur une autre route compte selon qu'il est devant ou derrière son regard),
+ * l'écart est la distance à vol d'oiseau, signée. Les pistes des coureurs n'ont pas de repère commun : on ne peut pas
+ * soustraire leurs distances de trajet.
+ */
+export function nearby(
+  self: { x: number; z: number; heading: number },
+  riders: readonly { slot: number; name: string; x: number; z: number }[],
+  ahead = AHEAD_SHOWN,
+  behind = BEHIND_SHOWN,
+  rangeM = NEARBY_RANGE_M,
+): NearbyRiders {
+  const fx = Math.cos(self.heading);
+  const fz = Math.sin(self.heading);
+  const front: Nearby[] = [];
+  const back: Nearby[] = [];
+  for (const r of riders) {
+    const dx = r.x - self.x;
+    const dz = r.z - self.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > rangeM) continue;
+    if (dx * fx + dz * fz >= 0) front.push({ slot: r.slot, name: r.name, gapM: dist });
+    else back.push({ slot: r.slot, name: r.name, gapM: -dist });
+  }
+  front.sort((a, b) => a.gapM - b.gapM);
+  back.sort((a, b) => b.gapM - a.gapM);
+  return { ahead: front.slice(0, ahead).reverse(), behind: back.slice(0, behind) };
+}
+
+/** Écart lisible et stable : par 5 m sous 1 km (pas de chiffres qui clignotent), puis en km. */
+export function formatGap(gapM: number): string {
+  const sign = gapM < 0 ? '−' : '+';
+  const a = Math.abs(gapM);
+  if (a < 1000) return `${sign}${Math.round(a / 5) * 5} m`;
+  return `${sign}${(a / 1000).toFixed(1).replace('.', ',')} km`;
+}
