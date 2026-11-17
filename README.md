@@ -68,7 +68,7 @@ Vérifié dans la vraie page avec le trainer simulé ; pas encore sur le KICKR.
 
 ### Écrans et connexion au lancement
 
-L'application a trois écrans : **Appareils** (toujours le premier au lancement), **Sortie** et **Séances**.
+L'application s'ouvre toujours sur l'**accueil**, d'où l'on va aux écrans **Appareils**, **Sortie** et **Séances**.
 
 - Chaque appareil connecté (trainer, capteur cardiaque) est mémorisé dans le navigateur. Au lancement, l'application tente de les retrouver et de s'y reconnecter seule, puis passe à la sortie quand le trainer et les autres appareils connus ont répondu.
 - Cette reconnexion sans clic repose sur `navigator.bluetooth.getDevices()`, détecté à l'exécution. Le Chrome de test (novembre 2026) ne l'expose pas par défaut : l'écran propose alors « Reconnecter KICKR 81B5 », un clic par appareil, avec un sélecteur limité à cet appareil. La coquille Capacitor (BLE natif) permettra la reconnexion vraiment automatique.
@@ -103,6 +103,14 @@ npm run bots -- --count 5 --watch --url ws://localhost:5173/api/world/ws   # 5 r
 En ligne : `npx wrangler d1 migrations apply ma-moulinette-logs --remote -c wrangler.app.toml`, les secrets `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET` (`npx wrangler secret put … -c wrangler.app.toml`), puis `npm run deploy:app`. Dans les réglages de l'application Strava, « Authorization Callback Domain » doit être le domaine de l'application. L'application Strava est limitée à 10 athlètes ; au-delà, il faut une revue de Strava.
 
 Vérifié : tests unitaires (dont deux clients reliés par une salle, sans réseau), et `wrangler dev` avec un vrai Durable Object : robots connectés directement et à travers Vite, refus lisibles sans session et pour une mauvaise version. Non vérifié : la vraie connexion Strava, et un déploiement.
+
+### Hors ligne et cache
+
+Au garage, le réseau est souvent faible : l'application se lance depuis le navigateur sans attendre le réseau, et roule hors ligne (sans compte ni envoi à Strava, qui passent par `/api/`).
+
+- **Service worker** (build de production seulement) : `dist/sw.js` est généré au build avec la liste des fichiers de la version (page, JS, CSS, polices woff2, modèles 3D, icônes : ~1 Mio compressé). Tout est téléchargé à la première visite ; ensuite la page et les fichiers viennent du cache. Gabarit et règles : [`tools/offline/sw.js`](tools/offline/sw.js) ; génération : [`tools/offline/service-worker.ts`](tools/offline/service-worker.ts).
+- **Mise à jour** : le navigateur revérifie `sw.js` à chaque lancement. Une nouvelle version s'installe en arrière-plan et prend le relais au lancement suivant, une fois l'application fermée : une page ouverte garde tous les fichiers de sa version, même ceux qu'elle charge plus tard. Sur iPhone, l'application installée peut rester en mémoire : la nouvelle version arrive alors après l'avoir fermée depuis le sélecteur d'apps.
+- **Cache HTTP** : tout ce qui est sous `/assets/` porte une empreinte dans son nom (y compris `avatar.glb`, `bike.glb` et le portrait de repli, importés depuis `src/assets/`), et [`public/_headers`](public/_headers) le garde un an (`immutable`).
 
 ### Journaux d'erreurs à distance
 

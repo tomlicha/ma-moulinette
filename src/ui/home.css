@@ -175,7 +175,10 @@ main:has([data-view='appareils']:not([hidden])) { max-width: none; padding: 0; }
 .dev-go { margin: 0; gap: 8px 18px; }
 button.dev-go-btn { height: 52px; padding: 0 28px; font-size: 1.25rem; box-shadow: 0 8px 20px rgb(194 65 12 / .35); }
 button.dev-go-btn[aria-disabled='true'], button.dev-go-btn:disabled { box-shadow: none; }
-.dev-go a { color: var(--muted); font-weight: 600; }
+.dev-go a { position: relative; color: var(--muted); font-weight: 600; }
+/* Liens isolés sous un bouton : zone de toucher de 44 px de haut, sans changer la mise en page. */
+.dev-go a::before, .home-wo-link::before { content: ''; position: absolute; inset: -12px -6px; }
+.home-wo-link { position: relative; }
 
 /* Résumé du coureur : ouvre la fiche (masse, FTP, zones), comme le médaillon du radar. */
 button.rider-chip { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; height: 44px; padding: 0 14px; border-radius: 14px; background: #fff; color: var(--fg); border: 1px solid var(--btn-line); font-weight: 500; text-align: left; }
@@ -187,6 +190,13 @@ button.rider-chip:hover { background: #FBF6EF; }
 
 .dev-radar { grid-row: 3; grid-column: 2; display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-card); background: var(--radar-bg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); }
 .dev-radar > div { width: 100%; }
+/* Colonne étroite (portable 1024 × 640 : 205 px) : bulles plus larges et plus serrées, pour ne pas tronquer « Aucun appareil connu ». */
+.dev-radar { container-type: inline-size; }
+@container (max-width: 230px) {
+  .radar--large .radar-tag { max-width: 84%; padding: 4px 8px; border-radius: 10px; }
+  .radar--large .radar-tag .r { font-size: 14px; }
+  .radar--large .radar-tag .n, .radar--large .radar-tag .s { font-size: 12px; }
+}
 .dev-radar .radar { border: 0; border-radius: 0; background: transparent; }
 
 .dev-sensors { grid-row: 4; grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; padding: 16px 22px; }
@@ -324,9 +334,9 @@ button.rider-chip:hover { background: #FBF6EF; }
   .dev-go a { font-size: .85rem; }
   button.dev-go-btn { height: 38px; padding: 0 14px; font-size: .95rem; box-shadow: none; }
   .dev-sensors { padding: 8px 14px; gap: 4px; }
-  .dev-sensors-head .home-kicker { display: none; }
   /* La ligne d'information (« Première utilisation… », « Reconnexion… ») disparaît : pas la place, et elle recouvrait le lien « Aide ? ». Les boutons et les pastilles disent déjà l'état. */
-  .dev-sensors-head { display: none; }
+  /* Masquée à l'œil seulement : le titre « Capteurs » reste le h2 des cartes (ordre des titres pour les lecteurs d'écran). */
+  .dev-sensors-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .dev .home-brand { height: 36px; }
   /* L'aide se replie en lien « Aide ? » dans le coin de la carte ; ouverte, elle reprend sa place sous les capteurs (la page défile). */
   .dev-sensors-foot { position: absolute; top: 8px; right: 14px; z-index: 3; }

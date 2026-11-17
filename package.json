@@ -12,7 +12,8 @@
     "map": "node tools/map/build.mjs",
     "logs:serve": "node tools/log-server.ts",
     "dev:api": "wrangler dev -c wrangler.app.toml --port 8787",
-    "bots": "node --experimental-transform-types --no-warnings --import ./tools/ts-resolve.mjs tools/net/bots.ts"
+    "bots": "node --experimental-transform-types --no-warnings --import ./tools/ts-resolve.mjs tools/net/bots.ts",
+    "budget": "node tools/ci/bundle-budget.mjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.1",

@@ -14,6 +14,19 @@ const PROFILES = ONLY ? PROFILES0.filter(p => p.name.startsWith(ONLY)) : PROFILE
 const SCREENS = ['accueil', 'appareils', 'seances', 'sortie'];
 const MEASURE = () => {
   const W = innerWidth, H = innerHeight;
+  // Zone de toucher réelle : la boîte de l'élément, agrandie par un ::before/::after posé en absolu (marge invisible).
+  const hitRect = (el) => {
+    const r = el.getBoundingClientRect(); let { left, top, right, bottom } = r;
+    for (const ps of ['::before', '::after']) {
+      const cs = getComputedStyle(el, ps);
+      if (cs.content === 'none' || cs.position !== 'absolute' || cs.pointerEvents === 'none') continue;
+      const v = (x) => (x === 'auto' ? NaN : parseFloat(x));
+      const [t, rt, b, l] = [v(cs.top), v(cs.right), v(cs.bottom), v(cs.left)];
+      if ([t, rt, b, l].some(Number.isNaN)) continue;
+      left = Math.min(left, r.left + l); top = Math.min(top, r.top + t); right = Math.max(right, r.right - rt); bottom = Math.max(bottom, r.bottom - b);
+    }
+    return { left, top, right, bottom, width: right - left, height: bottom - top };
+  };
   const vis = (el) => el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
   const small = []; const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n; (n = tw.nextNode());) { const t = n.textContent.trim(); const el = n.parentElement; if (!t || !el || !vis(el)) continue;
@@ -22,9 +35,9 @@ const MEASURE = () => {
     const px = parseFloat(getComputedStyle(el).fontSize) * s; if (px && px < 12) small.push({ t: t.slice(0, 30), px: +px.toFixed(1) }); }
   const tiny = []; let targets = 0;
   for (const el of document.querySelectorAll('button, a[href], select, input:not([type=hidden]), [role=radio], [role=button], [role=slider]')) {
-    if (!vis(el)) continue; const r = el.getBoundingClientRect(); if (!r.width || r.right < 0 || r.left > W || r.bottom < 0 || r.top > H) continue; targets++;
+    if (!vis(el)) continue; const r = hitRect(el); if (!r.width || r.right < 0 || r.left > W || r.bottom < 0 || r.top > H) continue; targets++;
     if (r.width < 24 || r.height < 24) tiny.push({ t: (el.getAttribute('aria-label') || el.textContent || el.id || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) }); }
-  const under44 = [...document.querySelectorAll('button, a[href], select, input:not([type=hidden]), [role=radio], [role=button]')].filter(el => { if (!vis(el)) return false; const r = el.getBoundingClientRect(); return r.width && r.left < W && r.top < H && r.bottom > 0 && (r.width < 44 || r.height < 44); }).length;
+  const under44 = [...document.querySelectorAll('button, a[href], select, input:not([type=hidden]), [role=radio], [role=button]')].filter(el => { if (!vis(el)) return false; const r = hitRect(el); return r.width && r.left < W && r.top < H && r.bottom > 0 && (r.width < 44 || r.height < 44); }).length;
   const de = document.documentElement;
   return { W, H, overflowX: de.scrollWidth > W + 1 ? de.scrollWidth - W : 0, overflowY: de.scrollHeight > H + 1 ? de.scrollHeight - H : 0,
     smallText: small, tinyTargets: tiny, targets, under44, domNodes: document.getElementsByTagName('*').length,

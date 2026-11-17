@@ -118,6 +118,6 @@ Typographie (polices servies par l'application via `@fontsource`, jamais depuis 
 
 ## À faire
 
-- Mesurer le coût du flou au-dessus du canevas WebGPU sur un Android d'entrée de gamme ; sinon basculer en `flat` (`?quality=low` le fait déjà).
+- Mesurer le coût du flou au-dessus du canevas WebGPU sur un Android d'entrée de gamme ; sinon basculer en `flat` (fait par défaut sur écran tactile depuis le 16 novembre 2026 : qualité réduite, `src/render/quality.ts`).
 - Vérifier le contraste sur des captures du vrai rendu, pas seulement sur les maquettes.
 - Téléphone : vérifier la version compacte sur de vrais appareils (elle n'a été mesurée qu'en émulation), et la place du message de séance sur les écrans de moins de 360 px de haut.
