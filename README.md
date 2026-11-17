@@ -62,7 +62,7 @@ Validé : l'export FIT dans la vraie page (fichier relu avec le décodeur de Gar
 
 `src/workout/` : lecture des fichiers `.zwo` (Zwift), `.erg` (watts) et `.mrc` (% de FTP), en TypeScript pur et sans DOM ; déroulement minuté de la séance ; consigne envoyée au trainer en ERG (immédiatement à chaque palier, au plus une fois par seconde pendant une rampe). Fichiers de référence dans `samples/workouts/`, également proposés dans la page (« Séance d'exemple »).
 
-Sur la page : charger un fichier ou l'exemple, régler la FTP (mémorisée dans le navigateur), puis « Démarrer la séance ». Pause, palier suivant, arrêt et intensité ±5 % sont disponibles en cours de route. Un palier libre (`FreeRide`, `MaxEffort`) relâche l'ERG, qui est repris au palier suivant. Désengager l'ERG à la main laisse la séance continuer sans consigne ; le réengager lui rend la main. Le temps de séance s'arrête quand le trainer est déconnecté.
+Sur la page : charger un fichier ou l'exemple, régler la FTP (mémorisée dans le navigateur, et synchronisée avec le compte s'il y en a un), puis « Démarrer la séance ». Pause, palier suivant, arrêt et intensité ±5 % sont disponibles en cours de route. Un palier libre (`FreeRide`, `MaxEffort`) relâche l'ERG, qui est repris au palier suivant. Désengager l'ERG à la main laisse la séance continuer sans consigne ; le réengager lui rend la main. Le temps de séance s'arrête quand le trainer est déconnecté.
 
 Vérifié dans la vraie page avec le trainer simulé ; pas encore sur le KICKR.
 
@@ -72,7 +72,7 @@ L'application s'ouvre toujours sur l'**accueil**, d'où l'on va aux écrans **Ap
 
 - Chaque appareil connecté (trainer, capteur cardiaque) est mémorisé dans le navigateur. Au lancement, l'application tente de les retrouver et de s'y reconnecter seule, puis passe à la sortie quand le trainer et les autres appareils connus ont répondu.
 - Cette reconnexion sans clic repose sur `navigator.bluetooth.getDevices()`, détecté à l'exécution. Le Chrome de test (novembre 2026) ne l'expose pas par défaut : l'écran propose alors « Reconnecter KICKR 81B5 », un clic par appareil, avec un sélecteur limité à cet appareil. La coquille Capacitor (BLE natif) permettra la reconnexion vraiment automatique.
-- **Séances** : un seul écran plein écran, dans la continuité de l'accueil ([docs/design/seances.md](docs/design/seances.md)). Bibliothèque (mes séances, modèles en lecture seule, recherche, import `.zwo`/`.erg`/`.mrc`) à droite, éditeur par blocs toujours actif à gauche (échauffement, palier, intervalles, rampe, libre, retour au calme) avec aperçu du profil, durée, puissance moyenne, intensité et charge estimées, validation, export `.zwo`. Les séances sont gardées dans le navigateur (`localStorage`), pas encore synchronisées entre appareils.
+- **Séances** : un seul écran plein écran, dans la continuité de l'accueil ([docs/design/seances.md](docs/design/seances.md)). Bibliothèque (mes séances, modèles en lecture seule, recherche, import `.zwo`/`.erg`/`.mrc`) à droite, éditeur par blocs toujours actif à gauche (échauffement, palier, intervalles, rampe, libre, retour au calme) avec aperçu du profil, durée, puissance moyenne, intensité et charge estimées, validation, export `.zwo`. Les séances sont gardées dans le navigateur (`localStorage`) et, avec un compte, synchronisées entre ses appareils, comme la FTP, la masse et « Mes blocs » (`POST /api/sync`, [docs/design/compte.md](docs/design/compte.md#données-synchronisées)).
 - **Thème « Doux »** (12 novembre 2026) : fond crème, cartes blanches arrondies, accent orange, navigation en pastille flottante en bas, scènes d'accueil conservées derrière un voile crème ; thème nuit suivant le système sur la Sortie. Sur téléphone en portrait, une invite translucide propose le plein écran et le paysage. L'écran Appareils est plein écran : carte titre, radar (toucher le médaillon règle masse, FTP et zones) et une carte « Capteurs » unique. Détails : [docs/design/accueil-appareils.md](docs/design/accueil-appareils.md).
 
 
@@ -96,7 +96,7 @@ En local :
 cp .dev.vars.example .dev.vars                                         # connexion de développement, sans Strava
 npx wrangler d1 migrations apply ma-moulinette-logs --local -c wrangler.app.toml
 npm run dev:api    # Worker : comptes et salle, sur http://localhost:8787
-npm run dev        # page sur http://localhost:5173, qui relaie /api/auth et /api/world vers le Worker
+npm run dev        # page sur http://localhost:5173, qui relaie /api/auth, /api/sync, /api/strava et /api/world vers le Worker
 npm run bots -- --count 5 --watch --url ws://localhost:5173/api/world/ws   # 5 robots qui roulent
 ```
 

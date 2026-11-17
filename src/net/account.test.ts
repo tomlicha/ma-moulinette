@@ -11,7 +11,7 @@ describe('nativeStravaLogin', () => {
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/auth/redeem');
     expect(JSON.parse(init.body as string)).toEqual({ ticket: T });
-    expect((init.headers as Record<string, string>)['x-zwift2']).toBe('1');
+    expect((init.headers as Record<string, string>)['x-mamoulinette']).toBe('1');
   });
 
   it('annulée ou refusée : rien n’est échangé', async () => {

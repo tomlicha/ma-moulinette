@@ -8,7 +8,7 @@ export interface StravaStatus {
   locked?: boolean;
 }
 
-const KEY_STORAGE = 'zwift2.ownerKey';
+const KEY_STORAGE = 'mamoulinette.ownerKey';
 
 export function getOwnerKey(): string {
   try {

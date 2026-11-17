@@ -134,9 +134,9 @@ describe('bibliothèque', () => {
 
   it('ignore un contenu corrompu', () => {
     const store = memory();
-    store.setItem('zwift2.workouts', 'pas du json');
+    store.setItem('mamoulinette.workouts', 'pas du json');
     expect(new WorkoutLibrary(store).list()).toEqual([]);
-    store.setItem('zwift2.workouts', JSON.stringify([{ id: 'x', name: 'ok', blocks: [], updatedAt: 1 }, { nimporte: 'quoi' }]));
+    store.setItem('mamoulinette.workouts', JSON.stringify([{ id: 'x', name: 'ok', blocks: [], updatedAt: 1 }, { nimporte: 'quoi' }]));
     expect(new WorkoutLibrary(store).list().map((w) => w.id)).toEqual(['x']);
   });
 });

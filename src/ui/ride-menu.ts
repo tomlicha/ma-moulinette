@@ -1,6 +1,6 @@
 import './sortie.css';
 
-const STATS_KEY = 'zwift2.viewStats';
+const STATS_KEY = 'mamoulinette.viewStats';
 
 interface Store {
   getItem(k: string): string | null;

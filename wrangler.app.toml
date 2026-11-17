@@ -8,12 +8,12 @@ preview_urls = false
 
 [assets]
 directory = "./dist"
-# Seules les adresses /api/* passent par worker/app.ts (comptes, salle temps réel, passerelle Strava) ; le reste est servi directement.
+# Seules les adresses /api/* passent par worker/app.ts (comptes, synchronisation, salle temps réel, passerelle Strava) ; le reste est servi directement.
 run_worker_first = ["/api/*"]
 # Une seule page : toute adresse inconnue renvoie index.html.
 not_found_handling = "single-page-application"
 
-# Comptes, sessions et jetons Strava : même base que les journaux (migrations 0002 et 0003).
+# Comptes, sessions, jetons Strava et données synchronisées : même base que les journaux (migrations 0002 à 0004).
 [[d1_databases]]
 binding = "DB"
 database_name = "ma-moulinette-logs"

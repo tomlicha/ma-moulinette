@@ -235,7 +235,7 @@ export function setupExport(opts: {
       }
 
       log('Strava : envoi en cours…');
-      const result = await sendToStrava(out.bytes, { name: out.name, externalId: `zwift2-${out.startMs}` });
+      const result = await sendToStrava(out.bytes, { name: out.name, externalId: `mamoulinette-${out.startMs}` });
       if (result.ok) {
         exported = undefined;
         log(

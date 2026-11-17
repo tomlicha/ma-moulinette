@@ -1,6 +1,6 @@
 # Compte du coureur
 
-Référence permanente du compte : connexion avec Strava, nom montré aux autres, mode sans compte. Toute évolution part de ce fichier et le met à jour.
+Référence permanente du compte : connexion avec Strava, nom montré aux autres, données synchronisées entre appareils, mode sans compte. Toute évolution part de ce fichier et le met à jour.
 
 - Code : [`src/ui/account-chip.ts`](../../src/ui/account-chip.ts) (pastille, menu, boîte du nom), [`src/ui/account.css`](../../src/ui/account.css) (style), [`src/net/account.ts`](../../src/net/account.ts) (appels au serveur) ; côté serveur [`src/server/accounts.ts`](../../src/server/accounts.ts) et [`src/server/user-strava.ts`](../../src/server/user-strava.ts).
 - Branchement : fin de [`src/main.ts`](../../src/main.ts) : la pastille s'ajoute à chaque `.home-top` (Accueil, Appareils, Séances), et la connexion à la salle temps réel suit l'état du compte.
@@ -18,6 +18,9 @@ Référence permanente du compte : connexion avec Strava, nom montré aux autres
 | 2026-11-16 | **Android : connexion par l'app Strava.** Le bouton mène à `strava.com/oauth/mobile/authorize`, que l'app Strava (75.0 ou plus) intercepte : déjà connecté, on n'a qu'à toucher « Autoriser ». Si l'essai reste sans session (l'app a rendu la main à un autre navigateur que celui de Ma Moulinette), le toucher suivant, dans les 15 minutes, passe par la page web de Strava. iPhone et ordinateur : page web. | Demande de Tom : profiter de la session de l'app Strava. Sur iPhone, l'app Strava ne s'ouvre que depuis une app native (`strava://`, fenêtre de connexion système) : ce sera pour la coquille iOS. |
 | 2026-11-16 | Le **menu du compte passe au-dessus des cartes** : l'en-tête des écrans a son propre niveau (`z-index: 20`). Dans le **rail de Séances** (téléphone couché), seule l'initiale tient ; le menu s'ouvre à sa droite, vers le haut ; sans compte, rien dans le rail. | Sur iPhone couché en plein écran (390 px de haut), le menu passait derrière la carte Séance. Le rail fait 54 px : la pastille débordait, et le bouton officiel Strava (198 px) n'y tient pas. |
 | 2026-11-16 | **Téléphone couché** : seulement le bouton Strava (40 px de haut, comme la marque), ou la pastille réduite à l'initiale et au nom, avec un point vert sur l'initiale quand on est en ligne. | La hauteur est rare ; la phrase d'explication reste sur grand écran. |
+| 2026-11-17 | **Les données du coureur suivent son compte** : FTP, masse, séances de l'éditeur et « Mes blocs ». Les réglages propres à l'appareil (trainer, protocole, braquets, parcours, affichage, appareils connus) restent sur l'appareil. | Demande de Tom : retrouver ses réglages et ses séances en se connectant sur un autre appareil. Un trainer ou un affichage dépend de l'appareil, pas du coureur. |
+| 2026-11-17 | Fusion **élément par élément, la modification la plus récente gagne** ; les suppressions sont transmises. Pas de fusion à l'intérieur d'une séance. | Simple et prévisible : deux appareils qui changent deux séances différentes gardent les deux ; la même séance changée des deux côtés garde la dernière version. |
+| 2026-11-17 | **Première connexion** sur un appareil : ses données (celles d'avant le compte comprises) rejoignent le compte. **Autre compte** que le précédent sur l'appareil : les données de l'appareil sont remplacées par celles de ce compte. La déconnexion n'efface rien. | Personne ne perd ce qu'il avait avant le compte ; un appareil partagé ne mélange pas les séances de deux coureurs. |
 
 ## États
 
@@ -38,6 +41,16 @@ Référence permanente du compte : connexion avec Strava, nom montré aux autres
 - **Aspiration** : la ligne « Toi » affiche « Aspiration N % » en vert quand un coureur juste devant (même file, moins de 25 m) épargne de l'air ; détails et modèle dans [salle.md](salle.md). Au-delà de 33 coureurs, la salle n'envoie à chacun que ses 32 voisins les plus proches (1,5 km), de quoi remplir l'encart.
 - Étiquettes de nom : fond à 34 % d'opacité et ombre portée du texte, pour rester discrètes (72 % avant le 17 novembre).
 - Pastille à gauche du bouton du menu : « En ligne · N autres coureurs », cachée sans compte. Texte de 13 px (le minimum du projet est 12 px).
+
+## Données synchronisées
+
+- Code : [`src/sync/protocol.ts`](../../src/sync/protocol.ts) (éléments échangés, règles de validité, limites), [`journal.ts`](../../src/sync/journal.ts) (ce qui reste à envoyer, version de chaque élément), [`client.ts`](../../src/sync/client.ts) (envois et réception), [`sources.ts`](../../src/sync/sources.ts) (séances, blocs) ; réglages dans [`src/main.ts`](../../src/main.ts) (`settingsSource`). Serveur : [`src/server/sync.ts`](../../src/server/sync.ts), table `user_items` (migration `0004`, [`worker/sync-store.ts`](../../worker/sync-store.ts)).
+- **Une adresse**, `POST /api/sync` : la page envoie ses modifications (100 au plus) et la dernière révision reçue ; le serveur garde chaque modification plus récente que la sienne et rend ce qui a changé depuis (200 éléments par page), plus l'état final de chaque élément envoyé. Même contrôle d'origine et même en-tête anti-CSRF que les comptes.
+- **Éléments** : `setting/ftp`, `setting/mass`, `workout/<id>`, `block/<id>`. Une suppression est gardée sans contenu, pour prévenir les autres appareils. Limites : 32 000 caractères par élément, 1000 éléments par compte.
+- **Quand** : à la connexion, 1,5 s après une modification, au retour sur la page, au retour du réseau, et toutes les deux minutes tant que la page est visible. Sans compte, rien ne part : le journal (`mamoulinette.sync`) garde les modifications pour la prochaine connexion du même compte.
+- **Ce qui arrive d'ailleurs** : la FTP et la masse se mettent à jour (une sortie en cours garde la masse de son départ) ; la liste des séances et l'étagère se refont ; une séance ouverte sans modification dans l'éditeur suit la nouvelle version, un brouillon modifié reste tel quel.
+- **Anciennes clés** : le 17 novembre 2026, les clés du navigateur passent de `zwift2.*` à `mamoulinette.*` ; au lancement, les anciennes sont reprises sous le nouveau nom puis effacées ([`src/util/legacy-storage.ts`](../../src/util/legacy-storage.ts)). L'en-tête anti-CSRF devient `x-mamoulinette` ; l'ancien `x-zwift2` reste accepté le temps que la nouvelle version soit installée partout (le service worker sert l'ancienne au premier lancement après la mise à jour) : à retirer de [`src/net/csrf.ts`](../../src/net/csrf.ts) ensuite.
+- Vérifié le 17 novembre 2026 : tests (serveur, SQL de D1 sur SQLite, deux appareils simulés) et application réelle avec `wrangler dev` (migration `0004` appliquée sur D1 local) : un ordinateur avec des données sous les anciennes clés, puis un iPhone 13 couché en plein écran (844 × 390), même compte ; l'iPhone a reçu la FTP, la masse et la séance, puis la FTP changée sur l'iPhone est arrivée sur l'ordinateur.
 
 ## Captures
 

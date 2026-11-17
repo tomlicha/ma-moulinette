@@ -16,7 +16,7 @@
 import { isNativeShell } from '../native/shell';
 
 /** Session en cours : le guide d'installation a été écarté (« Continuer dans le navigateur »). */
-const SKIP_KEY = 'zwift2.installSkipped';
+const SKIP_KEY = 'mamoulinette.installSkipped';
 
 export interface ShellEnv {
   /** Écran tactile (`pointer: coarse`). */

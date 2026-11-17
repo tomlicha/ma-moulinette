@@ -1571,5 +1571,29 @@ export function setupWorkoutEditor(o: EditorOptions) {
       }
       renderShelf();
     },
+    /**
+     * Séances ou blocs changés depuis un autre appareil (synchronisation du compte). Une séance ouverte sans
+     * modification suit la nouvelle version, ou laisse la place si elle a été supprimée ; un brouillon modifié reste
+     * tel quel : l'enregistrer en fera la version la plus récente.
+     */
+    libraryChanged() {
+      if (draft?.id && !isDirty()) {
+        const w = o.library.get(draft.id);
+        if (!w) {
+          draft = undefined;
+          baseline = '';
+          openFallback(false);
+        } else {
+          const next: Draft = { id: w.id, name: w.name, description: w.description ?? '', blocks: structuredClone(w.blocks) };
+          if (JSON.stringify(next) !== baseline) {
+            const keep = selected;
+            open(next);
+            if (next.blocks.length) select(Math.min(keep, next.blocks.length - 1));
+          }
+        }
+      }
+      renderLibrary();
+      renderShelf();
+    },
   };
 }

@@ -158,7 +158,7 @@ describe('relais Strava, dépôt', () => {
             : j({ id_str: '99', status: 'Your activity is ready.', error: null, activity_id: 555, activity_id_str: '555' }),
       },
     });
-    const res = (await relay(post('/api/strava/upload?name=Ma%20sortie&externalId=zwift2-1', new Uint8Array([9, 9, 9]))))!;
+    const res = (await relay(post('/api/strava/upload?name=Ma%20sortie&externalId=mamoulinette-1', new Uint8Array([9, 9, 9]))))!;
     expect(await res.json()).toMatchObject({ activityId: '555', activityUrl: 'https://www.strava.com/activities/555' });
 
     const up = strava.calls[0]!;
@@ -168,7 +168,7 @@ describe('relais Strava, dépôt', () => {
     expect(form.get('sport_type')).toBe('VirtualRide');
     expect(form.get('trainer')).toBe('1');
     expect(form.get('name')).toBe('Ma sortie');
-    expect(form.get('external_id')).toBe('zwift2-1');
+    expect(form.get('external_id')).toBe('mamoulinette-1');
     expect(new Uint8Array(await (form.get('file') as Blob).arrayBuffer())).toEqual(new Uint8Array([9, 9, 9]));
     expect(polls).toBe(3);
   });
@@ -177,7 +177,7 @@ describe('relais Strava, dépôt', () => {
     const { relay } = setup({
       tokens: valid,
       strava: {
-        'POST /api/v3/uploads': uploadOk({ error: 'zwift2-1.fit duplicate of activity 21234316', status: 'There was an error processing your activity.' }),
+        'POST /api/v3/uploads': uploadOk({ error: 'mamoulinette-1.fit duplicate of activity 21234316', status: 'There was an error processing your activity.' }),
       },
     });
     const body = await (await relay(post('/api/strava/upload')))!.json();
