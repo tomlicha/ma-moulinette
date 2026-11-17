@@ -56,6 +56,9 @@ export interface Nearby {
   name: string;
   /** Écart au joueur, en m : positif devant, négatif derrière. */
   gapM: number;
+  /** Position dans le monde, en m : pour le placer sur la carte de l'encart. */
+  x: number;
+  z: number;
 }
 
 export interface NearbyRiders {
@@ -87,8 +90,8 @@ export function nearby(
     const dz = r.z - self.z;
     const dist = Math.hypot(dx, dz);
     if (dist > rangeM) continue;
-    if (dx * fx + dz * fz >= 0) front.push({ slot: r.slot, name: r.name, gapM: dist });
-    else back.push({ slot: r.slot, name: r.name, gapM: -dist });
+    if (dx * fx + dz * fz >= 0) front.push({ slot: r.slot, name: r.name, gapM: dist, x: r.x, z: r.z });
+    else back.push({ slot: r.slot, name: r.name, gapM: -dist, x: r.x, z: r.z });
   }
   front.sort((a, b) => a.gapM - b.gapM);
   back.sort((a, b) => b.gapM - a.gapM);

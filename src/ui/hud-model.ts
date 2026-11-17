@@ -232,8 +232,13 @@ export function turnArrow(turnDeg: number): string {
   return right ? '↘' : '↙';
 }
 
-/** Flèche, nom et résumé d'une route qui part d'un carrefour : « Le Col · 6,4 km · +5,6 % · +357 m ». */
-export function junctionLabel(o: JunctionOption): { arrow: string; name: string; meta: string } {
+/**
+ * Flèche, nom et résumé d'une route qui part d'un carrefour : « Le Col · 6,4 km · +5,6 % · +357 m ». `base` est le résumé
+ * sans la montée, `climb` la montée seule (vide sous 10 m) : le téléphone n'affiche que `base`, la carte de l'encart
+ * porte la montée.
+ */
+export function junctionLabel(o: JunctionOption): { arrow: string; name: string; meta: string; base: string; climb: string } {
   const climb = o.climbM >= 10 ? ` · +${Math.round(o.climbM)} m` : '';
-  return { arrow: turnArrow(o.turnDeg), name: o.name, meta: `${fmt1(o.lengthM / 1000)} km · ${signed(o.avgGradePct, 1)} %${climb}` };
+  const base = `${fmt1(o.lengthM / 1000)} km · ${signed(o.avgGradePct, 1)} %`;
+  return { arrow: turnArrow(o.turnDeg), name: o.name, meta: base + climb, base, climb };
 }

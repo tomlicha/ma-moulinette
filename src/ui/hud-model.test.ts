@@ -208,7 +208,13 @@ describe('junctionLabel', () => {
   const opt = { edgeId: 'col', forward: true, onCourse: true, name: 'Le Col', lengthM: 6370, avgGradePct: 5.6, climbM: 357.4, turnDeg: -70, turn: 'left' as const };
 
   it('donne la flèche, le nom et le résumé de la route', () => {
-    expect(junctionLabel(opt)).toEqual({ arrow: '←', name: 'Le Col', meta: '6,4 km · +5,6 % · +357 m' });
+    expect(junctionLabel(opt)).toEqual({ arrow: '←', name: 'Le Col', meta: '6,4 km · +5,6 % · +357 m', base: '6,4 km · +5,6 %', climb: ' · +357 m' });
+  });
+
+  it('sépare la montée du reste : le téléphone la laisse à la carte de l’encart', () => {
+    const l = junctionLabel(opt);
+    expect(l.base + l.climb).toBe(l.meta);
+    expect(junctionLabel({ ...opt, climbM: 4 })).toMatchObject({ base: '6,4 km · +5,6 %', climb: '' });
   });
 
   it('une flèche par direction, et pas de montée sur une descente', () => {

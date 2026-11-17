@@ -281,6 +281,8 @@ export class RideHud {
       this.upMax = !compact ? UP_ITEMS : h >= COMPACT_TALL_PX ? UP_ITEMS_COMPACT_TALL : UP_ITEMS_COMPACT;
       const s = Math.max(Math.min(w / REF_W, h / REF_H), compact ? COMPACT_SCALE : 0);
       root.style.setProperty('--hud-s', String(s));
+      // L'encart des coureurs et de la carte (sortie.css) grandit avec le HUD au-delà de 1280 × 720, sans jamais rétrécir.
+      document.documentElement.style.setProperty('--near-s', String(Math.max(1, s)));
       // Petite fenêtre d'ordinateur (portable 1024 × 640) : les widgets, à 90 % de la scène, auraient des libellés de
       // 16 px de scène sous 12 px à l'écran. On les grossit jusqu'à 100 % pour garder 12 px. Téléphone : `.hud.compact`.
       if (compact) root.style.removeProperty('--hud-k');
@@ -365,6 +367,9 @@ export class RideHud {
       row.className = 'hud-junction-opts';
       j.options.forEach((o, idx) => {
         const l = junctionLabel(o);
+        // La montée est dans son propre élément : le téléphone la laisse à la carte de l'encart (hud.css).
+        const meta = Object.assign(document.createElement('span'), { className: 'meta' });
+        meta.append(Object.assign(document.createElement('span'), { className: 'm-base', textContent: l.base }), Object.assign(document.createElement('span'), { className: 'm-climb', textContent: l.climb }));
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'hud-junction-opt';
@@ -372,7 +377,7 @@ export class RideHud {
         b.append(
           Object.assign(document.createElement('span'), { className: 'arrow', textContent: l.arrow }),
           Object.assign(document.createElement('span'), { className: 'nm', textContent: l.name }),
-          Object.assign(document.createElement('span'), { className: 'meta', textContent: l.meta }),
+          meta,
         );
         b.addEventListener('click', () => this.onChoose?.(idx));
         row.append(b);

@@ -224,10 +224,12 @@ html[data-notch='right'] .hud.compact { left: 0; }
  * Carrefour, version téléphone : un bandeau d'une ligne par route, calé comme les autres panneaux. À droite du panneau de
  * gauche et jusqu'au bord de la fenêtre (même marge que le bandeau du bas), sous le panneau central, pour ne pas recouvrir
  * le cycliste. La distance est une pastille à cheval sur le bord du haut : elle ne prend pas de place. Flèche et nom sur la
- * première ligne, le résumé en dessous sur toute la largeur : il ne passe plus à la ligne.
+ * première ligne, le résumé en dessous sur toute la largeur : il ne passe plus à la ligne. Le bandeau s'arrête 6 px avant
+ * l'encart des coureurs et de la carte (`--near-clear`, sortie.css), qui porte la montée de chaque route : le résumé n'a
+ * plus que la longueur et la pente.
  */
 .hud.compact .hud-junction {
-  left: calc(var(--hud-m) - var(--hud-ox, 0px) + 264px); right: calc(var(--hud-m) - var(--hud-ox, 0px)); width: auto;
+  left: calc(var(--hud-m) - var(--hud-ox, 0px) + 264px); right: calc(var(--hud-m) - var(--hud-ox, 0px) + var(--near-clear, 0px) / var(--hud-s, 1)); width: auto;
   top: calc(172px + var(--hud-m) - var(--hud-oy, 0px)); padding: 5px 6px; gap: 0;
 }
 .hud.compact .hud-message:not([hidden]) ~ .hud-junction { top: calc(252px + var(--hud-m) - var(--hud-oy, 0px)); }
@@ -240,6 +242,7 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud.compact .hud-junction-opt { min-height: 59px; padding: 3px 8px; column-gap: 6px; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; }
 .hud.compact .hud-junction-opt .arrow { grid-row: 1; grid-column: 1; font-size: 24px; }
 .hud.compact .hud-junction-opt .nm { grid-row: 1; grid-column: 2; font-size: 18px; }
+.hud.compact .hud-junction-opt .m-climb { display: none; }
 .hud.compact .hud-junction-opt .meta { grid-row: 2; grid-column: 1 / -1; font-size: 16px; white-space: nowrap; }
 /* Bandeau du bas : large comme la fenêtre, collé en bas ; en séance, le profil seul, les temps en étiquette au-dessus. */
 .hud.compact .hud-bottom { left: calc(640px - var(--hud-bw) / 2); width: var(--hud-bw); top: auto; bottom: calc(var(--hud-m) - var(--hud-oy, 0px)); height: auto; padding: 8px 18px; }

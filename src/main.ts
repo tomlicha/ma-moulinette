@@ -49,7 +49,7 @@ import { setupCourseMap } from './ui/course-map';
 import { setupAccount } from './ui/account-chip';
 import { WorldClient } from './net/world-client';
 import { crowdLine, RiderTags } from './ui/rider-tags';
-import { NearRiders } from './ui/near-riders';
+import { RidePanel } from './ui/ride-panel';
 import { draftFrom } from './sim/draft';
 import { controlModes } from './ui/radar-model';
 import { ClimbCounter, PowerAverage } from './ui/hud-model';
@@ -1207,6 +1207,9 @@ function renderHud() {
     heartRateConnected: roleState.hr === 'connected',
     ...(ride && lastRide ? { junction: journey.pendingJunction(lastRide.distanceM) } : {}),
   });
+  // Encart : la carte suit le coureur ; elle passe seule au premier plan 250 m avant un carrefour (docs/design/sortie.md).
+  const at = ride && lastRide ? lastRide.distanceM : 0;
+  ridePanel.update({ distanceM: at, pending: ride && lastRide ? journey.pendingJunction(at) : undefined });
 }
 setInterval(renderHud, 250);
 // Choix au carrefour : touche du HUD, ou flèches gauche et droite pour glisser la sélection d'une route à l'autre.
@@ -1257,7 +1260,7 @@ async function buildView() {
   v.onLost = onGpuLost;
   v.setOthers(() => world.riders());
   v.onTags = (tags) => riderTags.set(tags);
-  v.onNearby = (n) => nearRiders.set(n, ride ? currentDraft : 0);
+  v.onNearby = (n) => ridePanel.setNearby(n, ride ? currentDraft : 0);
   v.onStats = (s) => {
     $('view-stats').textContent =
       `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +
@@ -1400,7 +1403,7 @@ const account = setupAccount({
   },
 });
 const riderTags = new RiderTags($('rider-tags'));
-const nearRiders = new NearRiders($('near'));
+const ridePanel = new RidePanel($('near'), { journey, prefs });
 const crowd = $('crowd');
 /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
 function showCrowd() {
@@ -1410,7 +1413,7 @@ function showCrowd() {
   crowd.textContent = s === 'online' ? crowdLine(world.population) : s === 'connecting' ? 'Connexion…' : s === 'replaced' ? 'Connecté sur un autre appareil' : s === 'outdated' ? 'Mise à jour : recharger la page' : 'Connexion perdue, nouvel essai…';
   if (s !== 'online') {
     riderTags.clear();
-    nearRiders.clear();
+    ridePanel.clearNearby();
   }
 }
 world.onStatus = (s) => {
