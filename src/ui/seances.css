@@ -371,4 +371,20 @@ kbd { font: inherit; font-size: .75rem; border: 1px solid var(--ctl-line); borde
   .lib-text strong { font-size: .85rem; }
   .lib-text small { font-size: .75rem; }
 }
+/* Tablette tactile (iPad) : cibles d'au moins 44 px, le minimum d'Apple, pour des doigts moites pendant la séance. La place
+   ne manque pas : on grandit les vraies boîtes, et une marge invisible seulement pour les onglets du profil. */
+@media (pointer: coarse) and (min-width: 700px) and (min-height: 600px) {
+  .chip { height: 44px; }
+  .chip.icon { width: 44px; }
+  .bb-step { width: 44px; min-height: 44px; }
+  .sh-tab { position: relative; height: 34px; }
+  .sh-tab::before { content: ''; position: absolute; inset: -5px -2px; }
+  .ed-inspector .actions { gap: 6px; }
+  .ed-inspector .actions button { min-height: 44px; }
+  .stepper input { min-width: 44px; min-height: 44px; }
+  .dur input { min-height: 44px; }
+  .ed-desc input { padding: 8px 0; min-height: 44px; }
+  .lib-search { height: 44px; }
+  #lib-new, #lib-import-btn { min-height: 44px; }
+}
 @media (prefers-reduced-motion: reduce) { .sea > .sea-lib { transition: none; } }

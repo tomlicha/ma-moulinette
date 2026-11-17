@@ -1,3 +1,4 @@
+import { browserUa, noBluetoothStatus } from './bluetooth-support';
 import { Emitter } from './emitter';
 import { errMsg } from '../util/errors';
 
@@ -57,7 +58,7 @@ export abstract class GattDevice extends Emitter {
 
   async connect(nameHint?: string): Promise<void> {
     if (!webBluetoothAvailable()) {
-      const msg = 'Web Bluetooth indisponible (Chrome ou Edge requis, en HTTPS ou sur localhost)';
+      const msg = noBluetoothStatus(browserUa());
       this.emit('state', 'error', msg);
       throw new Error(msg);
     }

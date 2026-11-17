@@ -202,3 +202,5 @@ button[aria-disabled='true'] { opacity: .45; cursor: help; }
   .pill { font-size: .8rem; padding: 2px 8px; }
   h1 { font-size: 1.1rem; margin: .4em 0; }
 }
+/* Multitâche (Split View, fenêtre réduite) : l'appareil est déjà couché, l'icône ne tourne pas. */
+.rotate-widen .rotate-phone { animation: none; transform: rotate(-90deg); }

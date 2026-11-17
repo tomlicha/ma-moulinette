@@ -15,6 +15,13 @@ const OAUTH_COOKIE = 'mm_oauth';
 export const CSRF_HEADER = 'x-zwift2';
 export const SESSION_TTL_S = 30 * 24 * 3600;
 const OAUTH_TTL_S = 600;
+/**
+ * Coquille native : la connexion Strava se fait dans une session d'authentification système (Google refuse les WebView
+ * intégrées), dont les cookies ne sont pas ceux de la WebView. Le retour rend donc à l'app un ticket à usage unique,
+ * qu'elle échange contre sa session (`redeem`). Le ticket n'arrive qu'à la session qui a ouvert la connexion.
+ */
+export const NATIVE_RETURN = 'moulinette://auth';
+const TICKET_TTL_S = 120;
 export const NAME_MAX = 32;
 
 export interface User {
@@ -163,8 +170,9 @@ export function createAccounts(opts: AccountOptions) {
 
   async function callback(req: Request, url: URL): Promise<Response> {
     if (!cfg) return page('La connexion Strava n’est pas configurée.', 503);
-    const [expected = '', popupFlag] = (readCookie(req, OAUTH_COOKIE) ?? '').split('.');
-    const popup = popupFlag === 'p';
+    const [expected = '', flag] = (readCookie(req, OAUTH_COOKIE) ?? '').split('.');
+    const popup = flag === 'p';
+    const native = flag === 'n';
     const clear = cookie(OAUTH_COOKIE, '', 0, AUTH_PREFIX);
     const state = url.searchParams.get('state') ?? '';
     if (!expected || !safeEqual(state, expected)) {
@@ -177,7 +185,7 @@ export function createAccounts(opts: AccountOptions) {
       );
     }
     const code = url.searchParams.get('code');
-    if (url.searchParams.get('error') || !code) return redirect('/', [clear]);
+    if (url.searchParams.get('error') || !code) return redirect(native ? `${NATIVE_RETURN}?error=denied` : '/', [clear]);
 
     let tokens: Tokens;
     try {
@@ -195,6 +203,11 @@ export function createAccounts(opts: AccountOptions) {
       (await store.userByIdentity('strava', tokens.athleteId)) ??
       (await store.createUser('strava', tokens.athleteId, suggestedName(tokens), false));
     await store.saveStravaTokens(user.id, tokens);
+    if (native) {
+      const ticket = randomToken();
+      await store.createSession(await sha256Hex(ticket), user.id, now() + TICKET_TTL_S);
+      return redirect(`${NATIVE_RETURN}?ticket=${ticket}`, [clear]);
+    }
     const session = await openSession(user.id);
     if (!popup) return redirect('/', [clear, session]);
     const res = new Response(
@@ -225,13 +238,28 @@ export function createAccounts(opts: AccountOptions) {
       const state = randomToken(16);
       // `?popup=1` : ouverte dans une fenêtre par l'envoi à Strava (accès Strava à renouveler) ; elle se refermera seule.
       const popup = url.searchParams.get('popup') === '1';
+      // `?native=1` : ouverte par la coquille native, dans une session d'authentification système (retour par ticket).
+      const native = url.searchParams.get('native') === '1' && !popup;
       // `?via=app` : passer par l'app Strava (Android). Jamais pour la fenêtre : l'app rendrait la main au navigateur, pas à elle.
-      const viaApp = url.searchParams.get('via') === 'app' && !popup;
+      const viaApp = url.searchParams.get('via') === 'app' && !popup && !native;
       const to = authorizeUrl(cfg.clientId, `${originOf(req)}${AUTH_PREFIX}callback`, state, viaApp);
-      return redirect(to, [cookie(OAUTH_COOKIE, popup ? `${state}.p` : state, OAUTH_TTL_S, AUTH_PREFIX)]);
+      const flagged = popup ? `${state}.p` : native ? `${state}.n` : state;
+      return redirect(to, [cookie(OAUTH_COOKIE, flagged, OAUTH_TTL_S, AUTH_PREFIX)]);
     }
 
     if (route === 'callback' && req.method === 'GET') return callback(req, url);
+
+    if (route === 'redeem') {
+      // Ticket rendu à la coquille native par la connexion Strava : à usage unique, échangé contre une session.
+      if (!mutating(req)) return json({ error: 'forbidden' }, 403);
+      const body = (await req.json().catch(() => ({}))) as { ticket?: unknown };
+      const ticket = typeof body.ticket === 'string' && /^[0-9a-f]{64}$/.test(body.ticket) ? body.ticket : undefined;
+      const hash = ticket && (await sha256Hex(ticket));
+      const user = hash ? await store.userBySession(hash, now()) : undefined;
+      if (!hash || !user) return json({ error: 'invalid_ticket' }, 400);
+      await store.deleteSession(hash);
+      return json({ user }, 200, { 'set-cookie': await openSession(user.id) });
+    }
 
     if (route === 'profile') {
       if (!mutating(req)) return json({ error: 'forbidden' }, 403);

@@ -1,5 +1,6 @@
 import './account.css';
-import { devLogin, fetchAccount, loginUrl, logout, prefersStravaApp, saveDisplayName, type AccountState, type User } from '../net/account';
+import { devLogin, fetchAccount, loginUrl, logout, nativeStravaLogin, prefersStravaApp, saveDisplayName, type AccountState, type User } from '../net/account';
+import { isNativeShell, Moulinette } from '../native/shell';
 import type { WorldStatus } from '../net/world-client';
 
 /**
@@ -142,6 +143,18 @@ export function setupAccount(o: {
       ${s.methods.dev ? `<button type="button" class="secondary account-dev">Connexion de développement</button>` : ''}`;
     // Le chemin se décide au toucher : par l'app Strava sur Android, sauf si le dernier essai par l'app n'a rien donné.
     el.querySelector<HTMLAnchorElement>('.strava-connect')?.addEventListener('click', (e) => {
+      // Coquille native : session d'authentification système, la WebView ne quitte pas l'application.
+      if (isNativeShell()) {
+        e.preventDefault();
+        o.log('compte : connexion Strava par la session système');
+        void nativeStravaLogin((x) => Moulinette.authenticate(x))
+          .then((ok) => {
+            o.log(ok ? 'compte : connecté avec Strava' : 'compte : connexion Strava annulée');
+            if (ok) void refresh();
+          })
+          .catch((err: unknown) => o.log(`compte : connexion Strava impossible (${err instanceof Error ? err.message : err})`));
+        return;
+      }
       const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
       const viaApp = prefersStravaApp({ userAgent: navigator.userAgent, platform: nav.userAgentData?.platform }, readAppTry(), Date.now());
       writeAppTry(viaApp ? Date.now() : undefined);

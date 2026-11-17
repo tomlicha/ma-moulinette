@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Adresse de l'application, écrite par tools/ios/sync.mjs dans la copie de la coquille iOS. -->
+  <meta name="app-url" content="" />
+  <title>Ma Moulinette, hors ligne</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #f4ede3; color: #14171a; font: 16px/1.45 system-ui, -apple-system, sans-serif; }
+    main { width: min(440px, calc(100vw - 32px)); padding: 26px 28px; border-radius: 24px; background: #fff; box-shadow: 0 10px 28px rgb(80 50 20 / .14); text-align: center; }
+    h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    p { margin: 0 0 18px; color: #4f5865; }
+    button { min-height: 48px; padding: 0 22px; border: 0; border-radius: 14px; background: #c2410c; color: #fff; font: 600 1rem system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body>
+  <!-- Coquille native, premier lancement sans réseau : l'application n'a pas encore été gardée pour le hors-ligne. -->
+  <main>
+    <h1>Pas de connexion</h1>
+    <p>Ma Moulinette a besoin d’Internet pour son premier lancement. Ensuite, elle s’ouvre aussi hors ligne.</p>
+    <button type="button" id="retry">Réessayer</button>
+  </main>
+  <script>
+    const url = document.querySelector('meta[name="app-url"]').content;
+    const retry = () => (url ? location.replace(url) : location.reload());
+    document.getElementById('retry').addEventListener('click', retry);
+    addEventListener('online', retry);
+  </script>
+</body>
+</html>

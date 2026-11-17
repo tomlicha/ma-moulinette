@@ -1,0 +1,16 @@
+/* Sélecteur d'appareil Bluetooth (coquille native) : même carte que la fiche du coureur. */
+.chooser-card h2 { margin: 2px 0 0; font: 700 2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.chooser-status { margin: 0; color: var(--muted); }
+.chooser-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: min(320px, 50dvh); overflow-y: auto; }
+.chooser-list:empty { display: none; }
+.chooser-item { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border: 1px solid var(--ctl-line); border-radius: 14px; background: var(--raised); color: var(--fg); font: 600 1.05rem Barlow, system-ui, sans-serif; text-align: left; box-shadow: none; }
+.chooser-item:hover, .chooser-item:focus-visible { border-color: var(--accent); }
+.chooser-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chooser-signal { display: inline-flex; align-items: flex-end; gap: 3px; height: 16px; flex: none; }
+.chooser-signal i { width: 4px; border-radius: 2px; background: var(--ctl-line); }
+.chooser-signal i:nth-child(1) { height: 6px; }
+.chooser-signal i:nth-child(2) { height: 11px; }
+.chooser-signal i:nth-child(3) { height: 16px; }
+.chooser-signal[data-bars='1'] i:nth-child(-n+1), .chooser-signal[data-bars='2'] i:nth-child(-n+2), .chooser-signal[data-bars='3'] i { background: var(--ok); }
+.chooser-card .row { display: flex; justify-content: flex-end; }
+.chooser-card .row button { min-height: 44px; }

@@ -1,9 +1,13 @@
 import { installNativeBluetooth } from './sensors/native-bluetooth';
+import { isNativeShell, Moulinette } from './native/shell';
+import { createKeepAwake } from './ui/keep-awake';
+import { openDeviceChooser } from './ui/device-chooser';
 import { HeartRateMonitor } from './sensors/heart-rate-monitor';
 import { SensorHub } from './sensors/hub';
 import { SimulatedTrainer } from './sensors/simulator';
 import { WebBluetoothTrainer } from './sensors/web-bluetooth';
 import { webBluetoothAvailable } from './sensors/gatt-device';
+import { browserUa, noBluetoothHint, noBluetoothStatus } from './sensors/bluetooth-support';
 // Vue 3D chargée à la demande (`buildView`) : three.js n'est pas dans le JS du lancement.
 import type { GpuLoss, RideView } from './render/ride-view';
 import { Background } from './render/background';
@@ -56,7 +60,7 @@ import { WorkoutLibrary } from './workout/library';
 import { SAMPLE_WORKOUTS } from './workout/samples';
 
 // Dans la coquille iOS/Android, Web Bluetooth n'existe pas : le pont natif le fournit (sinon, sans effet).
-installNativeBluetooth();
+installNativeBluetooth(openDeviceChooser);
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 setupBlockedHints();
@@ -353,6 +357,16 @@ function setErgActive(on: boolean) {
   if (!on) throttle.reset(); // en sortie, la prochaine mise à jour renvoie la pente du parcours
 }
 
+// Écran allumé tant qu'on est sur la Sortie ou qu'une sortie tourne : pendant une séance ERG, on ne touche pas l'écran.
+const keepAwake = createKeepAwake({
+  native: isNativeShell() ? Moulinette : undefined,
+  wakeLock: (navigator as Navigator & { wakeLock?: Parameters<typeof createKeepAwake>[0]['wakeLock'] }).wakeLock,
+  document,
+  log: (m) => log(m),
+});
+/** Lit l'ancre plutôt que le routeur : appelée aussi avant sa création. */
+const syncAwake = () => void keepAwake.set(location.hash === '#sortie' || !!ride);
+
 function startRide() {
   autoStart = false;
   const massKg = Number(massInput.value) || DEFAULT_RIDER.massKg;
@@ -368,6 +382,7 @@ function startRide() {
   massInput.title = 'La masse se règle avant de démarrer la sortie.';
   setState(currentState, trainer?.name);
   log(`sortie virtuelle démarrée (${massKg} kg)`);
+  syncAwake();
 }
 
 function stopRide(resetTrainer = true) {
@@ -381,6 +396,7 @@ function stopRide(resetTrainer = true) {
   massInput.readOnly = false;
   massInput.title = '';
   log('sortie virtuelle arrêtée');
+  syncAwake();
   if (resetTrainer && currentState === 'connected') void hub.setSimulation({ gradePct: 0 }).catch(() => {});
   setState(currentState, trainer?.name);
 }
@@ -895,6 +911,7 @@ const recap = setupRecap($<HTMLDialogElement>('recap'), {
 
 const router = setupRouter((v) => {
   view?.setActive(v === 'sortie');
+  syncAwake();
   if (v === 'sortie') {
     viewBuild.hurry();
     startViewBuild(); // si le temps mort n'est pas encore venu
@@ -969,7 +986,7 @@ function renderDevices() {
   connectBle.textContent = t ? 'Reconnecter' : 'Rechercher un trainer';
   connectHr.textContent = h ? 'Reconnecter' : 'Rechercher un capteur';
   const bt = webBluetoothAvailable();
-  const noBt = 'Le Bluetooth web n’existe que dans Chrome ou Edge, sur ordinateur ou Android. Ici, seul le trainer simulé est disponible.';
+  const noBt = noBluetoothHint(browserUa());
   const trainerBusy =
     roleState.trainer === 'connected' ? 'Un trainer est déjà connecté : déconnecte-le d’abord pour en changer.' : 'Connexion du trainer en cours…';
   const hrBusy =
@@ -1110,10 +1127,9 @@ function offerRecap(done?: { workout: Workout; ftpW: number }) {
 
 
 if (webBluetoothAvailable()) {
-  $('support').textContent = 'Web Bluetooth disponible.';
+  $('support').textContent = isNativeShell() ? 'Bluetooth disponible.' : 'Web Bluetooth disponible.';
 } else {
-  $('support').textContent =
-    'Web Bluetooth indisponible ici (Chrome ou Edge, en HTTPS ou sur localhost). Le trainer simulé reste utilisable.';
+  $('support').textContent = noBluetoothStatus(browserUa());
 }
 
 const params = new URLSearchParams(location.search);

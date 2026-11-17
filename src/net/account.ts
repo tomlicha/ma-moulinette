@@ -77,3 +77,23 @@ export const logout = (f: Fetch = fetch) => post<unknown>('logout', {}, f).then(
 
 /** Connexion de développement, par simple nom. */
 export const devLogin = (name: string, f: Fetch = fetch) => post<{ user: User }>('dev-login', { name }, f).then((r) => r.user);
+
+/** Ouvre une session d'authentification système et rend l'adresse de retour (plugin de la coquille native). */
+export type SystemAuth = (o: { url: string; callbackScheme: string }) => Promise<{ url: string }>;
+
+/**
+ * Coquille native : connexion Strava dans une session d'authentification système (Google refuse les WebView intégrées),
+ * puis échange du ticket rendu contre la session de la WebView. `false` si la connexion est annulée ou refusée.
+ */
+export async function nativeStravaLogin(auth: SystemAuth, origin = location.origin, f: Fetch = fetch): Promise<boolean> {
+  let back: string;
+  try {
+    ({ url: back } = await auth({ url: `${origin}${AUTH}login?native=1`, callbackScheme: 'moulinette' }));
+  } catch {
+    return false; // fermée par le coureur
+  }
+  const ticket = new URL(back).searchParams.get('ticket');
+  if (!ticket) return false;
+  await post<{ user: User }>('redeem', { ticket }, f);
+  return true;
+}

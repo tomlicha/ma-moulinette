@@ -265,3 +265,46 @@ describe("connexion par l'app Strava (Android)", () => {
     expect(prefersStravaApp(android, now - APP_RETRY_MS - 1, now)).toBe(true);
   });
 });
+
+describe('coquille native : connexion dans une session d’authentification système', () => {
+  async function nativeSignIn(accounts: ReturnType<typeof setup>['accounts'], query = 'code=abc') {
+    const login = (await accounts.handle(new Request(`${ORIGIN}/api/auth/login?native=1`)))!;
+    const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+    const oauth = cookieValue(login, 'mm_oauth')!;
+    expect(oauth).toBe(`${state}.n`);
+    return (await accounts.handle(new Request(`${ORIGIN}/api/auth/callback?state=${state}&${query}`, { headers: { cookie: `mm_oauth=${oauth}` } })))!;
+  }
+
+  it('rend un ticket à l’app, sans session dans le navigateur système ; le ticket ouvre une session une seule fois', async () => {
+    const { accounts } = setup();
+    const cb = await nativeSignIn(accounts);
+    const to = new URL(cb.headers.get('location')!);
+    expect(`${to.protocol}//${to.host}`).toBe('moulinette://auth');
+    expect(cookieValue(cb, SESSION_COOKIE)).toBeUndefined();
+    const ticket = to.searchParams.get('ticket')!;
+    expect(ticket).toMatch(/^[0-9a-f]{64}$/);
+
+    const res = (await accounts.handle(post('/api/auth/redeem', { ticket })))!;
+    expect(res.status).toBe(200);
+    const session = cookieValue(res, SESSION_COOKIE)!;
+    expect(session).toMatch(/^[0-9a-f]{64}$/);
+    expect(session).not.toBe(ticket);
+    const me = await (await accounts.handle(new Request(`${ORIGIN}/api/auth/me`, { headers: { cookie: `${SESSION_COOKIE}=${session}` } })))!.json();
+    expect(me.user).toBeTruthy();
+    // Rejoué : refusé.
+    expect((await accounts.handle(post('/api/auth/redeem', { ticket })))!.status).toBe(400);
+  });
+
+  it('refus chez Strava : l’app est prévenue', async () => {
+    const { accounts } = setup();
+    const cb = await nativeSignIn(accounts, 'error=access_denied');
+    expect(cb.headers.get('location')).toBe('moulinette://auth?error=denied');
+  });
+
+  it('l’échange exige l’en-tête anti-CSRF et un ticket bien formé', async () => {
+    const { accounts } = setup();
+    expect((await accounts.handle(post('/api/auth/redeem', { ticket: 'a'.repeat(64) }, undefined, {})))!.status).toBe(403);
+    expect((await accounts.handle(post('/api/auth/redeem', { ticket: 'pas un ticket' })))!.status).toBe(400);
+    expect((await accounts.handle(post('/api/auth/redeem', { ticket: 'a'.repeat(64) })))!.status).toBe(400);
+  });
+});

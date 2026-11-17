@@ -1,6 +1,8 @@
 import { RideRecorder, type Recording } from './recorder';
 import { setBlocked } from '../ui/blocked';
 import { getLoginUrl, getOwnerKey, getStatus, sendToStrava, setOwnerKey, waitForLogin, type StravaStatus } from './strava/client';
+import { nativeStravaLogin } from '../net/account';
+import { isNativeShell, Moulinette } from '../native/shell';
 import type { SensorHub } from '../sensors/hub';
 import type { ConnectionState } from '../sensors/types';
 import type { RideSnapshot } from '../sim/ride';
@@ -209,14 +211,21 @@ export function setupExport(opts: {
       }
     }
     const needsLogin = strava?.configured && !strava.connected;
-    const popup = needsLogin ? window.open('', 'strava-login', 'width=520,height=720') : null;
+    // Coquille native : pas de fenêtre, une session d'authentification système (voir `nativeStravaLogin`).
+    const native = isNativeShell();
+    const popup = needsLogin && !native ? window.open('', 'strava-login', 'width=520,height=720') : null;
     busy = true;
     refreshButtons();
     try {
       if (popup) popup.location.href = await getLoginUrl();
       const out = await prepare(name);
       if (!out) return fail('rien à envoyer', false);
-      if (needsLogin) {
+      if (needsLogin && native) {
+        await nativeStravaLogin((x) => Moulinette.authenticate(x));
+        await refreshStrava();
+        if (!strava?.connected) return fail('connexion non terminée, la sortie est gardée en mémoire pour un nouvel essai', true);
+        log(`Strava : connecté${strava.athlete ? ` (${strava.athlete})` : ''}`);
+      } else if (needsLogin) {
         if (!popup) return fail('fenêtre de connexion bloquée par le navigateur, autoriser les fenêtres puis réessayer', true);
         // Le succès se lit dans le statut du relais, pas dans le message de la fenêtre : Strava peut couper `window.opener`.
         await waitForLogin(popup);
