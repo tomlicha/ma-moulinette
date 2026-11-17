@@ -4,7 +4,7 @@ import '@fontsource/barlow/700.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './home.css';
-import { radarTag, type RadarDevice, type RadarRole, type RadarTone } from './radar-model';
+import { radarTag, type RadarDevice, type RadarRole } from './radar-model';
 import portraitFallback from '../assets/rider-portrait.jpg'; // repli tant que le portrait n'est pas rendu
 
 /** `mini` : tuile de l'accueil (rôle et nom). `large` : tuile de l'écran Appareils, avec l'état en plus. */

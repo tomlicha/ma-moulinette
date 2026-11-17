@@ -1,6 +1,5 @@
 import {
   BLOCK_LABEL,
-  blockDurationS,
   blocksToWorkout,
   defaultBlock,
   toZwo,

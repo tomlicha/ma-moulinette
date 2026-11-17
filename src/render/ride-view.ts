@@ -161,6 +161,7 @@ export class RideView {
     performance.mark('ride:renderer');
     // Perte du GPU pendant la construction : on finit quand même (les appels sur un moteur perdu ne font rien), puis on
     // échoue, pour que l'appelant reprenne sur un canevas neuf. Après, c'est la vue qui prévient (`onLost`).
+    // eslint-disable-next-line prefer-const -- lu par `onDeviceLost`, affecté après la construction du monde
     let view: RideView | undefined;
     let lostEarly: GpuLoss | undefined;
     const base = renderer.onDeviceLost.bind(renderer);
@@ -249,7 +250,7 @@ export class RideView {
     this.resizeObserver.disconnect();
     this.others.dispose();
     removeEventListener('resize', this.onWindowResize);
-    this.renderer.dispose();
+    void this.renderer.dispose();
   }
 
   private size = { w: 0, h: 0 };

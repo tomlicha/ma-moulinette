@@ -187,7 +187,6 @@ function setState(s: ConnectionState, detail?: string) {
   stateEl.textContent = stateLabel(s);
   stateEl.title = detail ?? '';
   const connected = s === 'connected';
-  const busy = s === 'connecting' || connected;
   // Les boutons de connexion sont réglés par renderDevices, plus bas.
   setBlocked(disconnectBtn, connected ? undefined : 'Aucun trainer connecté.');
   setBlocked(
@@ -601,6 +600,8 @@ const readFtp = () => (Number(woFtp.value) >= 50 ? Number(woFtp.value) : 200);
 const readMass = () => (Number(massInput.value) >= MASS_LIMITS.min ? Number(massInput.value) : DEFAULT_RIDER.massKg);
 
 /** Appelé par l'écran Séances quand « Rouler » doit se remettre à jour (affecté une fois l'éditeur créé). */
+// Affecté plus bas, une fois l'éditeur créé : lu avant par des fonctions déjà déclarées.
+// eslint-disable-next-line prefer-const
 let refreshEditorRide: (() => void) | undefined;
 
 /** Ce qui empêche de démarrer une séance, hors le choix de la séance : séance déjà en cours, trainer absent ou sans ERG. */

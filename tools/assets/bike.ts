@@ -593,7 +593,6 @@ function cassette(b: MeshBuilder) {
 
 function crankset(): MeshBuilder {
   const b = new MeshBuilder();
-  const O = V(0, 0, 0);
   // Deux plateaux à grosses dents (une sur deux d'un vrai plateau) : faces noires, denture claire.
   for (const [x, rMid, w, teeth] of [[-0.072, 0.094, 0.024, 26], [-0.063, 0.064, 0.018, 18]] as const) {
     const L = 2 * Math.PI * rMid;

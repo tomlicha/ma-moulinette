@@ -49,6 +49,6 @@ export async function renderRiderPortrait(size: number): Promise<Blob> {
     if (!blob) throw new Error('portrait du coureur : encodage impossible');
     return blob;
   } finally {
-    renderer.dispose();
+    void renderer.dispose();
   }
 }
