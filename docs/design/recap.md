@@ -62,7 +62,7 @@ Même condition que les autres écrans : `(pointer: coarse) and (orientation: la
 
 - Nom proposé : « Ma Moulinette - » puis la séance, ou le parcours. Il est modifiable avant l'envoi.
 - « Continuer à rouler » devient « **Reprendre la sortie** » quand la sortie a été arrêtée ; « **Terminer, retour à l'accueil** » est alors proposé dans tous les états (sinon, fermer obligerait à relancer la sortie).
-- L'identifiant externe (`zwift2-<début>`) évite un doublon chez Strava si l'envoi est refait depuis le menu.
+- L'identifiant externe (`mamoulinette-<début>`) évite un doublon chez Strava si l'envoi est refait depuis le menu.
 
 ## Données
 

@@ -1,7 +1,7 @@
 # Variables du Worker en local (`npm run dev:api`) : copier ce fichier en `.dev.vars`, ignoré par git.
 # Connexion par simple nom, sans Strava : jamais en ligne.
 DEV_LOGIN=1
-# La page est servie par Vite (5173) qui relaie /api/auth et /api/world vers wrangler dev (8787).
+# La page est servie par Vite (5173) qui relaie /api/auth, /api/sync, /api/strava et /api/world vers wrangler dev (8787).
 PUBLIC_ORIGIN=http://localhost:5173
 # Pour essayer la vraie connexion Strava en local (« Authorization Callback Domain » = localhost) :
 # STRAVA_CLIENT_ID=

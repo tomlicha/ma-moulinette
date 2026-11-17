@@ -1,7 +1,7 @@
 import { CHAINRING_LIMITS, VIRTUAL_GEARS, clampGear, nearestGear, realRatio } from '../sim/virtual-gears';
 
-const COG_KEY = 'zwift2.cog';
-const RING_KEY = 'zwift2.chainring';
+const COG_KEY = 'mamoulinette.cog';
+const RING_KEY = 'mamoulinette.chainring';
 
 interface Store {
   getItem(k: string): string | null;

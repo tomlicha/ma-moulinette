@@ -30,7 +30,7 @@ function riderPortraitKey(): string {
  */
 function logReceiver(env: Record<string, string>): Plugin {
   return {
-    name: 'zwift2-log-receiver',
+    name: 'mamoulinette-log-receiver',
     async configureServer(server) {
       await mkdir('.logs', { recursive: true });
       const receiver = createLogReceiver({
@@ -72,11 +72,12 @@ export default defineConfig(({ mode }) => ({
     serviceWorker(),
   ],
   server: {
-    // Comptes, envoi à Strava et salle temps réel : servis par le Worker lancé à côté (`npm run dev:api`, wrangler dev
+    // Comptes, données synchronisées, envoi à Strava et salle temps réel : servis par le Worker lancé à côté (`npm run dev:api`, wrangler dev
     // sur le port 8787), comme en ligne. Sans lui, l'application tourne en mode sans compte (export FIT seulement).
     proxy: {
       '/api/auth': 'http://localhost:8787',
       '/api/strava': 'http://localhost:8787',
+      '/api/sync': 'http://localhost:8787',
       '/api/world': { target: 'ws://localhost:8787', ws: true },
     },
   },

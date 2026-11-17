@@ -7,12 +7,13 @@
  * données d'un athlète ; on ne montre donc ni photo ni activité Strava.
  */
 import { authorizeUrl, exchangeCode, StravaError, type ClientConfig, type Fetch, type Tokens } from '../export/strava/api';
+import { hasCsrfHeader } from '../net/csrf';
 
 export const AUTH_PREFIX = '/api/auth/';
 export const SESSION_COOKIE = 'mm_session';
 const OAUTH_COOKIE = 'mm_oauth';
-/** Même en-tête anti-CSRF que la passerelle Strava : un autre site ne peut pas l'envoyer sans préalerte CORS. */
-export const CSRF_HEADER = 'x-zwift2';
+/** Même en-tête anti-CSRF que la passerelle Strava et la synchronisation (src/net/csrf.ts). */
+export { CSRF_HEADER } from '../net/csrf';
 export const SESSION_TTL_S = 30 * 24 * 3600;
 const OAUTH_TTL_S = 600;
 /**
@@ -148,7 +149,7 @@ export function createAccounts(opts: AccountOptions) {
   }
 
   /** Requête qui modifie quelque chose : même origine et en-tête anti-CSRF. */
-  const mutating = (req: Request) => req.method === 'POST' && sameOrigin(req) && !!req.headers.get(CSRF_HEADER);
+  const mutating = (req: Request) => req.method === 'POST' && sameOrigin(req) && hasCsrfHeader(req);
 
   async function openSession(userId: string): Promise<string> {
     const token = randomToken();

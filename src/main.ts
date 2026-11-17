@@ -32,7 +32,7 @@ import { ALL_PROTOCOLS, PROTOCOL_LABEL, type ControlProtocol } from './sensors/t
 import { formatDuration } from './ui/duration';
 import { setBlocked, setupBlockedHints, type BlockReason } from './ui/blocked';
 import { setupRouter } from './ui/router';
-import { MASS_LIMITS, setupRiderProfile } from './ui/rider-profile';
+import { FTP_LIMITS, MASS_LIMITS, setupRiderProfile } from './ui/rider-profile';
 import { setupWheel } from './ui/wheel-picker';
 import { setupAppShell } from './ui/app-shell';
 import { setupWorkoutEditor } from './ui/workout-editor';
@@ -58,6 +58,18 @@ import { blocksToWorkout } from './workout/blocks';
 import { BlockLibrary } from './workout/block-library';
 import { WorkoutLibrary } from './workout/library';
 import { SAMPLE_WORKOUTS } from './workout/samples';
+import { createSyncClient, type SyncSource } from './sync/client';
+import { SyncJournal } from './sync/journal';
+import type { SyncItem, SyncSetting } from './sync/protocol';
+import { blockSource, workoutSource } from './sync/sources';
+import { migrateLegacyKeys } from './util/legacy-storage';
+
+// Données gardées sous l'ancien préfixe `zwift2.` : reprises sous `mamoulinette.` avant toute lecture.
+try {
+  migrateLegacyKeys(localStorage);
+} catch {
+  // stockage inaccessible : rien à reprendre
+}
 
 // Dans la coquille iOS/Android, Web Bluetooth n'existe pas : le pont natif le fournit (sinon, sans effet).
 installNativeBluetooth(openDeviceChooser);
@@ -95,8 +107,10 @@ const hub = new SensorHub();
 let trainer: TrainerAdapter | undefined;
 
 /** Protocole de pilotage imposé depuis l'aide de l'écran Appareils ; vide = choix automatique selon le modèle. */
-const PROTOCOL_KEY = 'zwift2.trainerProtocol';
+const PROTOCOL_KEY = 'mamoulinette.trainerProtocol';
 const prefs = browserStore();
+/** Journal de synchronisation avec le compte : FTP, masse, séances et blocs y notent chaque modification (src/sync/). */
+const syncJournal = new SyncJournal(prefs);
 const protocolSelect = $<HTMLSelectElement>('trainer-protocol');
 const savedProtocol = prefs.getItem(PROTOCOL_KEY) as ControlProtocol | null;
 protocolSelect.value = savedProtocol && ALL_PROTOCOLS.includes(savedProtocol) ? savedProtocol : '';
@@ -543,7 +557,7 @@ const coursePicker = setupCoursePicker({
   root: $('course-options'),
   network: COL_DES_ERABLES,
   store: prefs,
-  storeKey: 'zwift2.course',
+  storeKey: 'mamoulinette.course',
   onSelect: (course) => {
     $('home-title').textContent = course.name;
     $('home-desc').textContent = course.description;
@@ -573,8 +587,8 @@ setupHomeBackground($('dev-scenes'));
 const NO_WORKOUT = "Aucune séance choisie : choisis-en une sur l'accueil.";
 const PROFILE_W = 1000;
 const PROFILE_H = 120;
-const FTP_KEY = 'zwift2.ftp';
-const MASS_KEY = 'zwift2.mass';
+const FTP_KEY = 'mamoulinette.ftp';
+const MASS_KEY = 'mamoulinette.mass';
 
 const follower = new ErgFollower();
 let workout: Workout | undefined;
@@ -589,9 +603,9 @@ let woSending = false;
 let woHoldUntil = 0;
 
 try {
-  const saved = Number(localStorage.getItem(FTP_KEY));
-  if (saved >= 50) woFtp.value = String(saved);
-  const savedMass = Number(localStorage.getItem(MASS_KEY));
+  const saved = Number(prefs.getItem(FTP_KEY));
+  if (saved >= FTP_LIMITS.min) woFtp.value = String(saved);
+  const savedMass = Number(prefs.getItem(MASS_KEY));
   if (savedMass >= MASS_LIMITS.min && savedMass <= MASS_LIMITS.max) massInput.value = String(savedMass);
 } catch {
   // stockage indisponible (navigation privée) : on garde la valeur par défaut
@@ -812,22 +826,29 @@ homeRideBtn.addEventListener('click', () => {
   courseDialog.showModal();
   $<HTMLButtonElement>('course-go').focus();
 });
-massInput.addEventListener('change', () => {
+/** Garde le réglage sur l'appareil (`undefined` : revient à la valeur par défaut). */
+function storeSetting(key: string, v: number | undefined) {
   try {
-    localStorage.setItem(MASS_KEY, String(readMass()));
+    if (v === undefined) prefs.removeItem(key);
+    else prefs.setItem(key, String(v));
   } catch {
     // préférence non mémorisée, sans conséquence
   }
-});
-woFtp.addEventListener('change', () => {
-  try {
-    localStorage.setItem(FTP_KEY, String(readFtp()));
-  } catch {
-    // préférence non mémorisée, sans conséquence
-  }
+}
+/** La FTP a changé (ici ou sur un autre appareil) : séance en cours, profil et éditeur suivent. */
+function ftpChanged() {
   if (runner) runner.ftpW = readFtp();
   renderProfile();
   editor.refresh();
+}
+massInput.addEventListener('change', () => {
+  storeSetting(MASS_KEY, readMass());
+  syncJournal.record('setting', 'mass', readMass());
+});
+woFtp.addEventListener('change', () => {
+  storeSetting(FTP_KEY, readFtp());
+  syncJournal.record('setting', 'ftp', readFtp());
+  ftpChanged();
 });
 woStart.addEventListener('click', startWorkout);
 // Commandes posées sur la vue : elles relaient celles du menu, qui portent les règles.
@@ -867,10 +888,11 @@ for (const [btn, delta] of [
 
 // --- Écrans, appareils connus et reconnexion au lancement ---
 
-const library = new WorkoutLibrary();
+const library = new WorkoutLibrary(prefs, undefined, syncJournal);
+const blockLibrary = new BlockLibrary(prefs, undefined, syncJournal);
 const editor = setupWorkoutEditor({
   library,
-  blocks: new BlockLibrary(),
+  blocks: blockLibrary,
   readFtp,
   log,
   onLibraryChange: refreshWorkoutChoices,
@@ -1276,6 +1298,60 @@ if (import.meta.env.DEV && params.has('recap')) {
   });
 }
 
+// Données du coureur synchronisées avec son compte : FTP, masse, séances, « Mes blocs » (docs/design/compte.md).
+const SETTING_FIELDS: Record<SyncSetting, { input: HTMLInputElement; key: string }> = {
+  ftp: { input: woFtp, key: FTP_KEY },
+  mass: { input: massInput, key: MASS_KEY },
+};
+const settingsSource: SyncSource = {
+  kind: 'setting',
+  all: () =>
+    (Object.keys(SETTING_FIELDS) as SyncSetting[]).flatMap((id): SyncItem[] => {
+      const raw = prefs.getItem(SETTING_FIELDS[id].key);
+      // Un réglage sans version (fait avant la synchronisation) cède devant celui du compte.
+      return raw === null ? [] : [{ kind: 'setting', id, body: Number(raw), updatedAt: syncJournal.stamp('setting', id) ?? 0 }];
+    }),
+  apply(items) {
+    for (const i of items) {
+      const f = SETTING_FIELDS[i.id as SyncSetting];
+      if (!f) continue;
+      const v = typeof i.body === 'number' ? i.body : undefined;
+      // Pendant une sortie, la masse de la sortie ne change pas (Ride l'a prise au départ) : seule la valeur gardée suit.
+      f.input.value = String(v ?? f.input.defaultValue);
+      storeSetting(f.key, v);
+    }
+    if (items.some((i) => i.id === 'ftp')) ftpChanged();
+    riderProfile.refresh();
+  },
+  clear() {
+    for (const f of Object.values(SETTING_FIELDS)) {
+      f.input.value = f.input.defaultValue;
+      storeSetting(f.key, undefined);
+    }
+    ftpChanged();
+    riderProfile.refresh();
+  },
+};
+/** Séances changées depuis un autre appareil : l'éditeur et la liste de la sortie suivent, la séance choisie aussi. */
+function workoutsChanged(ids: Set<string>) {
+  editor.libraryChanged();
+  const before = homeSelect.value;
+  refreshWorkoutChoices();
+  const changed = homeSelect.value !== before || (before.startsWith('lib:') && (ids.size === 0 || ids.has(before.slice(4))));
+  if (changed && !runner) chooseWorkout(homeSelect.value);
+}
+const sync = createSyncClient({
+  journal: syncJournal,
+  sources: [settingsSource, workoutSource(library, workoutsChanged), blockSource(blockLibrary, () => editor.libraryChanged())],
+  log,
+});
+// Retour sur la page, retour du réseau, et toutes les deux minutes tant qu'elle est visible : les autres appareils ont pu changer quelque chose.
+document.addEventListener('visibilitychange', () => void sync.now());
+addEventListener('online', () => void sync.now());
+setInterval(() => {
+  if (document.visibilityState === 'visible') void sync.now();
+}, 120_000);
+
 // Compte (connexion Strava, facultative) et salle temps réel : sans compte, on roule seul et l'export FIT reste là.
 const world = new WorldClient(journey.network);
 const account = setupAccount({
@@ -1284,6 +1360,7 @@ const account = setupAccount({
   onChange: (s) => {
     if (s.kind === 'signed-in' && s.user.nameConfirmed) world.connect();
     else world.disconnect();
+    void sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
   },
 });
 const riderTags = new RiderTags($('rider-tags'));

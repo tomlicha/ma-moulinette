@@ -1,5 +1,6 @@
 import type { Tokens } from '../export/strava/api';
 import type { AccountStore, Provider, User } from './accounts';
+import type { SyncRow, SyncStore } from './sync';
 
 /** Comptes en mémoire : pour les tests. Même comportement que le magasin D1 du Worker. */
 export function createMemoryAccountStore(): AccountStore & { users: Map<string, User> } {
@@ -42,6 +43,39 @@ export function createMemoryAccountStore(): AccountStore & { users: Map<string, 
     },
     async loadStravaTokens(userId) {
       return tokens.get(userId);
+    },
+  };
+}
+
+/** Données synchronisées en mémoire : pour les tests. Même comportement que le magasin D1 du Worker. */
+export function createMemorySyncStore(): SyncStore {
+  const rows = new Map<string, SyncRow & { userId: string }>();
+  const of = (userId: string) => [...rows.values()].filter((r) => r.userId === userId);
+  const maxRev = (userId: string) => of(userId).reduce((m, r) => Math.max(m, r.rev), 0);
+  const copy = ({ userId: _, ...r }: SyncRow & { userId: string }): SyncRow => structuredClone(r);
+  return {
+    async put(userId, item) {
+      const key = `${userId}\n${item.kind}/${item.id}`;
+      const old = rows.get(key);
+      if (old && old.updatedAt >= item.updatedAt) return;
+      rows.set(key, { ...structuredClone(item), userId, rev: maxRev(userId) + 1 });
+    },
+    async changes(userId, since, limit) {
+      return of(userId)
+        .filter((r) => r.rev > since)
+        .sort((a, b) => a.rev - b.rev)
+        .slice(0, limit)
+        .map(copy);
+    },
+    async get(userId, kind, id) {
+      const r = rows.get(`${userId}\n${kind}/${id}`);
+      return r && copy(r);
+    },
+    async maxRev(userId) {
+      return maxRev(userId);
+    },
+    async countLive(userId) {
+      return of(userId).filter((r) => r.body !== null).length;
     },
   };
 }

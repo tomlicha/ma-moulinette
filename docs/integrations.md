@@ -234,7 +234,7 @@ Le fichier `api.ts` de Strava devient le cœur du premier connecteur. Le rafraî
 
 Aujourd'hui une sortie non envoyée vit en mémoire et disparaît à la fermeture de l'onglet. Exigence EF-13 : ne rien perdre.
 
-1. **Fin de sortie** : le FIT est encodé et rangé dans **IndexedDB** avec son identifiant (`zwift2-<startMs>`, déjà utilisé comme `external_id`) et la liste des destinations choisies.
+1. **Fin de sortie** : le FIT est encodé et rangé dans **IndexedDB** avec son identifiant (`mamoulinette-<startMs>`, déjà utilisé comme `external_id`) et la liste des destinations choisies.
 2. **Côté navigateur** : dès que le réseau est là, chaque sortie en attente est déposée **une fois** à la passerelle (`POST /api/sync/activities`, corps FIT, en-tête CSRF existant). La passerelle répond dès que le fichier est en R2 et les travaux créés ; la sortie locale est alors marquée « remise ». Elle reste téléchargeable en FIT pendant 30 jours.
 3. **Côté passerelle** : un travail par destination (`jobs` en D1, exécuté par Cloudflare Queues). États : `pending → running → done | processing | rejected | reauth | failed`. Nouvel essai avec attente exponentielle (1 min, 5 min, 30 min, 2 h, 12 h), puis `failed`. `Retry-After` et 429 respectés.
 4. **Idempotence** : l'`external_id` est envoyé à chaque plateforme qui l'accepte ; une sortie déjà présente (Strava : « duplicate ») est un succès, pas une erreur. La table `links` garde la correspondance sortie ↔ identifiant distant.
@@ -262,7 +262,7 @@ Depuis l'éditeur ou la bibliothèque : « Envoyer vers… » ouvre la liste des
 |---|---|---|
 | `users` | `id`, `created_at`, `account_id` (nul tant que pas de vrai compte) | Identité implicite |
 | `connections` | `user_id`, `provider`, `remote_athlete_id`, `scopes`, `access_token_enc`, `refresh_token_enc`, `expires_at`, `status` (`ok`, `reauth`, `revoked`), `options` (envoi auto…) | Jetons chiffrés en AES-GCM avec une clé `wrangler secret` ; une ligne par plateforme |
-| `activities` | `id` (`zwift2-<startMs>`), `user_id`, `start_ms`, `r2_key`, `summary` (JSON), `workout_ref` | FIT dans R2, purgé après 30 jours s'il est livré partout |
+| `activities` | `id` (`mamoulinette-<startMs>`), `user_id`, `start_ms`, `r2_key`, `summary` (JSON), `workout_ref` | FIT dans R2, purgé après 30 jours s'il est livré partout |
 | `jobs` | `id`, `activity_id` ou `workout_id`, `provider`, `kind`, `status`, `attempts`, `next_at`, `remote_ref`, `last_error` | Un travail par destination |
 | `links` | `local_id`, `provider`, `remote_id`, `remote_url` | Idempotence et liens affichés |
 | `oauth_states` | `state`, `user_id`, `provider`, `pkce_verifier`, `expires_at` | Remplace la `Map` en mémoire du relais Strava, qui ne survit pas à un Worker |
@@ -321,7 +321,7 @@ Utile tout de suite, sans serveur, et seule voie pour Garmin (sorties) et Final 
 
 - **Jetons** : chiffrés au repos (AES-GCM, clé en secret Worker, numéro de version de clé pour la rotation), jamais renvoyés au navigateur, jamais journalisés. Les rapports de télémétrie excluent les en-têtes et corps des appels tiers.
 - **OAuth** : `state` à usage unique et durée de 10 min (comme aujourd'hui), PKCE quand la plateforme le permet, droits minimaux par fonction activée : on ne demande `activity:read` à Strava que si l'import est activé.
-- **Requêtes de la page** : vérification d'origine et en-tête CSRF existants (`x-zwift2`), cookie `SameSite=Lax`.
+- **Requêtes de la page** : vérification d'origine et en-tête CSRF existants (`x-mamoulinette`), cookie `SameSite=Lax`.
 - **Webhooks** : vérification propre à chaque plateforme (jeton de vérification Strava, signature quand elle existe) ; réponse rapide puis traitement en file.
 - **Déconnexion et désautorisation** : effacer les jetons, révoquer côté plateforme quand l'API le permet, annuler les travaux en attente.
 - **Données de santé** (FC, poids) : consentement explicite par destination (« Envoyer ma fréquence cardiaque à Strava »), finalités affichées, suppression en libre-service de tout ce que la passerelle garde. FIT conservés 30 jours au plus après livraison. Hébergement : D1 et R2 permettent de restreindre les données à l'Union européenne (juridiction), à activer à la création.

@@ -39,9 +39,9 @@ describe('DeviceRegistry', () => {
 
   it('survit à un stockage corrompu ou plein', () => {
     const store = memory();
-    store.data.set('zwift2.devices', '{pas du json');
+    store.data.set('mamoulinette.devices', '{pas du json');
     expect(new DeviceRegistry(store).list()).toEqual([]);
-    store.data.set('zwift2.devices', JSON.stringify([{ role: 'trainer', id: 'a', name: 'ok' }, { role: 'drone', id: 'x', name: 'y' }, 42]));
+    store.data.set('mamoulinette.devices', JSON.stringify([{ role: 'trainer', id: 'a', name: 'ok' }, { role: 'drone', id: 'x', name: 'y' }, 42]));
     expect(new DeviceRegistry(store).list().map((d) => d.id)).toEqual(['a']);
     const full: KeyValueStore = { ...store, setItem: () => { throw new Error('QuotaExceeded'); } };
     expect(() => new DeviceRegistry(full).remember('hr', { id: 'b', name: 'n' })).not.toThrow();

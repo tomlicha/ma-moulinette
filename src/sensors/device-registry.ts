@@ -12,12 +12,12 @@ export interface KnownDevice {
 
 export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-const KEY = 'zwift2.devices';
+const KEY = 'mamoulinette.devices';
 
 /** Stockage du navigateur s'il est utilisable ; sinon une mémoire de session (navigation privée, stockage bloqué). */
 export function browserStore(): KeyValueStore {
   try {
-    const probe = '__zwift2_probe__';
+    const probe = '__mamoulinette_probe__';
     localStorage.setItem(probe, '1');
     localStorage.removeItem(probe);
     return localStorage;

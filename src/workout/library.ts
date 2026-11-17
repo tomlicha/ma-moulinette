@@ -1,4 +1,5 @@
 import { browserStore, type KeyValueStore } from '../sensors/device-registry';
+import type { SyncJournal } from '../sync/journal';
 import type { EditorBlock } from './blocks';
 
 export interface SavedWorkout {
@@ -9,16 +10,20 @@ export interface SavedWorkout {
   updatedAt: number;
 }
 
-const KEY = 'zwift2.workouts';
+const KEY = 'mamoulinette.workouts';
+
+/** Contenu d'une séance tel qu'il est synchronisé avec le compte (src/sync/protocol.ts). */
+export const workoutBody = (w: SavedWorkout) => ({ name: w.name, description: w.description, blocks: w.blocks });
 
 /**
- * Séances créées dans l'éditeur, gardées dans le navigateur de l'utilisateur.
- * Ce n'est qu'un stockage local : elles ne suivent pas l'utilisateur d'un appareil à l'autre (il faudra le backend).
+ * Séances créées dans l'éditeur, gardées dans le navigateur de l'utilisateur. Chaque modification est notée dans le
+ * journal de synchronisation : avec un compte, elles suivent le coureur d'un appareil à l'autre (src/sync/).
  */
 export class WorkoutLibrary {
   constructor(
     private readonly store: KeyValueStore = browserStore(),
     private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly journal?: Pick<SyncJournal, 'record'>,
   ) {}
 
   list(): SavedWorkout[] {
@@ -41,11 +46,24 @@ export class WorkoutLibrary {
   save(w: Omit<SavedWorkout, 'id' | 'updatedAt'> & { id?: string }, now = Date.now()): SavedWorkout {
     const saved: SavedWorkout = { ...w, id: w.id ?? this.newId(), updatedAt: now };
     this.write([saved, ...this.list().filter((x) => x.id !== saved.id)]);
+    this.journal?.record('workout', saved.id, workoutBody(saved), saved.updatedAt);
     return saved;
   }
 
-  remove(id: string) {
+  remove(id: string, now = Date.now()) {
     this.write(this.list().filter((w) => w.id !== id));
+    this.journal?.record('workout', id, null, now);
+  }
+
+  /** Séances venues du compte (remplacées ou ajoutées) et supprimées ailleurs ; rien n'est noté dans le journal. */
+  merge(put: SavedWorkout[], drop: string[]) {
+    const gone = new Set([...drop, ...put.map((w) => w.id)]);
+    this.write([...put, ...this.list().filter((w) => !gone.has(w.id))]);
+  }
+
+  /** Efface toutes les séances, sans rien noter (changement de compte). */
+  clear() {
+    this.write([]);
   }
 
   private write(list: SavedWorkout[]) {

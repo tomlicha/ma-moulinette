@@ -10,6 +10,7 @@ import {
   type Tokens,
   type UploadStatus,
 } from './api';
+import { hasCsrfHeader } from '../../net/csrf';
 
 export interface TokenStore {
   load(): Promise<Tokens | undefined>;
@@ -37,8 +38,8 @@ export const PREFIX = '/api/strava/';
 const MAX_FIT_BYTES = 10 * 1024 * 1024;
 const REFRESH_MARGIN_S = 300;
 const STATE_TTL_S = 600;
-/** En-tête exigé sur les requêtes qui modifient quoi que ce soit : un autre site ne peut pas l'envoyer sans préalerte CORS. */
-export const CSRF_HEADER = 'x-zwift2';
+/** En-tête exigé sur les requêtes qui modifient quoi que ce soit : voir src/net/csrf.ts. */
+export { CSRF_HEADER } from '../../net/csrf';
 export const OWNER_HEADER = 'x-owner-key';
 
 const json = (body: unknown, status = 200) =>
@@ -126,7 +127,7 @@ export function createStravaRelay(opts: RelayOptions) {
 
   async function upload(req: Request): Promise<Response> {
     if (!cfg) return json({ error: 'not_configured' }, 503);
-    if (!sameOrigin(req) || !req.headers.get(CSRF_HEADER)) return json({ error: 'forbidden' }, 403);
+    if (!sameOrigin(req) || !hasCsrfHeader(req)) return json({ error: 'forbidden' }, 403);
     if (!authorized(req)) return json({ error: 'locked' }, 403);
     const fit = new Uint8Array(await req.arrayBuffer());
     if (!fit.length) return json({ error: 'empty' }, 400);
@@ -135,7 +136,7 @@ export function createStravaRelay(opts: RelayOptions) {
     const url = new URL(req.url);
     const meta = {
       name: url.searchParams.get('name') || 'Ma Moulinette',
-      externalId: url.searchParams.get('externalId') || `zwift2-${now()}`,
+      externalId: url.searchParams.get('externalId') || `mamoulinette-${now()}`,
     };
 
     let tokens: Tokens | undefined;
@@ -191,7 +192,7 @@ export function createStravaRelay(opts: RelayOptions) {
       const redirect = `${url.origin}${PREFIX}callback`;
       // POST : la clé voyage en en-tête, jamais dans une adresse ; la réponse est l'adresse Strava à ouvrir.
       if (req.method === 'POST') {
-        if (!sameOrigin(req) || !req.headers.get(CSRF_HEADER)) return json({ error: 'forbidden' }, 403);
+        if (!sameOrigin(req) || !hasCsrfHeader(req)) return json({ error: 'forbidden' }, 403);
         if (!authorized(req)) return json({ error: 'locked' }, 403);
         return json({ url: authorizeUrl(cfg.clientId, redirect, await newState()) });
       }
@@ -216,7 +217,7 @@ export function createStravaRelay(opts: RelayOptions) {
     if (route === 'upload' && req.method === 'POST') return upload(req);
 
     if (route === 'logout' && req.method === 'POST') {
-      if (!sameOrigin(req) || !req.headers.get(CSRF_HEADER)) return json({ error: 'forbidden' }, 403);
+      if (!sameOrigin(req) || !hasCsrfHeader(req)) return json({ error: 'forbidden' }, 403);
       if (!authorized(req)) return json({ error: 'locked' }, 403);
       await opts.store.save(undefined);
       return json({ connected: false });

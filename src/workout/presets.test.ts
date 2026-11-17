@@ -65,9 +65,9 @@ describe('Mes blocs', () => {
 
   it('ignore un contenu illisible ou invalide', () => {
     const store = memoryStore();
-    store.setItem('zwift2.blocks', '{ pas du json');
+    store.setItem('mamoulinette.blocks', '{ pas du json');
     expect(new BlockLibrary(store).list()).toEqual([]);
-    store.setItem('zwift2.blocks', JSON.stringify([{ id: 'x', name: 'vide', blocks: [], updatedAt: 1 }, { nope: true }]));
+    store.setItem('mamoulinette.blocks', JSON.stringify([{ id: 'x', name: 'vide', blocks: [], updatedAt: 1 }, { nope: true }]));
     expect(new BlockLibrary(store).list()).toEqual([]);
   });
 });

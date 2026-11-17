@@ -4,11 +4,12 @@
  * tout répond « indisponible » : l'application reste en mode sans compte.
  */
 import type { User } from '../server/accounts';
+import { CSRF_HEADER } from './csrf';
 
 export type { User } from '../server/accounts';
 
 export const AUTH = '/api/auth/';
-const CSRF = { 'x-zwift2': '1' };
+const CSRF = { [CSRF_HEADER]: '1' };
 
 export interface Methods {
   /** Connexion Strava configurée sur le serveur. */
