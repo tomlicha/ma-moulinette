@@ -9,7 +9,7 @@ import { footPitch, SKELETON, solvePose, solveTorsoAngle, type Basis, type BikeF
 const SAMPLES = 72;
 const TAU = Math.PI * 2;
 /** Balancement du vélo d'un côté à l'autre à chaque coup de pédale, à pleine cadence, en radians. */
-const SWAY = (1.8 * Math.PI) / 180;
+const SWAY = (0.6 * Math.PI) / 180;
 /** Cadence à partir de laquelle le balancement est entier, en tours par minute. */
 const SWAY_FULL_RPM = 70;
 

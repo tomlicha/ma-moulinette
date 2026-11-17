@@ -311,15 +311,9 @@ export class RideView {
    */
   private follow(dtS: number) {
     const f = forwardOf(this.heading);
-    const side = sideOf(this.heading);
     this.fwd.set(f.x, 0, f.z);
-    // Balancement léger de la caméra avec celui du coureur.
-    const sway = this.roll * Math.sin(this.swayPhase) * 1.6;
-    this.camTarget.set(
-      this.p.x - this.fwd.x * 4.4 + side.x * sway,
-      this.p.y + 1.85,
-      this.p.z - this.fwd.z * 4.4 + side.z * sway,
-    );
+    // La caméra reste dans l'axe de la route : seul le coureur se balance, sinon l'image paraît ballotter.
+    this.camTarget.set(this.p.x - this.fwd.x * 4.4, this.p.y + 1.85, this.p.z - this.fwd.z * 4.4);
     if (!this.cameraReady) {
       this.camera.position.copy(this.camTarget);
       this.cameraReady = true;

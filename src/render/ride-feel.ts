@@ -44,7 +44,7 @@ export function swayRoll(gradePct: number, cadenceRpm: number): number {
   const lowCadence = 1 - clamp(cadenceRpm / 100, 0, 1) * 0.5; // 1 à bas régime, 0,5 à 100 tr/min
   const load = climb * lowCadence;
   const moving = smoothstep(5, 40, cadenceRpm);
-  return (0.012 + 0.045 * load) * moving;
+  return (0.004 + 0.018 * load) * moving;
 }
 
 /** Phase du balancement : une oscillation par deux tours de pédalier, une bascule par coup de pédale. */
