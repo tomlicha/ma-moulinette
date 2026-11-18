@@ -9,6 +9,7 @@ import { drain, type Steps } from './background';
 import { Decor, DECOR_HIGH, DECOR_LOW, type DecorOptions } from './decor';
 import { faceted, instanced, merge } from './geometry-utils';
 import { buildMarie } from './marie';
+import { buildRichard } from './richard';
 import { fbm, mulberry32, smoothstep, valueNoise } from './noise';
 import { PALETTE } from './palette';
 import { buildPlaces } from './places';
@@ -43,7 +44,7 @@ export interface World {
   /** Change la lumière, le ciel et la brume : l'ambiance du parcours choisi. */
   setAmbiance(a: Ambiance): void;
   /**
-   * Anime les éléments vivants du décor (Marie et sa roue) et peuple le terrain et le décor autour du cycliste.
+   * Anime les éléments vivants du décor (Marie et sa roue, Richard et son escalier) et peuple le terrain et le décor autour du cycliste.
    * Marie disparaît quand le cycliste en est loin.
    */
   update(dtS: number, rider?: { x: number; z: number }): void;
@@ -581,6 +582,10 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
   const marie =
     assets && marieSpot ? buildMarie(layout, assets, layout.network.edges.get(marieSpot.edge)!, marieSpot.s) : undefined;
   if (marie) group.add(marie.group);
+  const richardSpot = layout.network.landmarks.find((l) => l.kind === 'richard');
+  const richard =
+    assets && richardSpot ? buildRichard(layout, assets, layout.network.edges.get(richardSpot.edge)!, richardSpot.s) : undefined;
+  if (richard) group.add(richard.group);
 
   scene.add(group, sky, sun, fill);
   let lastRider: { x: number; z: number } | undefined;
@@ -625,6 +630,7 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
         decor.update(rider.x, rider.z);
       }
       marie?.update(dtS, rider);
+      richard?.update(dtS, rider);
       clouds.rotation.y += dtS * CLOUD_DRIFT_RAD_S;
       places.update(dtS);
     },

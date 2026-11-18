@@ -5,7 +5,7 @@
  * - `shot=lineup` (défaut) : trois coureurs, trois quarts avant, profil, trois quarts arrière ;
  *   `shot=close` : un coureur en gros plan ; `shot=chase` : vue de poursuite comme en jeu.
  * - `yaw` (degrés) et `zoom` pour `shot=close`, `crank` (degrés) pour figer le pédalier, `spin=1` pour animer.
- * - `shot=marie` : Marie dans le vrai décor, vue de près (`yaw`, `zoom`) ; `shot=marie-chase` : vue de poursuite à son approche.
+ * - `shot=marie` : Marie dans le vrai décor, vue de près (`yaw`, `zoom`) ; `shot=richard` : Richard et son escalier (`t` : secondes d'animation avant la capture) ; `shot=marie-chase` : vue de poursuite à son approche.
  * - `shot=ride` : vue de poursuite sur le réseau, à `d` m du départ (défaut 0). `route=col,descente` force les choix de
  *   carrefour dans l'ordre (identifiants de routes) ; `relief` règle l'exagération du relief (1 = réel, défaut 1,6).
  *   `course=rive` choisit le parcours (`col` par défaut). `shot=map` : le réseau vu du dessus (lignes de route), pour juger le tracé.
@@ -55,7 +55,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe4e6ea);
 const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardNodeMaterial({ color: 0xf1f2f4, roughness: 1 }));
 ground.receiveShadow = true;
-const inWorld = ['marie', 'marie-chase', 'ride', 'map'].includes(shot); // le vrai décor apporte son sol et ses lumières
+const inWorld = ['marie', 'richard', 'marie-chase', 'ride', 'map'].includes(shot); // le vrai décor apporte son sol et ses lumières
 if (!inWorld) {
   scene.add(ground);
   scene.add(new THREE.HemisphereLight(0xeef4ff, 0x9a9488, 1.6));
@@ -106,24 +106,26 @@ function driveTo(journey: Journey, d: number, picks: string[]) {
   journey.update(d);
 }
 
-if (shot === 'marie' || shot === 'marie-chase' || shot === 'ride' || shot === 'map') {
+if (shot === 'marie' || shot === 'richard' || shot === 'marie-chase' || shot === 'ride' || shot === 'map') {
   const layout = new WorldLayout(COL_DES_ERABLES, num('relief', DEFAULT_RELIEF));
   world = buildWorld(layout, scene, params.get('quality') === 'low' ? WORLD_LOW : WORLD_HIGH, assets);
   const marieSpot = COL_DES_ERABLES.landmarks.find((l) => l.kind === 'marie')!;
-  const marieEdge = COL_DES_ERABLES.edges.get(marieSpot.edge)!;
+  const richardSpot = COL_DES_ERABLES.landmarks.find((l) => l.kind === 'richard')!;
   const up = (v: number) => new THREE.Vector3(0, v, 0);
 
-  if (shot === 'marie') {
-    const p = marieEdge.pointAt((marieSpot as { s: number }).s);
-    const h = marieEdge.headingAt((marieSpot as { s: number }).s);
+  if (shot === 'marie' || shot === 'richard') {
+    const spot = shot === 'richard' ? richardSpot : marieSpot;
+    const spotEdge = COL_DES_ERABLES.edges.get(spot.edge)!;
+    const p = spotEdge.pointAt((spot as { s: number }).s);
+    const h = spotEdge.headingAt((spot as { s: number }).s);
     const f = forwardOf(h);
     const sd = sideOf(h);
     const s = new THREE.Vector3(sd.x, 0, sd.z);
     const fv = new THREE.Vector3(f.x, 0, f.z);
     const ground = layout.groundY(p.x - sd.x * 5.6, p.z - sd.z * 5.6);
-    const t = new THREE.Vector3(p.x, ground + 0.55, p.z).addScaledVector(s, -5.6);
+    const t = new THREE.Vector3(p.x, ground + (shot === 'richard' ? 1.0 : 0.55), p.z).addScaledVector(s, -5.6);
     const a = (num('yaw', 20) * Math.PI) / 180; // 0 : vu de la route, 90 : vu de l'arrière
-    const dist = 4.2 / num('zoom', 1);
+    const dist = (shot === 'richard' ? 7 : 4.2) / num('zoom', 1);
     camera.fov = 40;
     camera.near = 0.1;
     camera.far = 9000;
@@ -248,5 +250,6 @@ renderer.setAnimationLoop((now) => {
   const w = world?.stats();
   info.textContent = `${backend} · ${renderer.info.render.triangles.toLocaleString('fr-FR')} triangles · ${renderer.info.render.drawCalls} appels de dessin` + (w ? ` · ${w.chunks} morceaux, ${w.decorInstances} arbres et rochers, ${w.coarseNearRoad} grossiers près de la route` : '');
 });
+for (let i = 0; i < num('t', 0) * 20; i++) world?.update(0.05, worldRider); // `t` : secondes d'animation du décor avant la capture
 await renderer.renderAsync(scene, camera);
 document.title = 'ready';

@@ -14,7 +14,7 @@ La boucle de 6 km (une montée à 5 %, sa descente, sur un cercle) ne donnait ni
 
 ### Le monde des Érables et ses deux parcours
 
-Un seul réseau de 28,8 km (6 carrefours, 9 routes), des parcours qui s'y superposent. Données : [`src/sim/courses/col-des-erables.ts`](../../src/sim/courses/col-des-erables.ts), avec les repères de décor (arches, clôtures, Marie).
+Un seul réseau de 28,8 km (6 carrefours, 9 routes), des parcours qui s'y superposent. Données : [`src/sim/courses/col-des-erables.ts`](../../src/sim/courses/col-des-erables.ts), avec les repères de décor (arches, clôtures, Marie, Richard).
 
 ![Carte des parcours](parcours-carte.svg)
 
@@ -33,7 +33,7 @@ Ajouter un parcours : écrire ses routes dans les données (elles doivent passer
 
 **Choix.** C'est **« Rouler » qui ouvre le menu de choix du parcours** : la carte « Monde » de l'accueil n'a pas la place d'un sélecteur (sur un iPhone en paysage elle ne fait que 300 px de large), alors que le menu prend celle dont il a besoin. Une boîte de dialogue avec une grande touche par parcours (nom, longueur et montée, description, profil d'altitude à l'échelle commune du réseau), la carte du réseau à droite, et « Partir » qui lance la sortie. Le parcours retenu est gardé d'une visite à l'autre ; l'accueil en affiche le nom, la description et la scène qui lui ressemble. Si une sortie est déjà en cours, « Rouler » la reprend sans menu : on ne change pas de parcours en route (ce serait repartir du village). Une sortie repart du début du parcours choisi, et « Démarrer la séance » prend le parcours retenu. Code : [`course-picker.ts`](../../src/ui/course-picker.ts), logique dans [`course-selection.ts`](../../src/ui/course-selection.ts).
 
-**Carte.** Dans le menu, une miniature du réseau : le parcours retenu en couleur, l'autre en retrait, les routes hors parcours en gris. Un clic l'ouvre en grand ([`course-map.ts`](../../src/ui/course-map.ts)) : noms et altitudes des carrefours, kilomètres de la boucle, sens de marche, Marie, et le profil d'altitude du parcours. Fermer : bouton, Échap ou clic sur le fond. La hauteur du dessin suit celle de la fenêtre (520 à 760 px) et la boîte défile en dessous. Les cartes viennent de [`network-map.ts`](../../src/sim/network-map.ts), les mêmes fonctions que la planche ci-dessus.
+**Carte.** Dans le menu, une miniature du réseau : le parcours retenu en couleur, l'autre en retrait, les routes hors parcours en gris. Un clic l'ouvre en grand ([`course-map.ts`](../../src/ui/course-map.ts)) : noms et altitudes des carrefours, kilomètres de la boucle, sens de marche, Marie, Richard, et le profil d'altitude du parcours. Fermer : bouton, Échap ou clic sur le fond. La hauteur du dessin suit celle de la fenêtre (520 à 760 px) et la boîte défile en dessous. Les cartes viennent de [`network-map.ts`](../../src/sim/network-map.ts), les mêmes fonctions que la planche ci-dessus.
 
 ## Carrefours
 

@@ -31,6 +31,8 @@ export interface EdgeDef {
 export type Landmark =
   | { kind: 'arch'; edge: string; s: number; text: string }
   | { kind: 'marie'; edge: string; s: number }
+  /** Richard monte et descend un escalier sur la roue arrière de son vélo. */
+  | { kind: 'richard'; edge: string; s: number }
   /** Clôture en bois à droite de la route dans son sens de définition, entre `from` et `to`. */
   | { kind: 'fence'; edge: string; from: number; to: number }
   /** Essence qui borde la route des deux côtés entre `from` et `to` : les érables roux du Col. */
