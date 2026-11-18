@@ -59,11 +59,12 @@ describe('Col des Érables', () => {
     expect(validateNetwork(COL_DES_ERABLES)).toEqual([]);
   });
 
-  it('mesure entre 28 et 35 km et monte au moins une fois à 9 % ou plus', () => {
-    expect(COL_DES_ERABLES.lengthM).toBeGreaterThan(28_000);
-    expect(COL_DES_ERABLES.lengthM).toBeLessThan(35_000);
+  it('mesure entre 45 et 52 km (Route arc-en-ciel comprise) et monte au moins une fois à 9 % ou plus', () => {
+    expect(COL_DES_ERABLES.lengthM).toBeGreaterThan(45_000);
+    expect(COL_DES_ERABLES.lengthM).toBeLessThan(52_000);
     let steepest = 0;
     for (const e of COL_DES_ERABLES.edges.values()) {
+      if (e.isLift) continue; // la cabine d'un ascenseur ne se pédale pas
       for (let s = 0; s <= e.lengthM; s += 5) steepest = Math.max(steepest, Math.abs(e.gradePctAt(s)));
     }
     expect(steepest).toBeGreaterThanOrEqual(9);
@@ -141,8 +142,8 @@ describe('validateNetwork', () => {
 describe('parcours du monde des Érables', () => {
   const [col, rive] = COL_DES_ERABLES.courses;
 
-  it('propose trois parcours, la montagne en premier', () => {
-    expect(COL_DES_ERABLES.courses.map((c) => c.id)).toEqual(['col', 'rive', 'velodrome']);
+  it('propose quatre parcours, la montagne en premier', () => {
+    expect(COL_DES_ERABLES.courses.map((c) => c.id)).toEqual(['col', 'rive', 'velodrome', 'arc-en-ciel']);
     expect(COL_DES_ERABLES.course()).toBe(col);
     expect(COL_DES_ERABLES.course('rive')).toBe(rive);
     expect(COL_DES_ERABLES.course('inconnu')).toBe(col); // repli sur le premier

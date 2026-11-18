@@ -8,6 +8,7 @@ import {
   findSeries,
   fmt1,
   junctionLabel,
+  liftBanner,
   nextSummitM,
   PowerAverage,
   profileWindow,
@@ -248,5 +249,34 @@ describe('junctionLabel', () => {
 describe('turnArrow', () => {
   it('distingue le biais, l’angle droit et l’épingle de chaque côté', () => {
     expect([-130, -70, -40, 0, 40, 70, 130].map(turnArrow)).toEqual(['↙', '←', '↖', '↑', '↗', '→', '↘']);
+  });
+});
+
+describe('liftBanner', () => {
+  const lift = {
+    startM: 483,
+    lengthM: 20,
+    durationS: 40,
+    progress: 0.55,
+    fromAltitudeM: 100,
+    toAltitudeM: 480,
+    altitudeM: 311.6,
+    toName: 'Gare céleste',
+    name: 'Ascenseur céleste',
+  };
+
+  it('montre l’altitude, le trajet de l’ascenseur et le temps qui reste', () => {
+    expect(liftBanner(lift)).toEqual({
+      label: 'Altitude',
+      value: '312',
+      unit: 'm',
+      info: 'Ascenseur céleste · 100 → 480 m',
+      right: 'Gare céleste dans 18 s',
+    });
+  });
+
+  it('ne dit jamais « dans 0 s » tant que la cabine bouge', () => {
+    expect(liftBanner({ ...lift, progress: 0.999 }).right).toBe('Gare céleste dans 1 s');
+    expect(liftBanner({ ...lift, progress: 0 }).right).toBe('Gare céleste dans 40 s');
   });
 });

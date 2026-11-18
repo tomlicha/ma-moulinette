@@ -27,6 +27,13 @@ export interface Ambiance {
   cloudUnder: THREE.Color;
   /** Densité de la brume : 0,00013 donne 7 % à 2 km, un quart à 4 km, les deux tiers à 8 km. */
   fogDensity: number;
+  /** Étoiles et Voie lactée dans le ciel, de 0 (jour) à 1 (nuit noire). */
+  stars: number;
+  /**
+   * Lumière propre de la Route arc-en-ciel, de 0 (de jour : des bandes pastel, translucides, comme un vrai arc-en-ciel)
+   * à 1 (de nuit : elle brille).
+   */
+  skyRoadGlow: number;
 }
 
 /** Plein jour d'automne : le soleil à 47°, un ciel bleu franc. */
@@ -45,6 +52,8 @@ export const DAY: Ambiance = {
   cloudTop: PALETTE.cloudTop,
   cloudUnder: PALETTE.cloudUnder,
   fogDensity: 0.00013,
+  stars: 0,
+  skyRoadGlow: 0,
 };
 
 /** Coucher de soleil, d'après la maquette « Rive du lac » : soleil bas à l'ouest, ciel pêche et lilas, nuages roses. */
@@ -63,12 +72,38 @@ export const SUNSET: Ambiance = {
   cloudTop: new THREE.Color(0xffd6c4),
   cloudUnder: new THREE.Color(0xc795ad),
   fogDensity: 0.00016,
+  stars: 0,
+  skyRoadGlow: 0.25,
 };
 
-export type Mood = 'day' | 'sunset';
+/**
+ * Nuit étoilée, pour la Route arc-en-ciel : une lune basse au sud-est tient lieu de soleil (lumière froide et faible),
+ * un ciel bleu nuit, des étoiles et une Voie lactée, des nuages gris-bleu éclairés par la lune. Assez de lumière pour
+ * lire le relief et la route au sol ; la route du ciel, elle, brille.
+ */
+export const NIGHT: Ambiance = {
+  sunDirection: new THREE.Vector3(0.45, 0.42, 0.62).normalize(),
+  sunColor: 0xb9c8ff,
+  sunIntensity: 1.05,
+  hemiSky: 0x5a6aa8,
+  hemiGround: 0x4b3a6e,
+  hemiIntensity: 1.35,
+  zenith: new THREE.Color(0x070a1f),
+  horizon: new THREE.Color(0x26305e),
+  glow: new THREE.Color(0xdfe6ff),
+  haloWide: 0.12,
+  haloTight: 0.35,
+  cloudTop: new THREE.Color(0x6b74a8),
+  cloudUnder: new THREE.Color(0x272c55),
+  fogDensity: 0.00011,
+  stars: 1,
+  skyRoadGlow: 1,
+};
+
+export type Mood = 'day' | 'sunset' | 'night';
 
 export function ambianceFor(mood: Mood | undefined): Ambiance {
-  return mood === 'sunset' ? SUNSET : DAY;
+  return mood === 'sunset' ? SUNSET : mood === 'night' ? NIGHT : DAY;
 }
 
 /** Les couleurs du ciel que lisent les matières (ciel, nuages, eau) : on les change sans rien reconstruire. */
@@ -82,6 +117,8 @@ export function createTones(a: Ambiance) {
     sunDirection: uniform(a.sunDirection.clone()),
     haloWide: uniform(a.haloWide),
     haloTight: uniform(a.haloTight),
+    stars: uniform(a.stars),
+    skyRoadGlow: uniform(a.skyRoadGlow),
     apply(next: Ambiance) {
       tones.zenith.value.copy(next.zenith);
       tones.horizon.value.copy(next.horizon);
@@ -91,6 +128,8 @@ export function createTones(a: Ambiance) {
       tones.sunDirection.value.copy(next.sunDirection);
       tones.haloWide.value = next.haloWide;
       tones.haloTight.value = next.haloTight;
+      tones.stars.value = next.stars;
+      tones.skyRoadGlow.value = next.skyRoadGlow;
     },
   };
   return tones;

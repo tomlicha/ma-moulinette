@@ -3,6 +3,8 @@
 // Usage (le serveur de dev doit tourner : `npm run dev`) :
 //   node tools/mobile/check.mjs <url> <dossierSortie> <iphone13|pixel9> [--no-ride] [--course=<id>]
 //   `--course=velodrome` : la sortie part sur ce parcours ; sur la piste, l'encart et sa touche de sortie, avant et après l'appui.
+//   `--advance=<ms>` : temps virtuel roulé avant la capture de la sortie (300 000 par défaut) ; `--course=arc-en-ciel
+//   --advance=115000` : dans l'ascenseur céleste.
 //   node tools/mobile/summary.mjs <dossierSortie>
 // Chrome : variable CHROME, sinon l'installation Windows habituelle. Limite : c'est Chromium, pas WebKit (iOS).
 import { spawn } from 'node:child_process';
@@ -230,7 +232,10 @@ if (course === 'velodrome' && !process.argv.includes('--no-ride')) {
   // 5. Sortie : « Partir », puis le carrefour annoncé.
   await click('#course-go');
   await sleep(1500);
-  await advance(300_000);
+  const adv = process.argv.find((a) => a.startsWith('--advance='))?.slice('--advance='.length);
+  // Avance précise : on laisse d'abord la vue finir de se construire, sinon la photo tombe sur l'écran de chargement.
+  if (adv) for (let i = 0; i < 120 && !(await evaluate("document.getElementById('ride-loading')?.hidden ?? true")); i++) await sleep(500);
+  await advance(Number(adv ?? 300_000));
   await evaluate('1'); await sleep(500); // laisse la page se redessiner après le saut de temps virtuel
   await shot('5-carrefour');
   report.canvas = await evaluate("(() => { const c = document.querySelector('.ride canvas'); return [c.width, c.height, c.clientWidth, c.clientHeight, devicePixelRatio, getComputedStyle(document.body).paddingLeft]; })()");

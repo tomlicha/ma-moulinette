@@ -57,7 +57,8 @@ export interface MapNetwork {
 
 export function mapNetwork(net: RoadNetwork): MapNetwork {
   return {
-    roads: [...net.edges.values()].map((e) => e.sample(30).map((p) => ({ x: p.x, z: p.z }))),
+    // Un ascenseur n'a pas de tracé en plan : rien à dessiner.
+    roads: [...net.edges.values()].filter((e) => !e.isLift).map((e) => e.sample(30).map((p) => ({ x: p.x, z: p.z }))),
     water: net.water.map((w) => w.shore.map(([x, z]) => ({ x, z }))),
   };
 }

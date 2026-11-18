@@ -209,7 +209,11 @@ export function sideOf(heading: number): { x: number; z: number } {
  * altitude → hauteur à l'image. Tout le décor (terrain, arbres, clôtures, repères) s'appuie sur cette classe.
  */
 export class WorldLayout {
+  /** Les routes au sol : elles portent le terrain, l'asphalte, le bord de route et le décor. */
   readonly edges: Edge[];
+  /** Les routes du ciel (`surface: 'sky'`), dessinées en ruban de lumière (`sky-road.ts`), et les ascenseurs. */
+  readonly skyEdges: Edge[];
+  readonly lifts: Edge[];
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   readonly center: { x: number; z: number };
   /** Rayon du plus petit cercle centré sur `center` qui contient tout le réseau, en m. */
@@ -254,7 +258,14 @@ export class WorldLayout {
   }
 
   constructor(readonly network: RoadNetwork, readonly relief = DEFAULT_RELIEF, deferred?: typeof DEFERRED) {
-    this.edges = [...network.edges.values()];
+    const all = [...network.edges.values()];
+    this.edges = all.filter((e) => e.def.surface !== 'sky' && !e.isLift);
+    this.skyEdges = all.filter((e) => e.def.surface === 'sky');
+    this.lifts = all.filter((e) => e.isLift);
+    this.skyNodes = new Set(
+      [...network.nodes.values()].filter((n) => network.incident(n.id).every((e) => e.def.surface === 'sky' || e.isLift)).map((n) => n.id),
+    );
+    this.buildSkyIndex();
     for (const l of network.landmarks) {
       if (l.kind === 'grove') this.groves.push({ edge: this.edges.findIndex((e) => e.id === l.edge), from: l.from, to: l.to });
     }
@@ -538,13 +549,66 @@ export class WorldLayout {
       }
     }
     const w = hit.dist === Infinity ? 0 : 1 - smoothstep(ROAD_HALF + 2, reach, hit.dist);
-    const alt = hit.dist === Infinity ? far : hit.alt * w + far * (1 - w);
+    // Sous une route du ciel, le sol reste plus bas qu'elle, de sa marge au moins (sauf sous la chaussée d'une route au sol).
+    const ceiling = this.skyCeiling(x, z);
+    const alt = Math.min(hit.dist === Infinity ? far : hit.alt * w + far * (1 - w), w > 0.999 ? Infinity : ceiling);
     // Un vélodrome aplanit son emprise à son altitude, et le sol y rejoint le relief en pente douce.
     for (const v of this.velodromes) {
       const k = v.flatWeight(x, z);
       if (k > 0) return alt + (v.def.altitude - alt) * k;
     }
     return alt;
+  }
+
+  /* ---------- Sous les routes du ciel ---------- */
+
+  /** Nœuds où n'arrivent que des routes du ciel ou des ascenseurs : ni plaque d'asphalte, ni poteau indicateur. */
+  readonly skyNodes: Set<string>;
+  /** Échantillons des routes du ciel (x, z, altitude, marge sous la route), rangés par case de `SKY_CELL_M`. */
+  private readonly skyCells = new Map<number, number[]>();
+  private readonly skyPts: number[] = [];
+
+  private buildSkyIndex(): void {
+    const groundNodes = new Set([...this.network.nodes.values()].filter((n) => !this.skyNodes.has(n.id)).map((n) => n.id));
+    for (const e of this.skyEdges) {
+      for (const p of e.sample(SKY_STEP_M)) {
+        // Près d'un carrefour au sol (le Sommet du col), la route part du sol : la marge y croît de 0 à `SKY_CLEAR_M`.
+        let fromGround = Infinity;
+        if (groundNodes.has(e.from.id)) fromGround = Math.min(fromGround, p.s);
+        if (groundNodes.has(e.to.id)) fromGround = Math.min(fromGround, e.lengthM - p.s);
+        const clear = SKY_CLEAR_M * smoothstep(40, SKY_RAMP_M, fromGround);
+        const i = this.skyPts.length / 4;
+        this.skyPts.push(p.x, p.z, p.altitude, clear);
+        const key = this.key(Math.floor(p.x / SKY_CELL_M), Math.floor(p.z / SKY_CELL_M));
+        const list = this.skyCells.get(key);
+        if (list) list.push(i);
+        else this.skyCells.set(key, [i]);
+      }
+    }
+  }
+
+  /**
+   * Plafond du sol en (x, z) sous les routes du ciel, en altitude réelle : chaque point de route abaisse le sol à sa
+   * propre altitude moins sa marge, puis le laisse remonter en pente (`SKY_CONE`) en s'éloignant. `Infinity` loin de
+   * toute route du ciel.
+   */
+  skyCeiling(x: number, z: number): number {
+    if (!this.skyPts.length) return Infinity;
+    const ci = Math.floor(x / SKY_CELL_M);
+    const cj = Math.floor(z / SKY_CELL_M);
+    let cap = Infinity;
+    for (let i = ci - 1; i <= ci + 1; i++) {
+      for (let j = cj - 1; j <= cj + 1; j++) {
+        const list = this.skyCells.get(this.key(i, j));
+        if (!list) continue;
+        for (const k of list) {
+          const d = Math.hypot(this.skyPts[4 * k]! - x, this.skyPts[4 * k + 1]! - z);
+          if (d > SKY_REACH_M) continue;
+          cap = Math.min(cap, this.skyPts[4 * k + 2]! - this.skyPts[4 * k + 3]! + Math.max(0, d - SKY_FLAT_M) * SKY_CONE);
+        }
+      }
+    }
+    return cap;
   }
 
   /** Hauteur du sol à l'image en (x, z) : exagérée, avec le creux sous la chaussée. */
@@ -581,6 +645,19 @@ export class WorldLayout {
     return this.velodromes.some((v) => v.covers(x, z));
   }
 }
+
+/** Pas d'échantillonnage des routes du ciel pour le plafond du sol, et taille des cases de leur index, en m. */
+const SKY_STEP_M = 20;
+const SKY_CELL_M = 200;
+/** Marge du sol sous une route du ciel, en altitude réelle, en m (× relief à l'image). */
+export const SKY_CLEAR_M = 40;
+/** Distance d'un carrefour au sol sur laquelle la marge s'installe, en m. */
+const SKY_RAMP_M = 400;
+/** Le plafond reste à plat sous la route sur cette distance, puis remonte de `SKY_CONE` m par m. */
+const SKY_FLAT_M = 25;
+const SKY_CONE = 0.4;
+/** Au-delà, une route du ciel ne pèse plus sur le sol, en m (la remontée a rattrapé tout relief). */
+const SKY_REACH_M = 260;
 
 /** Le sol passe sous le modèle d'un vélodrome de cette hauteur, en m à l'image. */
 const VELODROME_SINK_M = 0.3;

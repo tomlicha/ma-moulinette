@@ -1,4 +1,4 @@
-import type { Course } from '../sim/course';
+import type { Course, LiftState } from '../sim/course';
 import type { JunctionOption } from '../sim/journey';
 import { targetWatts, type Target, type WorkoutStep } from '../workout/model';
 import { zoneOf, type Zone } from '../workout/profile';
@@ -245,4 +245,20 @@ export function junctionLabel(o: JunctionOption): { arrow: string; name: string;
   const climb = o.climbM >= 10 ? ` · +${Math.round(o.climbM)} m` : '';
   const base = `${fmt1(o.lengthM / 1000)} km · ${signed(o.avgGradePct, 1)} %`;
   return { arrow: turnArrow(o.turnDeg), name: o.name, meta: base + climb, base, climb };
+}
+
+/**
+ * Textes du bas du HUD dans un ascenseur : l'altitude à la place de la pente (nulle dans la cabine), le trajet de
+ * l'ascenseur à la place du nom du parcours, et le temps qui reste avant l'arrivée (arrondi à la seconde au-dessus,
+ * jamais « 0 s » tant que la cabine bouge).
+ */
+export function liftBanner(lift: LiftState): { label: string; value: string; unit: string; info: string; right: string } {
+  const left = Math.max(1, Math.ceil((1 - lift.progress) * lift.durationS - 1e-9));
+  return {
+    label: 'Altitude',
+    value: String(Math.round(lift.altitudeM)),
+    unit: 'm',
+    info: `${lift.name} · ${Math.round(lift.fromAltitudeM)} → ${Math.round(lift.toAltitudeM)} m`,
+    right: `${lift.toName} dans ${left} s`,
+  };
 }

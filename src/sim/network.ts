@@ -33,8 +33,19 @@ export interface EdgeDef {
   path?: [number, number][];
   /** Route à sens unique : on ne la prend que dans son sens de définition (la piste d'un vélodrome). */
   oneWay?: boolean;
-  /** `track` : piste de vélodrome, dessinée par le vélodrome lui-même (ni asphalte, ni piquets, ni parapets). */
-  surface?: 'track';
+  /**
+   * `track` : piste de vélodrome, dessinée par le vélodrome lui-même (ni asphalte, ni piquets, ni parapets).
+   * `sky` : route suspendue dans le ciel (la Route arc-en-ciel), qui ne porte pas le sol : elle peut passer au-dessus
+   * d'une autre route, pourvu qu'elle en reste à `MIN_CLEARANCE_M` de hauteur.
+   * `lift` : un ascenseur, de `from` (en bas) à `to` (en haut), au même endroit ; voir `lift`.
+   */
+  surface?: 'track' | 'sky' | 'lift';
+  /**
+   * Ascenseur (`surface: 'lift'`) : la cabine met `durationS` secondes, quoi que fasse le cycliste, à parcourir
+   * `lengthM` mètres de trajet (une longueur symbolique, sur la plateforme). La hauteur gagnée n'est pas pédalée : le
+   * trajet la retranche de l'altitude de la simulation (voir `Journey.altitudeAt`).
+   */
+  lift?: { lengthM: number; durationS: number };
 }
 
 /** Éléments de décor posés sur une route, repérés par son identifiant et l'abscisse `s` depuis son nœud de départ. */
@@ -91,8 +102,8 @@ export interface CourseDef {
   id: string;
   name: string;
   description: string;
-  /** Lumière du parcours : plein jour par défaut, ou coucher de soleil. */
-  ambiance?: 'day' | 'sunset';
+  /** Lumière du parcours : plein jour par défaut, coucher de soleil ou nuit étoilée. */
+  ambiance?: 'day' | 'sunset' | 'night';
   /**
    * Routes de la boucle, dans l'ordre. Chacune se parcourt dans son sens de définition (départ → arrivée) et finit au
    * nœud où commence la suivante ; la dernière ramène au départ de la première. Le parcours part de la première.
@@ -163,6 +174,12 @@ function smoothCurve(pts: Pt[]): Pt[] {
   return out;
 }
 
+/** Lissage de 0 à 1, à dérivée nulle aux deux bouts : la cabine d'un ascenseur part et arrive en douceur. */
+export const smoothstep = (t: number) => {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+};
+
 /** Index du dernier élément de `xs` (croissant) qui est ≤ `v`, borné à [0, n-2]. */
 function segmentOf(xs: number[], v: number): number {
   let lo = 0;
@@ -185,10 +202,23 @@ export class Edge {
   private readonly knotS: number[] = [];
   private readonly knotY: number[] = [];
   private readonly knotD: number[] = [];
+  /** Ascenseur : cap d'arrivée sur la plateforme et cap de départ en haut (posés par le réseau, `setLiftHeadings`). */
+  private liftIn = 0;
+  private liftOut = 0;
 
   constructor(readonly def: EdgeDef, readonly from: NodeDef, readonly to: NodeDef) {
     this.id = def.id;
     this.name = def.name;
+    if (def.surface === 'lift') {
+      // Un ascenseur ne va nulle part en plan : la plateforme reste au pied de la colonne, seule la hauteur change.
+      if (!def.lift || def.lift.lengthM <= 0 || def.lift.durationS <= 0) throw new Error(`ascenseur ${def.id} : longueur et durée requises`);
+      if (dist([from.x, from.z], [to.x, to.z]) > 0.01) throw new Error(`ascenseur ${def.id} : le haut n'est pas au-dessus du bas`);
+      this.lengthM = def.lift.lengthM;
+      this.xs.push(from.x, from.x);
+      this.zs.push(from.z, from.z);
+      this.cum.push(0, this.lengthM);
+      return;
+    }
     if (def.path) {
       const [a, b] = [def.path[0]!, def.path[def.path.length - 1]!];
       if (dist(a, [from.x, from.z]) > 0.01 || dist(b, [to.x, to.z]) > 0.01) throw new Error(`arête ${def.id} : le tracé ne part pas de ${from.id} ou n'arrive pas à ${to.id}`);
@@ -245,7 +275,24 @@ export class Edge {
     this.knotD.push(...d);
   }
 
+  /** Vrai pour un ascenseur (`surface: 'lift'`). */
+  get isLift(): boolean {
+    return this.def.surface === 'lift';
+  }
+
+  /** Ascenseur : caps d'arrivée (en bas) et de départ (en haut), pour que le cycliste tourne sur la plateforme en montant. */
+  setLiftHeadings(inHeading: number, outHeading: number): void {
+    this.liftIn = inHeading;
+    this.liftOut = outHeading;
+  }
+
   private hermite(s: number): { y: number; dy: number } {
+    if (this.isLift) {
+      // La cabine monte en douceur ; sa « pente » n'a pas de sens physique (le trajet la retranche).
+      const t = Math.min(Math.max(s, 0), this.lengthM) / this.lengthM;
+      const rise = this.to.altitude - this.from.altitude;
+      return { y: this.from.altitude + rise * smoothstep(t), dy: (rise * 6 * t * (1 - t)) / this.lengthM };
+    }
     const S = this.knotS;
     const x = Math.min(Math.max(s, 0), this.lengthM);
     const k = segmentOf(S, x);
@@ -287,6 +334,7 @@ export class Edge {
 
   /** Cap en rad dans le sens départ → arrivée : `atan2(dz, dx)`, donc positif en tournant vers la droite (z vers le sud). */
   headingAt(s: number): number {
+    if (this.isLift) return this.liftHeadingAt(s);
     const x = Math.min(Math.max(s, 0), this.lengthM);
     const k = segmentOf(this.cum, x);
     return Math.atan2(this.zs[k + 1]! - this.zs[k]!, this.xs[k + 1]! - this.xs[k]!);
@@ -298,6 +346,7 @@ export class Edge {
    * qui le suit tressaute à chaque palier. Aux bouts de l'arête, c'est le cap du segment, comme `headingAt`.
    */
   smoothHeadingAt(s: number): number {
+    if (this.isLift) return this.liftHeadingAt(s);
     const x = Math.min(Math.max(s, 0), this.lengthM);
     const k = segmentOf(this.cum, x);
     const seg = (i: number) => Math.atan2(this.zs[i + 1]! - this.zs[i]!, this.xs[i + 1]! - this.xs[i]!);
@@ -309,6 +358,14 @@ export class Edge {
     if (d > Math.PI) d -= 2 * Math.PI;
     if (d < -Math.PI) d += 2 * Math.PI;
     return seg(k) + d * t;
+  }
+
+  /** Ascenseur : le cap tourne de celui de l'arrivée à celui du départ, au rythme de la montée. */
+  private liftHeadingAt(s: number): number {
+    let d = (this.liftOut - this.liftIn) % (2 * Math.PI);
+    if (d > Math.PI) d -= 2 * Math.PI;
+    if (d < -Math.PI) d += 2 * Math.PI;
+    return this.liftIn + d * smoothstep(Math.min(Math.max(s, 0), this.lengthM) / this.lengthM);
   }
 
   /** Points échantillonnés tous les `stepM` (pour l'index spatial, les tests et le rendu). */
@@ -355,6 +412,15 @@ export class RoadNetwork {
       this.incidentTo.get(a.id)!.push(edge);
       this.incidentTo.get(b.id)!.push(edge);
     }
+    for (const e of this.edges.values()) {
+      if (!e.isLift) continue;
+      // Cap d'arrivée : celui de la route qui mène au pied ; cap de départ : celui de la route qui part d'en haut.
+      const below = this.incidentTo.get(e.from.id)!.find((o) => o !== e);
+      const above = this.incidentTo.get(e.to.id)!.find((o) => o !== e);
+      const inH = below ? (below.to.id === e.from.id ? below.headingAt(below.lengthM) : below.headingAt(0) + Math.PI) : 0;
+      const outH = above ? (above.from.id === e.to.id ? above.headingAt(0) : above.headingAt(above.lengthM) + Math.PI) : inH;
+      e.setLiftHeadings(inH, outH);
+    }
     if (!this.edges.has(def.start.edge)) throw new Error(`départ : arête ${def.start.edge} inconnue`);
     for (const c of this.courses) {
       if (c.guide.length < 2) throw new Error(`parcours ${c.id} : au moins deux routes`);
@@ -380,13 +446,17 @@ export class RoadNetwork {
     return this.courses.find((c) => c.id === id) ?? this.courses[0];
   }
 
-  /** Longueur de la boucle d'un parcours et total de ses montées (échantillonné tous les 20 m), en m. */
+  /**
+   * Longueur de la boucle d'un parcours et total de ses montées pédalées (échantillonné tous les 20 m), en m : la
+   * hauteur donnée par un ascenseur n'y compte pas.
+   */
   courseStats(course: CourseDef): { lengthM: number; climbM: number } {
     let lengthM = 0;
     let climbM = 0;
     for (const id of course.guide) {
       const e = this.edges.get(id)!;
       lengthM += e.lengthM;
+      if (e.isLift) continue;
       const alts = e.sample(20).map((p) => p.altitude);
       for (let i = 1; i < alts.length; i++) climbM += Math.max(0, alts[i]! - alts[i - 1]!);
     }
@@ -438,11 +508,19 @@ export const MIN_SHORE_M = 18;
 /** Une route à moins de `SHORE_ZONE_M` d'un lac doit le dominer d'au moins `MIN_FREEBOARD_M`. */
 const SHORE_ZONE_M = 150;
 export const MIN_FREEBOARD_M = 1;
+/**
+ * Une route du ciel (`sky`) peut passer au-dessus ou au-dessous d'une autre route, et d'elle-même (la Spirale), sans
+ * l'écart en plan exigé, pourvu qu'elles restent au moins à cette hauteur l'une de l'autre, en m.
+ */
+export const MIN_CLEARANCE_M = 30;
 
-/** Liste les défauts du réseau ; vide s'il est jouable. Les tests l'exigent vide, et le rendu s'y fie. */
+/**
+ * Liste les défauts du réseau ; vide s'il est jouable. Les tests l'exigent vide, et le rendu s'y fie. Un ascenseur
+ * n'est pas une route : ni longueur minimale, ni pente, ni écart, ni angle ; il compte seulement pour les culs-de-sac.
+ */
 export function validateNetwork(net: RoadNetwork): string[] {
   const issues: string[] = [];
-  const edges = [...net.edges.values()];
+  const edges = [...net.edges.values()].filter((e) => !e.isLift);
 
   for (const e of edges) {
     if (e.lengthM < MIN_EDGE_M) issues.push(`${e.id} : ${e.lengthM.toFixed(0)} m, moins de ${MIN_EDGE_M} m`);
@@ -452,8 +530,8 @@ export function validateNetwork(net: RoadNetwork): string[] {
   }
 
   for (const n of net.nodes.values()) {
-    const around = net.incident(n.id);
-    if (around.length < 2) issues.push(`${n.id} : cul-de-sac (${around.length} route)`);
+    if (net.incident(n.id).length < 2) issues.push(`${n.id} : cul-de-sac (${net.incident(n.id).length} route)`);
+    const around = net.incident(n.id).filter((e) => !e.isLift);
     const headings = around.map((e) => (e.from.id === n.id ? e.headingAt(0) : e.headingAt(e.lengthM) + Math.PI));
     for (let i = 0; i < headings.length; i++) {
       for (let j = i + 1; j < headings.length; j++) {
@@ -472,9 +550,14 @@ export function validateNetwork(net: RoadNetwork): string[] {
     for (let j = i; j < edges.length; j++) {
       const a = edges[i]!;
       const b = edges[j]!;
+      // Au-dessus d'une route du ciel ou au-dessous, seuls comptent les points trop proches en hauteur.
+      const stacked = a.def.surface === 'sky' || b.def.surface === 'sky';
+      const apart = (p: { altitude: number }, q: { altitude: number }) => stacked && Math.abs(p.altitude - q.altitude) >= MIN_CLEARANCE_M;
       if (i === j) {
         let min = Infinity;
-        for (const p of samples[i]!) for (const q of samples[i]!) if (Math.abs(p.s - q.s) > 300) min = Math.min(min, Math.hypot(p.x - q.x, p.z - q.z));
+        for (const p of samples[i]!) {
+          for (const q of samples[i]!) if (Math.abs(p.s - q.s) > 300 && !apart(p, q)) min = Math.min(min, Math.hypot(p.x - q.x, p.z - q.z));
+        }
         if (min < MIN_SEPARATION_M) issues.push(`${a.id} : elle se rapproche d'elle-même à ${min.toFixed(0)} m`);
         continue;
       }
@@ -492,6 +575,7 @@ export function validateNetwork(net: RoadNetwork): string[] {
         if (shared.length && zone(a, p.s) < JUNCTION_ZONE_M) continue;
         for (const q of samples[j]!) {
           if (shared.length && zone(b, q.s) < JUNCTION_ZONE_M) continue;
+          if (apart(p, q)) continue;
           min = Math.min(min, Math.hypot(p.x - q.x, p.z - q.z));
         }
       }
