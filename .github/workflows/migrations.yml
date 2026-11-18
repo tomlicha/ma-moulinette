@@ -9,8 +9,8 @@
 #                          pour le déploiement du Worker de journaux (job deploy-logs)
 #   CLOUDFLARE_ACCOUNT_ID  identifiant du compte Cloudflare
 #
-# Le Worker de l'application est déployé à part, par Cloudflare, à chaque poussée sur main : les deux démarrent ensemble et
-# le job migrate est en général fini avant. Pour ne jamais avoir le code neuf avant sa migration : migrations additives
+# Le Worker de l'application est déployé à part, chaque nuit à 2 h heure de Montréal (deploy-production.yml) : les migrations
+# appliquées à la poussée passent donc avant le code neuf. Pour ne jamais avoir le code neuf avant sa migration : migrations additives
 # d'abord (créer, ajouter ; jamais renommer ni supprimer dans la même version que le code qui s'en passe), voir README.
 # Le Worker de journaux (wrangler.toml) est déployé ici, par le job deploy-logs, une fois la migration passée : il n'y a
 # donc jamais de code neuf sans sa table.
