@@ -217,7 +217,7 @@ const SIGN_LINES = ['ICI GÎT MARIE', 'remplaçant son pneu', 'à Magog'];
 /** Distance en amont de Marie (m) : la pancarte se lit pendant qu'on s'approche. */
 const SIGN_BEFORE_M = 11;
 
-function signTexture(): THREE.CanvasTexture | undefined {
+function signTexture(lines: readonly string[]): THREE.CanvasTexture | undefined {
   if (typeof document === 'undefined') return undefined;
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
@@ -235,23 +235,23 @@ function signTexture(): THREE.CanvasTexture | undefined {
   ctx.textBaseline = 'middle';
   const font = '700 {px} "Barlow Condensed", "Arial Narrow", "Segoe UI", system-ui, sans-serif';
   ctx.font = font.replace('{px}', '150px');
-  ctx.fillText(SIGN_LINES[0]!, 512, 135, 940);
+  ctx.fillText(lines[0]!, 512, 135, 940);
   ctx.font = font.replace('{px}', '110px');
-  ctx.fillText(SIGN_LINES[1]!, 512, 290, 940);
+  ctx.fillText(lines[1]!, 512, 290, 940);
   ctx.fillStyle = '#d9483b';
   ctx.font = font.replace('{px}', '120px');
-  ctx.fillText(SIGN_LINES[2]!, 512, 440, 940);
+  ctx.fillText(lines[2]!, 512, 440, 940);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
   return tex;
 }
 
-/** Pancarte sur deux piquets, plantée en amont de Marie. */
-function buildSign(zM: number): THREE.Group {
+/** Pancarte sur deux piquets (trois lignes), plantée `before` m en amont de `zM`. */
+export function buildSign(zM: number, lines: readonly string[] = SIGN_LINES, before = SIGN_BEFORE_M): THREE.Group {
   const g = new THREE.Group();
   const wood = material(0x6b4a2e, 0.9);
-  const tex = signTexture();
+  const tex = signTexture(lines);
   const face = tex ? new THREE.MeshStandardNodeMaterial({ map: tex, roughness: 0.8 }) : wood;
   const w = 3.6;
   const h = 1.8;
@@ -260,6 +260,6 @@ function buildSign(zM: number): THREE.Group {
   board.position.set(0, 0.6 + h / 2, 0);
   g.add(board);
   g.rotation.y = Math.PI; // face vers le coureur qui arrive, c'est-à-dire vers -z
-  g.position.set(-2.1, 0, zM - SIGN_BEFORE_M);
+  g.position.set(-2.1, 0, zM - before);
   return g;
 }

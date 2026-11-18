@@ -318,6 +318,10 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
         const q = to(e.pointAt(l.s).x, e.pointAt(l.s).z);
         out.push(`<circle cx="${n1(q.x)}" cy="${n1(q.y)}" r="${n1(9 * fs)}" fill="#D9483B" stroke="#fff" stroke-width="2"/>`);
         out.push(`<text x="${n1(q.x)}" y="${n1(q.y + 4 * fs)}" font-size="${n1(T(11))}" font-weight="800" fill="#fff" text-anchor="middle">M</text>`);
+      } else if (l.kind === 'richard') {
+        const q = to(e.pointAt(l.s).x, e.pointAt(l.s).z);
+        out.push(`<circle cx="${n1(q.x)}" cy="${n1(q.y)}" r="${n1(9 * fs)}" fill="#F08A24" stroke="#fff" stroke-width="2"/>`);
+        out.push(`<text x="${n1(q.x)}" y="${n1(q.y + 4 * fs)}" font-size="${n1(T(11))}" font-weight="800" fill="#fff" text-anchor="middle">R</text>`);
       }
     }
   }
@@ -405,9 +409,11 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     out.push(`<text x="${X + 60}" y="${y + 5}" font-size="16" fill="${COLORS.ink}">Arche</text>`);
     out.push(`<circle cx="${X + 23}" cy="${y + 28}" r="9" fill="#D9483B" stroke="#fff" stroke-width="2"/><text x="${X + 23}" y="${y + 32}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">M</text>`);
     out.push(`<text x="${X + 60}" y="${y + 33}" font-size="16" fill="${COLORS.ink}">Marie, qui répare son vélo</text>`);
-    out.push(`<text x="${X}" y="${y + 66}" font-size="14" fill="${COLORS.muted}">Flèches : sens de marche · numéros : kilomètres de la boucle</text>`);
+    out.push(`<circle cx="${X + 23}" cy="${y + 56}" r="9" fill="#F08A24" stroke="#fff" stroke-width="2"/><text x="${X + 23}" y="${y + 60}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">R</text>`);
+    out.push(`<text x="${X + 60}" y="${y + 61}" font-size="16" fill="${COLORS.ink}">Richard, sur la roue arrière dans l’escalier</text>`);
+    out.push(`<text x="${X}" y="${y + 94}" font-size="14" fill="${COLORS.muted}">Flèches : sens de marche · numéros : kilomètres de la boucle</text>`);
 
-    y += 112;
+    y += 140;
     const PH = 150;
     const range = altitudeRange(courses);
     for (const g of courses) {

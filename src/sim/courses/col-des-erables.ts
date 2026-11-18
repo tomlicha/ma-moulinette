@@ -47,6 +47,8 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
     { kind: 'grove', edge: 'col', from: 120, to: 3700, species: 'maple' },
     // Marie répare son vélo dans la première rampe du Col, loin des clôtures.
     { kind: 'marie', edge: 'col', s: 900 },
+    // Richard, sur la roue arrière dans un escalier, au bord de la Vallée, passé les clôtures.
+    { kind: 'richard', edge: 'vallee', s: 1400 },
   ],
   water: [
     {
