@@ -1,7 +1,8 @@
 // Validation mobile : émule un téléphone en paysage (Chromium, écran tactile, zones sûres), prend des captures et mesure la
 // lisibilité : taille réelle de chaque texte, cibles tactiles, chevauchements et débordements des panneaux.
 // Usage (le serveur de dev doit tourner : `npm run dev`) :
-//   node tools/mobile/check.mjs <url> <dossierSortie> <iphone13|pixel9> [--no-ride]
+//   node tools/mobile/check.mjs <url> <dossierSortie> <iphone13|pixel9> [--no-ride] [--course=<id>]
+//   `--course=velodrome` : la sortie part sur ce parcours ; sur la piste, l'encart et sa touche de sortie, avant et après l'appui.
 //   node tools/mobile/summary.mjs <dossierSortie>
 // Chrome : variable CHROME, sinon l'installation Windows habituelle. Limite : c'est Chromium, pas WebKit (iOS).
 import { spawn } from 'node:child_process';
@@ -122,7 +123,7 @@ const MEASURE = (scope) => `(() => {
     targets.push({ t: (el.getAttribute('aria-label') || el.textContent || el.id || el.tagName).trim().replace(/\\s+/g, ' ').slice(0, 36), w: Math.round(r.width), h: Math.round(r.height), id: el.id || el.className.toString().slice(0, 24) });
   }
   const panels = {};
-  for (const sel of ['[data-view="sortie"]', '.ride', '.ride canvas', '.hud', '.hud-left', '.hud-center', '.hud-bottom', '.hud-junction', '.hud-message', '#ride-menu-btn', '.ride-menu-btn', '.ride-quick', '.map-card', '.course-card', '.home-hero-body', '.home-nav', 'a.home-radar', '.home-workout']) {
+  for (const sel of ['[data-view="sortie"]', '.ride', '.ride canvas', '.hud', '.hud-left', '.hud-center', '.hud-bottom', '.hud-junction', '.hud-message', '.ride-near', '.rn-exit', '#ride-menu-btn', '.ride-menu-btn', '.ride-quick', '.map-card', '.course-card', '.home-hero-body', '.home-nav', 'a.home-radar', '.home-workout']) {
     // Plusieurs écrans partagent des classes (ex. .home-nav) : on prend le premier élément visible, pas le premier du document.
     const el = [...document.querySelectorAll(sel)].find(visible);
     if (el) { const r = el.getBoundingClientRect(); if (r.width) panels[sel] = { x: Math.round(r.left), y: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) }; }
@@ -206,8 +207,26 @@ await shot('4-carte');
 await measure('carte', '#map-dialog');
 await click('#map-close'); await sleep(400);
 await click('[data-course="col"]'); await sleep(400);
+const course = process.argv.find((a) => a.startsWith('--course='))?.slice('--course='.length);
+if (course) { await click(`[data-course="${course}"]`); await sleep(400); }
 
-if (!process.argv.includes('--no-ride')) {
+if (course === 'velodrome' && !process.argv.includes('--no-ride')) {
+  // 5. Vélodrome : on tourne ; l'encart porte la touche « Sortir du vélodrome », sans panneau « Carrefour ».
+  await click('#course-go');
+  // La vue 3D se construit (plus lentement sans fenêtre) : on attend que l'écran de chargement s'efface.
+  for (let i = 0; i < 120 && !(await evaluate("document.getElementById('ride-loading')?.hidden ?? true")); i++) await sleep(500);
+  await advance(120_000);
+  await evaluate('1'); await sleep(800);
+  report.junctionShown = await evaluate("(() => { const j = document.querySelector('.hud-junction'); return !!j && !j.hidden; })()");
+  report.exitLabel = await evaluate("document.querySelector('.rn-exit')?.textContent");
+  await shot('5-piste');
+  await measure('piste', '.ride');
+  // 6. Appui : la sortie est programmée, la touche donne la distance de la porte.
+  await click('.rn-exit'); await sleep(600);
+  report.exitArmedLabel = await evaluate("document.querySelector('.rn-exit')?.textContent");
+  await shot('6-piste-sortie');
+  await measure('piste-sortie', '.ride');
+} else if (!process.argv.includes('--no-ride')) {
   // 5. Sortie : « Partir », puis le carrefour annoncé.
   await click('#course-go');
   await sleep(1500);

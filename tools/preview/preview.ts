@@ -13,6 +13,8 @@
  * - `quality=low` : profil bas du monde (par défaut le profil haut, comme l'application).
  * - `webgl` pour forcer le repli WebGL2 ; `shadows=0` pour couper les ombres (juger le modelé sans auto-ombrage).
  * - `gate=z1..z6|free` pose la porte d'un changement de palier `ahead` m devant le cycliste (60 par défaut), comme en séance.
+ * - `shot=velodrome` : le vélodrome de Roubaix seul ; `view=aerial|porte|tribune|piste|virage|entree|facade|podium|parking`,
+ *   `anim=0` fige les coureurs (le décor s'anime toujours, `t` en avance l'horloge), `budget` affiche les triangles par partie.
  * - `pale` : cuissard gris clair sur le premier coureur, pour juger le modelé du bassin, invisible en noir.
  */
 import * as THREE from 'three/webgpu';
@@ -28,6 +30,9 @@ import { COL_DES_ERABLES } from '../../src/sim/courses/col-des-erables';
 import { IntervalGates } from '../../src/render/interval-gate';
 import type { Zone } from '../../src/workout/profile';
 import { Journey } from '../../src/sim/journey';
+import { DAY } from '../../src/render/ambiance';
+import { buildVelodrome } from '../../src/render/velodrome';
+import { VELODROME } from '../../src/sim/velodrome-track';
 
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (params.has(k) ? Number(params.get(k)) : d);
@@ -55,7 +60,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe4e6ea);
 const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardNodeMaterial({ color: 0xf1f2f4, roughness: 1 }));
 ground.receiveShadow = true;
-const inWorld = ['marie', 'richard', 'marie-chase', 'ride', 'map'].includes(shot); // le vrai décor apporte son sol et ses lumières
+const inWorld = ['marie', 'richard', 'marie-chase', 'ride', 'map', 'velodrome'].includes(shot); // le vrai décor apporte son sol et ses lumières
 if (!inWorld) {
   scene.add(ground);
   scene.add(new THREE.HemisphereLight(0xeef4ff, 0x9a9488, 1.6));
@@ -87,6 +92,8 @@ const place = (kit: Kit, x: number, z: number, yawDeg: number, y = 0) => {
 };
 
 let world: ReturnType<typeof buildWorld> | undefined;
+/** Animation propre à une vue (le vélodrome), appelée à chaque image. */
+let tick: ((dtS: number) => void) | undefined;
 let worldRider: { x: number; z: number } | undefined;
 
 /** Roule le trajet jusqu'à `d`, en prenant aux carrefours les routes de `picks` dans l'ordre (sinon tout droit). */
@@ -166,16 +173,23 @@ if (shot === 'marie' || shot === 'richard' || shot === 'marie-chase' || shot ===
     const ahead = journey.pointAt(d + 2);
     const f = forwardOf(pt.heading);
     const sd = sideOf(pt.heading);
-    const y = layout.y(pt.y);
-    const p = new THREE.Vector3(pt.x + sd.x * -1.6, y, pt.z + sd.z * -1.6);
+    // Comme `RideView.place` : sur une piste de vélodrome, le béton relevé porte le coureur, qui se penche.
+    const lx = pt.x + sd.x * -1.6;
+    const lz = pt.z + sd.z * -1.6;
+    const surf = layout.surfaceAt(lx, lz);
+    const y = layout.y(pt.y) + surf.lift;
+    const p = new THREE.Vector3(lx, y, lz);
     const rider = place({}, p.x, p.z, 0, p.y + 0.04);
-    rider.group.lookAt(p.x + f.x * 2, p.y + 0.04 + (layout.y(ahead.y) - y), p.z + f.z * 2);
+    const aheadLift = layout.surfaceAt(ahead.x + sd.x * -1.6, ahead.z + sd.z * -1.6).lift;
+    rider.group.lookAt(p.x + f.x * 2, p.y + 0.04 + (layout.y(ahead.y) + aheadLift - y), p.z + f.z * 2);
+    if (surf.bank) rider.group.rotateZ(-surf.bank);
     // Même caméra que dans l'application (`RideView.follow`) : regard sur la route devant, champ de vision selon la pente.
     camera.fov = fovFor(journey.gradeAt(d), num('speed', 25));
     camera.near = 0.3;
     camera.far = CAMERA_FAR_M;
     const back = num('camback', 4.4);
-    const aheadY = layout.y(journey.pointAt(d + LOOK_AHEAD_M).y);
+    const lookPt = journey.pointAt(d + LOOK_AHEAD_M);
+    const aheadY = layout.y(lookPt.y) + layout.surfaceAt(lookPt.x, lookPt.z).lift;
     camera.position.set(p.x - f.x * back, p.y + num('camup', 1.85), p.z - f.z * back);
     camera.lookAt(p.x + f.x * LOOK_AHEAD_M, lookHeight(p.y, aheadY), p.z + f.z * LOOK_AHEAD_M);
     worldRider = { x: p.x, z: p.z };
@@ -195,6 +209,89 @@ if (shot === 'marie' || shot === 'richard' || shot === 'marie-chase' || shot ===
     const layer = world.group.children[Number(k)];
     if (layer) layer.visible = false;
   }
+} else if (shot === 'velodrome') {
+  // Le vélodrome seul, sur une prairie, à la lumière de jour du monde. `view` : aerial (défaut), tribune, piste, virage, entree, facade.
+  const v = buildVelodrome();
+  scene.add(v.group);
+  scene.background = DAY.horizon.clone();
+  scene.fog = new THREE.FogExp2(DAY.horizon.getHex(), 0.0005);
+  const lawn = new THREE.Mesh(new THREE.CircleGeometry(4000, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardNodeMaterial({ color: 0x6aa84a, roughness: 1 }));
+  lawn.position.y = -0.02;
+  lawn.receiveShadow = true;
+  scene.add(lawn, new THREE.HemisphereLight(DAY.hemiSky, DAY.hemiGround, DAY.hemiIntensity));
+  const vSun = new THREE.DirectionalLight(DAY.sunColor, DAY.sunIntensity);
+  vSun.position.copy(DAY.sunDirection).multiplyScalar(400);
+  vSun.castShadow = params.get('shadows') !== '0';
+  vSun.shadow.mapSize.set(4096, 4096);
+  Object.assign(vSun.shadow.camera, { left: -200, right: 200, top: 200, bottom: -200, near: 1, far: 1000 });
+  vSun.shadow.bias = -0.0005;
+  vSun.shadow.normalBias = 0.05;
+  scene.add(vSun);
+  const t = v.track;
+  // Un groupe de six coureurs à l'approche de la ligne, penchés avec le dévers ; ils tournent (`anim=0` pour les figer).
+  const pack = ([[0, -6, 2.2], [1, -9, 3.0], [2, -13, 2.4], [1, -16, 1.8], [0, -19, 3.4], [2, -24, 2.6]] as const).map(([i, ds, u]) => ({
+    rider: place(KITS[i]!, 0, 0, 0),
+    s: v.finishS + ds + num('at', 0),
+    u,
+  }));
+  const placePack = () => {
+    for (const c of pack) {
+      const f = t.frame(c.s);
+      const p = t.point(c.s, c.u);
+      c.rider.group.position.set(p.x, p.y, p.z);
+      c.rider.group.rotation.set(0, Math.atan2(f.dirX, f.dirZ), 0);
+      c.rider.group.rotateZ(-f.bank);
+    }
+  };
+  placePack();
+  const moving = params.get('anim') !== '0';
+  if (params.has('budget')) {
+    // `budget` : triangles de chaque partie du vélodrome (instances comprises), affichés en bas de page.
+    const parts: string[] = [];
+    v.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const g = m.geometry;
+      const tris = (g.index ? g.index.count : g.getAttribute('position').count) / 3;
+      const n = (m as unknown as THREE.InstancedMesh).isInstancedMesh ? (m as unknown as THREE.InstancedMesh).count : 1;
+      if (tris * n > 2000) parts.push(`${Math.round((tris * n) / 1000)}k${n > 1 ? `(${n})` : ''}${m.castShadow ? 'o' : ''}`);
+    });
+    document.getElementById('info')!.dataset.budget = parts.join(' ');
+  }
+  tick = (dt) => {
+    v.update(dt);
+    if (!moving) return;
+    for (const c of pack) {
+      c.s += 15 * dt;
+      c.rider.animate(dt, 105, 15);
+    }
+    placePack();
+  };
+  const look = (from: THREE.Vector3, to: THREE.Vector3, fov: number) => {
+    camera.fov = fov;
+    camera.near = 0.3;
+    camera.far = 5000;
+    camera.position.copy(from);
+    camera.lookAt(to);
+  };
+  const at = (s: number, u: number, dy = 0) => {
+    const p = t.point(s, u);
+    return new THREE.Vector3(p.x, p.y + dy, p.z);
+  };
+  const apex = VELODROME.straightM / 2 + VELODROME.transitionM + t.arcM / 2;
+  const view = params.get('view') ?? 'aerial';
+  if (view === 'tribune') look(at(-24, 17, 8.6), at(apex - 30, 2), 62);
+  else if (view === 'podium') look(at(v.finishS + 18, 1.5, 2.6), at(v.finishS + 22, -15, 2), 55);
+  else if (view === 'parking') look(at(t.lapM / 2 + 60, 75, 22), at(t.lapM / 2 + 15, 30, 0), 50);
+  else if (view === 'porte') look(new THREE.Vector3(-120, 70, -190), at(v.gate.s, 6.7), 40);
+  else if (view === 'piste') look(at(v.finishS - 26, 2.6, 1.9), at(v.finishS + 6, 2.6, 0.8), 58);
+  else if (view === 'virage') look(at(apex - 50, -6, 1.7), at(apex + 10, 5, 0.5), 62);
+  else if (view === 'entree') {
+    const g = at(v.gate.s, 6.7, 1);
+    look(new THREE.Vector3(v.gate.road.x, 2.6, v.gate.road.z).lerp(g, 0.62).setY(2.6), g, 55);
+  }
+  else if (view === 'facade') look(at(-10, 80, 6), at(0, 25, 7), 55);
+  else look(new THREE.Vector3(-230, 170, 290), new THREE.Vector3(0, 0, 10), 38);
 } else if (shot === 'lineup') {
   place(KITS[0]!, -1.75, 0, 35); // trois quarts avant
   place(KITS[2]!, 0, 0, 90); // profil, avant vers la droite
@@ -246,10 +343,14 @@ renderer.setAnimationLoop((now) => {
   last = now;
   if (params.get('spin') === '1') for (const r of riders) r.animate(dt, 90, 9);
   world?.update(dt, worldRider);
+  tick?.(dt);
   renderer.render(scene, camera);
   const w = world?.stats();
-  info.textContent = `${backend} · ${renderer.info.render.triangles.toLocaleString('fr-FR')} triangles · ${renderer.info.render.drawCalls} appels de dessin` + (w ? ` · ${w.chunks} morceaux, ${w.decorInstances} arbres et rochers, ${w.coarseNearRoad} grossiers près de la route` : '');
+  info.textContent = (info.dataset.budget ? `${info.dataset.budget} · ` : '') + `${backend} · ${renderer.info.render.triangles.toLocaleString('fr-FR')} triangles · ${renderer.info.render.drawCalls} appels de dessin` + (w ? ` · ${w.chunks} morceaux, ${w.decorInstances} arbres et rochers, ${w.coarseNearRoad} grossiers près de la route` : '');
 });
-for (let i = 0; i < num('t', 0) * 20; i++) world?.update(0.05, worldRider); // `t` : secondes d'animation du décor avant la capture
+for (let i = 0; i < num('t', 0) * 20; i++) {
+  world?.update(0.05, worldRider);
+  tick?.(0.05);
+} // `t` : secondes d'animation du décor avant la capture
 await renderer.renderAsync(scene, camera);
 document.title = 'ready';

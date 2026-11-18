@@ -176,6 +176,8 @@ export function nextSummitM(course: Course, fromM: number, horizonM = 8000, step
 /** Fenêtre du profil d'altitude : derrière et devant le cycliste, en m. */
 export const PROFILE_BEHIND_M = 400;
 export const PROFILE_SPAN_M = 3000;
+/** Plus petite hauteur d'altitude représentée par l'encart, en m : un plat y reste plat. */
+export const PROFILE_MIN_RANGE_M = 40;
 
 /**
  * Profil d'altitude d'une fenêtre de `spanM` m dont le cycliste occupe la position `behindM`, dans un repère `width` × `height`
@@ -195,7 +197,9 @@ export function profileWindow(
   for (let d = startM; d <= startM + spanM + 1e-6; d += stepM) pts.push([d, course.altitudeAt(d)]);
   const alts = pts.map((p) => p[1]);
   const min = Math.min(...alts);
-  const range = Math.max(...alts) - min || 1;
+  // Échelle verticale d'au moins `PROFILE_MIN_RANGE_M` : sans elle, un plat (la piste d'un vélodrome, où l'écart n'est
+  // qu'un bruit de calcul ; la Rive du lac, quelques mètres) s'étirait sur toute la hauteur en dents de scie.
+  const range = Math.max(Math.max(...alts) - min, PROFILE_MIN_RANGE_M);
   const x = (d: number) => ((d - startM) / spanM) * width;
   const y = (alt: number) => height - 3 - ((alt - min) / range) * (height - 6);
   const line = pts.map(([d, a], i) => `${i ? 'L' : 'M'}${x(d).toFixed(1)} ${y(a).toFixed(1)}`).join(' ');

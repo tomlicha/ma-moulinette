@@ -48,6 +48,8 @@ export interface World {
    * Marie disparaît quand le cycliste en est loin.
    */
   update(dtS: number, rider?: { x: number; z: number }): void;
+  /** Tours de piste bouclés par le joueur : le vélodrome les affiche (tableau, écran géant) et sonne la cloche. */
+  setVelodromeLaps(n: number): void;
   /** Ce qui est construit en ce moment, pour les mesures. */
   stats(): { chunks: number; decorInstances: number; coarseNearRoad: number };
 }
@@ -111,10 +113,14 @@ function ribbon(layout: WorldLayout, latA: number, latB: number, lift: number, s
     const n = Math.max(1, Math.round(e.lengthM / stepM));
     const pos: number[] = [];
     const idx: number[] = [];
+    const drawn = e.def.surface !== 'track';
     for (let i = 0; i < n; i++) {
       const s0 = (i * e.lengthM) / n;
       const s1 = ((i + 1) * e.lengthM) / n;
-      if (!keep(e, i, s0, s1)) continue;
+      if (!drawn || !keep(e, i, s0, s1)) continue;
+      // Le vélodrome dessine lui-même sa piste et sa route d'accès.
+      const mid = e.pointAt((s0 + s1) / 2);
+      if (layout.underVelodrome(mid.x, mid.z)) continue;
       const base = pos.length / 3;
       for (const s of [s0, s1]) {
         const p = e.pointAt(s);
@@ -157,6 +163,7 @@ function* buildRoad(layout: WorldLayout): Steps<THREE.Group> {
   // Plaque d'asphalte à chaque carrefour : elle couvre l'angle entre deux routes qui ne se prolongent pas.
   const discs: THREE.BufferGeometry[] = [];
   for (const n of layout.network.nodes.values()) {
+    if (layout.underVelodrome(n.x, n.z)) continue;
     discs.push(new THREE.CircleGeometry(JUNCTION_RADIUS_M, 28).rotateX(-Math.PI / 2).translate(n.x, layout.y(n.altitude) + 0.035, n.z));
   }
   const junctions = new THREE.Mesh(merge(discs), asphaltMat);
@@ -634,6 +641,7 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
       clouds.rotation.y += dtS * CLOUD_DRIFT_RAD_S;
       places.update(dtS);
     },
+    setVelodromeLaps: (n) => places.setVelodromeLaps(n),
     stats: () => ({ chunks: terrain.chunkCount, decorInstances: decor.instanceCount, coarseNearRoad: lastRider ? terrain.coarseNear(lastRider.x, lastRider.z, 300) : 0 }),
   };
 }

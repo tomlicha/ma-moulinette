@@ -53,10 +53,10 @@ describe('junctionScene', () => {
   const p = j.pendingJunction(d)!;
   const js = junctionScene(j, p)!;
 
-  it('annonce le Moulin à 210 m avec ses trois routes, nommées', () => {
+  it('annonce le Moulin à 210 m avec ses quatre routes, nommées', () => {
     expect(p.distanceM).toBeLessThanOrEqual(ANNOUNCE_M);
     expect(js.name).toBe('Le Moulin');
-    expect(js.options.map((o) => o.label).sort()).toEqual(['Le Col', 'Les Collines', 'Les Prés']);
+    expect(js.options.map((o) => o.label).sort()).toEqual(['Allée du Vélodrome', 'Le Col', 'Les Collines', 'Les Prés']);
   });
   it('la route retenue par défaut est celle du parcours, une seule est marquée', () => {
     const sel = js.options.filter((o) => o.selected);

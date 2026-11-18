@@ -60,6 +60,8 @@ export class Journey implements Course {
   private readonly committed: Leg[] = [];
   private tentative: Leg[] = [];
   private choice: number | undefined;
+  /** Sortie de piste programmée à la prochaine porte (`setTrackExit`). */
+  private exitTrack = false;
 
   private courseDef: CourseDef | undefined;
 
@@ -93,6 +95,7 @@ export class Journey implements Course {
     this.committed.push({ edge: first, forward: start.forward, startM: 0, lengthM: first.lengthM });
     this.tentative = [];
     this.choice = undefined;
+    this.exitTrack = false;
   }
 
   /** Fin de la partie validée, en m. */
@@ -106,26 +109,89 @@ export class Journey implements Course {
     while (distanceM >= this.committedEndM - LOCK_M) {
       const last = this.committed[this.committed.length - 1]!;
       const options = this.optionsAfter(last);
-      const index = this.choice ?? defaultIndex(options);
-      this.committed.push(this.legFor(options[index]!, last.startM + last.lengthM));
+      const index = this.choice ?? this.defaultFor(last, options);
+      const leg = this.legFor(options[index]!, last.startM + last.lengthM);
+      this.committed.push(leg);
       this.choice = undefined;
       this.tentative = [];
+      // La sortie programmée est faite : on a quitté la piste.
+      if (this.exitTrack && !isTrack(leg)) this.exitTrack = false;
     }
   }
 
-  /** Le prochain carrefour, s'il est annoncé et pas encore verrouillé. */
+  /**
+   * Le prochain carrefour, s'il est annoncé et pas encore verrouillé. Un nœud qui n'offre qu'une route (la ligne
+   * d'arrivée d'une piste, l'entrée sur la piste, La Rive) n'en est pas un : rien à choisir, rien à annoncer. La porte
+   * d'un vélodrome, vue de la piste, ne s'annonce pas non plus : on y tourne tour après tour, et la sortie se
+   * programme à part (`setTrackExit`), sans panneau à chaque passage.
+   */
   pendingJunction(distanceM: number): PendingJunction | undefined {
     const atM = this.committedEndM;
     if (atM - distanceM > ANNOUNCE_M || atM - distanceM <= LOCK_M) return undefined;
     const last = this.committed[this.committed.length - 1]!;
+    if (isTrack(last)) return undefined;
     const options = this.optionsAfter(last);
+    if (options.length < 2) return undefined;
     return {
       nodeId: endNodeId(last),
       atM,
       distanceM: atM - distanceM,
       options,
-      selected: this.choice ?? defaultIndex(options),
+      selected: this.choice ?? this.defaultFor(last, options),
     };
+  }
+
+  /**
+   * Tours de piste bouclés à `distanceM` : le nombre de passages sur la ligne d'arrivée d'un vélodrome depuis le départ
+   * (le départ du parcours « Vélodrome », posé sur la ligne, ne compte pas).
+   */
+  lapsAt(distanceM: number): number {
+    const finish = new Set(this.network.velodromes.map((v) => v.finishNodeId));
+    let laps = 0;
+    for (const leg of this.committed) {
+      if (leg.startM + leg.lengthM > distanceM) break;
+      if (leg.forward && isTrack(leg) && finish.has(endNodeId(leg))) laps++;
+    }
+    return laps;
+  }
+
+  /** Vrai si le cycliste est, à `distanceM`, sur la piste d'un vélodrome. */
+  onTrack(distanceM: number): boolean {
+    return isTrack(this.legAt(Math.max(0, distanceM)));
+  }
+
+  /** Vrai si la sortie de la piste est programmée à la prochaine porte. */
+  get trackExitArmed(): boolean {
+    return this.exitTrack;
+  }
+
+  /**
+   * Programme (`true`) ou annule la sortie de la piste à la prochaine porte : on y prend alors la route qui quitte la
+   * piste au lieu d'un tour de plus. Sans effet hors de la piste ; s'efface une fois sorti.
+   */
+  setTrackExit(on: boolean): void {
+    this.exitTrack = on;
+    this.tentative = [];
+  }
+
+  /**
+   * Distance jusqu'à la prochaine porte où l'on peut quitter la piste, en m ; `undefined` hors de la piste. Si le choix
+   * de la porte toute proche est déjà verrouillé (moins de `LOCK_M`), c'est la porte du tour suivant.
+   */
+  trackExitInM(distanceM: number): number | undefined {
+    const d = Math.max(0, distanceM);
+    if (!this.onTrack(d)) return undefined;
+    let x = d;
+    for (let i = 0; i < 8; i++) {
+      const leg = this.legAt(x);
+      const end = leg.startM + leg.lengthM;
+      const committedNext = end <= this.committedEndM - 1e-6 ? findLeg(this.committed, end + 1e-3) : undefined;
+      const canLeave = this.optionsAfter(leg).some((o) => this.network.edges.get(o.edgeId)!.def.surface !== 'track');
+      // Une porte dont le choix est déjà figé sur la piste ne compte pas : on ne peut plus y sortir.
+      if (canLeave && !(committedNext && isTrack(committedNext))) return end - d;
+      x = end + 1e-3;
+    }
+    return undefined;
   }
 
   /** Retient l'option `index` du prochain carrefour. Renvoie faux si elle n'existe pas. */
@@ -190,6 +256,7 @@ export class Journey implements Course {
     for (const edge of this.network.incident(nodeId)) {
       if (edge === leg.edge) continue;
       const forward = edge.from.id === nodeId;
+      if (!forward && edge.def.oneWay) continue; // pas de piste à contresens
       const outHeading = forward ? edge.headingAt(0) : edge.headingAt(edge.lengthM) + Math.PI;
       const turnDeg = (wrapPi(outHeading - inHeading) * 180) / Math.PI;
       options.push({
@@ -237,10 +304,19 @@ export class Journey implements Course {
       const last = this.tentative[this.tentative.length - 1] ?? this.committed[this.committed.length - 1]!;
       const options = this.optionsAfter(last);
       // Seul le prochain carrefour tient compte du choix en cours ; les suivants prennent le tout droit.
-      const index = this.tentative.length === 0 && this.choice !== undefined ? this.choice : defaultIndex(options);
+      const index = this.tentative.length === 0 && this.choice !== undefined ? this.choice : this.defaultFor(last, options);
       this.tentative.push(this.legFor(options[index]!, last.startM + last.lengthM));
     }
     return findLeg(this.tentative, d);
+  }
+
+  /** Route par défaut après `leg` : la sortie de piste si elle est programmée, sinon celle du parcours ou le tout droit. */
+  private defaultFor(leg: Leg, options: JunctionOption[]): number {
+    if (this.exitTrack && isTrack(leg)) {
+      const out = options.findIndex((o) => this.network.edges.get(o.edgeId)!.def.surface !== 'track');
+      if (out >= 0) return out;
+    }
+    return defaultIndex(options);
   }
 
   private tentativeEndM(): number {
@@ -248,6 +324,8 @@ export class Journey implements Course {
     return last ? last.startM + last.lengthM : this.committedEndM;
   }
 }
+
+const isTrack = (leg: Leg) => leg.edge.def.surface === 'track';
 
 /** La route du parcours si elle est proposée ; sinon l'option la plus droite (à égalité, la première de gauche à droite). */
 function defaultIndex(options: JunctionOption[]): number {

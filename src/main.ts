@@ -1209,7 +1209,12 @@ function renderHud() {
   });
   // Encart : la carte suit le coureur ; elle passe seule au premier plan 250 m avant un carrefour (docs/design/sortie.md).
   const at = ride && lastRide ? lastRide.distanceM : 0;
-  ridePanel.update({ distanceM: at, pending: ride && lastRide ? journey.pendingJunction(at) : undefined });
+  ridePanel.update({
+    distanceM: at,
+    pending: ride && lastRide ? journey.pendingJunction(at) : undefined,
+    // Sur la piste d'un vélodrome : la touche de sortie remplace le panneau « Carrefour » de chaque tour.
+    trackExit: ride && lastRide && journey.onTrack(at) ? { armed: journey.trackExitArmed, inM: journey.trackExitInM(at) } : undefined,
+  });
 }
 setInterval(renderHud, 250);
 // Choix au carrefour : touche du HUD, ou flèches gauche et droite pour glisser la sélection d'une route à l'autre.
@@ -1221,6 +1226,13 @@ document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (t instanceof HTMLElement && t.closest('input, select, textarea, [contenteditable]')) return;
   const by = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+  // Sur la piste : flèche droite, sortir à la prochaine porte ; flèche gauche, rester sur la piste.
+  if (by && ride && lastRide && journey.onTrack(lastRide.distanceM)) {
+    e.preventDefault();
+    journey.setTrackExit(by > 0);
+    renderHud();
+    return;
+  }
   const p = by && ride && lastRide ? journey.pendingJunction(lastRide.distanceM) : undefined;
   if (!by || !p) return;
   e.preventDefault();
@@ -1404,6 +1416,10 @@ const account = setupAccount({
 });
 const riderTags = new RiderTags($('rider-tags'));
 const ridePanel = new RidePanel($('near'), { journey, prefs });
+ridePanel.onTrackExit = () => {
+  journey.setTrackExit(!journey.trackExitArmed);
+  renderHud();
+};
 const crowd = $('crowd');
 /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
 function showCrowd() {

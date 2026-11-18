@@ -76,7 +76,13 @@ interface Wall {
 export function* buildRoadside(layout: WorldLayout): Steps<THREE.Group> {
   const group = new THREE.Group();
   const dummy = new THREE.Object3D();
-  const edges = layout.edges;
+  // La piste d'un vélodrome n'a ni piquets, ni bornes, ni parapets : elle a son mur.
+  const edges = layout.edges.filter((e) => e.def.surface !== 'track');
+  /** La route `e` passe-t-elle dans un vélodrome en `s` (sa rampe d'accès) ? On n'y pose rien. */
+  const inVelodrome = (e: (typeof edges)[number], s: number) => {
+    const p = e.pointAt(s);
+    return layout.underVelodrome(p.x, p.z);
+  };
 
   // Parapets : à l'extérieur de chaque virage serré, là où l'on sortirait de la route. Une route qui tourne à droite a
   // son extérieur à gauche.
@@ -108,6 +114,7 @@ export function* buildRoadside(layout: WorldLayout): Steps<THREE.Group> {
   const posts = lot(postGeo, edges.reduce((n, e) => n + 2 * (Math.floor(e.lengthM / POST_EVERY_M) + 1), 0), false);
   const stones = lot(stoneGeo, edges.reduce((n, e) => n + Math.floor(e.lengthM / STONE_EVERY_M) + 1, 0), true);
   const put = (mesh: THREE.InstancedMesh, e: (typeof edges)[number], s: number, lat: number) => {
+    if (inVelodrome(e, s)) return;
     const p = e.pointAt(s);
     const h = e.headingAt(s);
     const side = sideOf(h);
@@ -188,6 +195,7 @@ export function* buildRoadside(layout: WorldLayout): Steps<THREE.Group> {
   // Poteaux indicateurs : dans le plus grand angle libre du carrefour, une flèche par route.
   for (const node of layout.network.nodes.values()) {
     yield;
+    if (layout.underVelodrome(node.x, node.z)) continue;
     const ways = layout.network.incident(node.id).map((e) => ({ e, h: e.from.id === node.id ? e.headingAt(0) : e.headingAt(e.lengthM) + Math.PI }));
     if (ways.length < 2) continue;
     const sorted = ways.map((w) => ((w.h % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)).sort((a, b) => a - b);

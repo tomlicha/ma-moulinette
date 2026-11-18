@@ -5,6 +5,7 @@ import { Rider } from './rider';
 import type { Kit } from './region-material';
 import { declutter, hueOf, laneOf } from './others-model';
 import { forwardOf, sideOf, type WorldLayout } from './world-layout';
+import type { Surface } from '../sim/velodrome-track';
 
 export { laneOf } from './others-model';
 
@@ -70,6 +71,7 @@ export class OthersLayer {
   readonly group = new THREE.Group();
   private readonly shown = new Map<number, Shown>();
   private readonly tmp = new THREE.Vector3();
+  private readonly surf: Surface = { lift: 0, bank: 0 };
 
   constructor(
     private readonly assets: RiderAssets,
@@ -114,12 +116,16 @@ export class OthersLayer {
       const f = forwardOf(s.heading);
       const side = sideOf(s.heading);
       const lane = laneOf(r.slot, this.laneM);
-      const y = this.layout.y(r.point.y);
-      const rise = this.layout.y(r.point.y + (2 * r.gradePct) / 100) - y; // montée sur 2 m, relief exagéré compris
       const x = r.point.x + side.x * lane;
       const z = r.point.z + side.z * lane;
+      // Piste de vélodrome : plus haut sur le béton relevé, penché avec le dévers.
+      const surf = this.layout.surfaceAt(x, z, this.surf);
+      const ground = this.layout.y(r.point.y);
+      const y = ground + surf.lift;
+      const rise = this.layout.y(r.point.y + (2 * r.gradePct) / 100) - ground; // montée sur 2 m, relief exagéré compris
       s.rider.group.position.set(x, y + 0.04, z);
       s.rider.group.lookAt(x + f.x * 2, y + 0.04 + rise, z + f.z * 2);
+      if (surf.bank) s.rider.group.rotateZ(-surf.bank);
       s.rider.animate(dtS, r.riding ? r.cadenceRpm : 0, r.speedMs);
       placed.push({ slot: r.slot, name: r.name, x, y, z, distanceM: dist });
     }

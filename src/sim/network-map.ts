@@ -116,6 +116,68 @@ function label(
   );
 }
 
+const VELO = {
+  casing: '#FFFFFF',
+  band: '#4D9AD6',
+  infield: '#7CC05A',
+  stripe: '#8ACB66',
+  brick: '#A5553B',
+  roof: '#2B3A55',
+  ink: '#14171A',
+  white: '#FFFFFF',
+};
+
+/** Contour d'un stade (rectangle aux bouts en demi-cercle), centré, de demi-longueur `w` et demi-largeur `h`. */
+const stadium = (w: number, h: number) =>
+  `M${n1(-w + h)} ${n1(-h)} H${n1(w - h)} A${n1(h)} ${n1(h)} 0 0 1 ${n1(w - h)} ${n1(h)} H${n1(-w + h)} A${n1(h)} ${n1(h)} 0 0 1 ${n1(-w + h)} ${n1(-h)} Z`;
+
+/**
+ * Icône d'un vélodrome, centrée sur l'origine, la ligne droite d'arrivée en bas (au sud quand le site n'est pas tourné) :
+ * piste à la couleur `track` sur un liseré blanc, bande bleue au pied, pelouse rayée et terrain, tribune de brique au toit
+ * sombre le long de la ligne droite d'arrivée, damier de la ligne, et la porte des coureurs, ouverte dans la ligne droite
+ * opposée. `k` règle la taille (1 : 64 unités de long).
+ */
+export function velodromeIcon(track: string, k = 1): string {
+  const w = 32 * k;
+  const h = 17 * k;
+  const t = 6.5 * k; // largeur de la piste
+  const out: string[] = [];
+  // Tribune : un bâtiment de brique sous un toit sombre, dehors, le long de la ligne droite d'arrivée, avec son pavillon
+  // d'entrée au milieu et ses fenêtres.
+  const sw = w * 0.62;
+  const sy = h + 1.5 * k;
+  out.push(`<rect x="${n1(-sw - 1.6 * k)}" y="${n1(sy - 1.6 * k)}" width="${n1(2 * sw + 3.2 * k)}" height="${n1(10.2 * k)}" rx="${n1(2 * k)}" fill="${VELO.casing}"/>`);
+  out.push(`<rect x="${n1(-sw)}" y="${n1(sy)}" width="${n1(2 * sw)}" height="${n1(7 * k)}" rx="${n1(1 * k)}" fill="${VELO.brick}"/>`);
+  out.push(`<path d="M${n1(-sw)} ${n1(sy)} H${n1(sw)} L${n1(sw - 1.5 * k)} ${n1(sy + 3 * k)} H${n1(-sw + 1.5 * k)} Z" fill="${VELO.roof}"/>`);
+  for (let i = -2; i <= 2; i++) if (i) out.push(`<rect x="${n1(i * sw * 0.38 - 1.2 * k)}" y="${n1(sy + 4.2 * k)}" width="${n1(2.4 * k)}" height="${n1(1.6 * k)}" fill="#9CCBE6"/>`);
+  out.push(`<rect x="${n1(-3.2 * k)}" y="${n1(sy - 0.5 * k)}" width="${n1(6.4 * k)}" height="${n1(8.6 * k)}" rx="${n1(0.8 * k)}" fill="${VELO.brick}" stroke="${VELO.casing}" stroke-width="${n1(0.6 * k)}"/>`); // pavillon d'entrée
+  // Piste sur son liseré blanc : le haut du virage plus sombre (le dévers), une ligne peinte, la bande bleue, la pelouse.
+  out.push(`<path d="${stadium(w + 3 * k, h + 3 * k)}" fill="${VELO.casing}"/>`);
+  out.push(`<path d="${stadium(w, h)}" fill="${track}"/>`);
+  out.push(`<path d="${stadium(w - 0.9 * k, h - 0.9 * k)}" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="${n1(1.8 * k)}"/>`);
+  out.push(`<path d="${stadium(w - t * 0.6, h - t * 0.6)}" fill="none" stroke="${VELO.white}" stroke-opacity=".8" stroke-width="${n1(0.6 * k)}"/>`);
+  out.push(`<path d="${stadium(w - t, h - t)}" fill="${VELO.band}"/>`);
+  const iw = w - t - 1.4 * k;
+  const ih = h - t - 1.4 * k;
+  out.push(`<path d="${stadium(iw, ih)}" fill="${VELO.infield}"/>`);
+  // Bandes de tonte et terrain de rugby.
+  const px = iw - ih * 0.55;
+  for (let i = 0; i < 6; i += 2) out.push(`<rect x="${n1(-px + (2 * px * i) / 6)}" y="${n1(-ih * 0.62)}" width="${n1((2 * px) / 6)}" height="${n1(ih * 1.24)}" fill="${VELO.stripe}"/>`);
+  out.push(`<rect x="${n1(-px)}" y="${n1(-ih * 0.62)}" width="${n1(2 * px)}" height="${n1(ih * 1.24)}" fill="none" stroke="${VELO.white}" stroke-width="${n1(0.7 * k)}"/>`);
+  out.push(`<line x1="0" y1="${n1(-ih * 0.62)}" x2="0" y2="${n1(ih * 0.62)}" stroke="${VELO.white}" stroke-width="${n1(0.7 * k)}"/>`);
+  // Damier de la ligne d'arrivée, en travers de la ligne droite du bas.
+  const cx = 4 * k;
+  const sq = t / 3;
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 2; c++) out.push(`<rect x="${n1(cx + c * sq * 0.8)}" y="${n1(h - t + r * sq)}" width="${n1(sq * 0.8)}" height="${n1(sq)}" fill="${(r + c) % 2 ? VELO.ink : VELO.white}"/>`);
+  }
+  // Porte des coureurs : une ouverture dans le liseré de la ligne droite du haut, entre deux piliers.
+  const gx = 4.5 * k;
+  out.push(`<rect x="${n1(gx - 2.4 * k)}" y="${n1(-h - 3.2 * k)}" width="${n1(4.8 * k)}" height="${n1(3.4 * k)}" fill="${track}"/>`);
+  for (const sx of [-1, 1]) out.push(`<rect x="${n1(gx + sx * 2.6 * k - 0.9 * k)}" y="${n1(-h - 4 * k)}" width="${n1(1.8 * k)}" height="${n1(2.6 * k)}" rx="${n1(0.4 * k)}" fill="${VELO.brick}"/>`);
+  return out.join('');
+}
+
 /** Points de la route échantillonnés tous les `stepM`, convertis par `to`. */
 function polyline(edge: Edge, to: (x: number, z: number) => Pt, stepM: number): string {
   return edge
@@ -250,7 +312,9 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
   }
 
   /* ---------- Routes hors parcours, puis parcours ---------- */
-  const edges = [...network.edges.values()];
+  // La piste d'un vélodrome est dessinée par son icône, et ses deux nœuds (porte, ligne d'arrivée) n'en sont pas.
+  const edges = [...network.edges.values()].filter((e) => e.def.surface !== 'track');
+  const inVelodrome = (x: number, z: number) => network.velodromes.some((v) => v.covers(x, z));
   out.push(`<g fill="none" stroke-linecap="round" stroke-linejoin="round">`);
   for (const e of edges.filter((e) => !inCourse.has(e.id))) {
     const d = polyline(e, to, stepM);
@@ -342,9 +406,26 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     }
   }
 
+  /* ---------- Vélodromes ---------- */
+  for (const v of network.velodromes) {
+    const q = to(v.def.x, v.def.z);
+    const k = thin ? 1.7 : fs > 1 ? 1.25 * fs : 1;
+    // Couleur de la piste : celle du parcours qui y tourne ; en retrait si un autre parcours est mis en avant.
+    const owners = [...network.edges.values()].filter((e) => e.def.surface === 'track').flatMap((e) => inCourse.get(e.id) ?? []);
+    const color = chosen && owners.includes(chosen) ? chosen.color : (owners[0]?.color ?? COLORS.road);
+    const dim = chosen !== undefined && !owners.includes(chosen);
+    out.push(`<g transform="translate(${n1(q.x)} ${n1(q.y)}) rotate(${n1((-v.def.yaw * 180) / Math.PI)})"${dim ? ' opacity=".55"' : ''}>${velodromeIcon(color, k)}</g>`);
+    if (labels !== 'none') {
+      const y = q.y + 30 * k + 14 * fs;
+      out.push(label(q.x, y, v.def.name, { size: T(16), weight: 800, anchor: 'middle' }));
+      out.push(label(q.x, y + 16 * fs, `piste de 500 m · ${Math.round(v.def.altitude)} m`, { size: T(13), weight: 500, fill: COLORS.muted, anchor: 'middle' }));
+    }
+  }
+
   /* ---------- Carrefours ---------- */
   const summit = edges.reduce((m, e) => (e.to.altitude > m.to.altitude ? e : m)).to;
-  for (const node of network.nodes.values()) {
+  const junctions = [...network.nodes.values()].filter((n) => !inVelodrome(n.x, n.z));
+  for (const node of junctions) {
     const q = to(node.x, node.z);
     const degree = network.incident(node.id).length;
     const right = node.x < (b.minX + b.maxX) / 2;
@@ -385,7 +466,7 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     out.push(`<text x="${X}" y="62" font-size="38" font-weight="800" fill="${COLORS.ink}">${esc(network.name)}</text>`);
     out.push(
       `<text x="${X}" y="90" font-size="16" fill="${COLORS.muted}">${esc(
-        `${fr(network.lengthM / 1000)} km de routes · ${network.nodes.size} carrefours · pentes jusqu'à ${fr(Math.max(...courses.map((g) => g.maxGradePct)), 0)} %`,
+        `${fr(network.lengthM / 1000)} km de routes · ${junctions.length} carrefours${network.velodromes.length ? ` · ${network.velodromes.length} vélodrome` : ''} · pentes jusqu'à ${fr(Math.max(...courses.map((g) => g.maxGradePct)), 0)} %`,
       )}</text>`,
     );
 
@@ -411,9 +492,15 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     out.push(`<text x="${X + 60}" y="${y + 33}" font-size="16" fill="${COLORS.ink}">Marie, qui répare son vélo</text>`);
     out.push(`<circle cx="${X + 23}" cy="${y + 56}" r="9" fill="#F08A24" stroke="#fff" stroke-width="2"/><text x="${X + 23}" y="${y + 60}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">R</text>`);
     out.push(`<text x="${X + 60}" y="${y + 61}" font-size="16" fill="${COLORS.ink}">Richard, sur la roue arrière dans l’escalier</text>`);
-    out.push(`<text x="${X}" y="${y + 94}" font-size="14" fill="${COLORS.muted}">Flèches : sens de marche · numéros : kilomètres de la boucle</text>`);
+    let extra = 0;
+    if (network.velodromes.length) {
+      out.push(`<g transform="translate(${X + 23} ${y + 88})">${velodromeIcon(courses.find((g) => g.course.id === 'velodrome')?.color ?? COLORS.road, 0.62)}</g>`);
+      out.push(`<text x="${X + 60}" y="${y + 93}" font-size="16" fill="${COLORS.ink}">Vélodrome : on y tourne tant qu’on veut</text>`);
+      extra = 36;
+    }
+    out.push(`<text x="${X}" y="${y + 94 + extra}" font-size="14" fill="${COLORS.muted}">Flèches : sens de marche · numéros : kilomètres de la boucle</text>`);
 
-    y += 140;
+    y += 140 + extra;
     const PH = 150;
     const range = altitudeRange(courses);
     for (const g of courses) {

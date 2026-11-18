@@ -1,4 +1,14 @@
 import { RoadNetwork, type NetworkDef } from '../network';
+import { U_TOP, VelodromeSite, type VelodromeDef } from '../velodrome-track';
+
+/**
+ * Le vélodrome, à l'est du Moulin, sur un replat à l'altitude du Moulin : l'Allée du Vélodrome y mène depuis le Moulin
+ * (carrefour des deux parcours), entre par la porte des coureurs, et l'on tourne sur la piste tant qu'on veut. À la
+ * porte, on choisit à chaque tour : encore un tour (tout droit, par défaut) ou la sortie (à droite).
+ */
+const VELODROME_DEF: VelodromeDef = { id: 'velodrome', name: 'Vélodrome', x: 2950, z: 60, yaw: 0, altitude: 15 };
+const velodrome = new VelodromeSite(VELODROME_DEF);
+const velodromeRoads = velodrome.roads();
 
 /**
  * Le monde des Érables : ≈ 28,8 km de routes, six carrefours, pentes jusqu'à 10 %. x vers l'est, z vers le sud (en m).
@@ -32,6 +42,13 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       ambiance: 'sunset',
       guide: ['vallee', 'pres', 'canal'],
     },
+    {
+      // Départ sur la ligne d'arrivée, devant la tribune ; à la porte, on peut toujours sortir par l'allée.
+      id: 'velodrome',
+      name: 'Vélodrome',
+      description: 'La piste de Roubaix : 500 m de béton relevé, tribune comble, des tours tant qu’on veut.',
+      guide: [`${VELODROME_DEF.id}-piste-2`, `${VELODROME_DEF.id}-piste-1`],
+    },
   ],
   landmarks: [
     { kind: 'arch', edge: 'vallee', s: 12, text: 'LES ÉRABLES' },
@@ -41,6 +58,7 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
     { kind: 'arch', edge: 'col', s: 6360, text: 'SOMMET · 372 m' },
     { kind: 'arch', edge: 'mur', s: 8, text: 'LE MUR · 2,0 km · jusqu’à 10 %' },
     { kind: 'arch', edge: 'collines-est', s: 8, text: 'LES COLLINES' },
+    { kind: 'arch', edge: 'allee-velodrome', s: 8, text: 'VÉLODROME · PISTE DE 500 m' },
     { kind: 'fence', edge: 'vallee', from: 150, to: 1100 },
     { kind: 'fence', edge: 'descente', from: 300, to: 1500 },
     // Les érables roux qui donnent son nom au col : du pied de la montée à la limite des arbres.
@@ -114,7 +132,9 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
     { id: 'lac', name: 'Le Lac', x: -500, z: -2800, altitude: 100, place: 'tarn' },
     { id: 'belvedere', name: 'Belvédère', x: 1300, z: -1400, altitude: 110, place: 'viewpoint' },
     { id: 'rive', name: 'La Rive', x: 1200, z: 3000, altitude: 8, place: 'harbour' },
+    ...velodromeRoads.nodes,
   ],
+  velodromes: [VELODROME_DEF],
   edges: [
     {
       id: 'vallee',
@@ -194,6 +214,16 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       plan: [[230, -260], [500, -520], [650, -950], [1000, -1100], [1200, -1300]],
       profile: [[0.15, 6], [0.3, 14], [0.5, 47], [0.7, 78], [0.85, 97]],
     },
+    {
+      id: 'allee-velodrome',
+      name: 'Allée du Vélodrome',
+      from: 'moulin',
+      to: velodrome.gateNodeId,
+      // Vers l'est, puis droit sur la porte des coureurs : les 200 derniers mètres suivent l'axe de la rampe.
+      plan: [[2600, -305], [2800, -285], [2935, -240], ...[200, 160, 120, 80, 40, U_TOP].map((b) => velodrome.accessPoint(b))],
+      profile: [],
+    },
+    ...velodromeRoads.edges,
   ],
 };
 

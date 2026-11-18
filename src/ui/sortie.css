@@ -198,6 +198,17 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .rn-tab[aria-selected='true'] { background: #5BE3C9; color: #0B1422; }
 .rn-tab:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .rn-junction { margin: 0; padding: 4px 4px 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/1.25 Barlow, system-ui, sans-serif; text-shadow: 0 1px 2px rgb(5 10 20 / .6); }
+/*
+ * Sur la piste d'un vélodrome : la touche de sortie, au pied de l'encart (docs/design/parcours.md, « Le vélodrome »).
+ * Neutre tant qu'on tourne ; turquoise, avec la distance de la porte, une fois la sortie programmée.
+ */
+.rn-exit {
+  min-height: 44px; padding: 6px 8px; border-radius: 9px; border: 1px solid rgb(255 255 255 / .22); background: rgb(255 255 255 / .1);
+  color: #fff; font: 700 14px/1.15 Barlow, system-ui, sans-serif; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rn-exit[hidden] { display: none; }
+.rn-exit[aria-pressed='true'] { background: #5BE3C9; border-color: transparent; color: #0B1422; }
+.rn-exit:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 /* Liste et carte occupent la même cellule : l'encart garde la taille de la plus haute, quel que soit l'onglet. */
 .rn-body { display: grid; }
 .rn-list-box, .rn-map-box { grid-area: 1 / 1; min-width: 0; }
@@ -222,6 +233,9 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
   html .ride, html[data-notch='left'] .ride { --edge-t: 6px; --edge-r: 6px; }
   .ride-near { top: calc(var(--edge-t) + 46px); right: var(--edge-r); width: 168px; padding: 5px; transform: none; }
   .rn-map-box { min-height: 200px; }
+  /* Touche de sortie affichée : la carte lui cède sa hauteur, l'encart ne descend pas sur le bandeau du bas. */
+  .ride-near:is([data-exit='ready'], [data-exit='armed']) .rn-map-box { min-height: 151px; }
+  .rn-exit { font-size: 13px; }
   .rn-list { gap: 0; }
   .rn-me { margin: 1px 0; padding: 1px 0; }
   /* Commandes de séance ou sélecteur de vitesse affichés : ils occupent la colonne du bord, l'encart passe à leur gauche. */

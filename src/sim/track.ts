@@ -78,7 +78,8 @@ function rawPoint(legAt: (d: number) => Leg, d: number): JourneyPoint {
   const leg = legAt(d);
   const s = edgeS(leg, d);
   const p = leg.edge.pointAt(s);
-  const heading = leg.edge.headingAt(s) + (leg.forward ? 0 : Math.PI);
+  // Cap continu (pas par palier de segment) : la caméra qui le suit ne tressaute pas dans les virages serrés.
+  const heading = leg.edge.smoothHeadingAt(s) + (leg.forward ? 0 : Math.PI);
   return { x: p.x, y: leg.edge.altitudeAt(s), z: p.z, heading: wrapPi(heading), edgeId: leg.edge.id };
 }
 

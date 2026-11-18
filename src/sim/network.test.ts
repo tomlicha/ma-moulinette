@@ -141,8 +141,8 @@ describe('validateNetwork', () => {
 describe('parcours du monde des Érables', () => {
   const [col, rive] = COL_DES_ERABLES.courses;
 
-  it('propose deux parcours, la montagne en premier', () => {
-    expect(COL_DES_ERABLES.courses.map((c) => c.id)).toEqual(['col', 'rive']);
+  it('propose trois parcours, la montagne en premier', () => {
+    expect(COL_DES_ERABLES.courses.map((c) => c.id)).toEqual(['col', 'rive', 'velodrome']);
     expect(COL_DES_ERABLES.course()).toBe(col);
     expect(COL_DES_ERABLES.course('rive')).toBe(rive);
     expect(COL_DES_ERABLES.course('inconnu')).toBe(col); // repli sur le premier

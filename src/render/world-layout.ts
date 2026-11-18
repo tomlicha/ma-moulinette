@@ -1,4 +1,5 @@
 import { shoreDistance, type Edge, type RoadNetwork, type WaterDef } from '../sim/network';
+import type { Surface, VelodromeSite } from '../sim/velodrome-track';
 import { drain, type Steps } from './background';
 import { fbm, smoothstep } from './noise';
 
@@ -536,15 +537,50 @@ export class WorldLayout {
         if (hit.dist !== Infinity) reach = Math.min(ROAD_INFLUENCE_M, Math.max(ROAD_HALF + 3, hit.dist + water.sd));
       }
     }
-    if (hit.dist === Infinity) return far;
-    const w = 1 - smoothstep(ROAD_HALF + 2, reach, hit.dist);
-    return hit.alt * w + far * (1 - w);
+    const w = hit.dist === Infinity ? 0 : 1 - smoothstep(ROAD_HALF + 2, reach, hit.dist);
+    const alt = hit.dist === Infinity ? far : hit.alt * w + far * (1 - w);
+    // Un vélodrome aplanit son emprise à son altitude, et le sol y rejoint le relief en pente douce.
+    for (const v of this.velodromes) {
+      const k = v.flatWeight(x, z);
+      if (k > 0) return alt + (v.def.altitude - alt) * k;
+    }
+    return alt;
   }
 
   /** Hauteur du sol à l'image en (x, z) : exagérée, avec le creux sous la chaussée. */
   groundY(x: number, z: number, scratch: RoadHit = { dist: Infinity, alt: 0, edge: -1, s: 0 }): number {
     const alt = this.groundAlt(x, z, scratch);
     const trench = scratch.dist === Infinity ? 0 : ROAD_TRENCH_M * (1 - smoothstep(ROAD_HALF - 0.6, ROAD_HALF + 2, scratch.dist));
-    return this.y(alt) - trench;
+    // Sous un vélodrome, le sol passe juste sous son modèle (pelouse, parvis, parking) : pas de scintillement entre les deux.
+    let under = 0;
+    for (const v of this.velodromes) under = Math.max(under, v.flatWeight(x, z) >= 1 ? VELODROME_SINK_M : 0);
+    return this.y(alt) - Math.max(trench, under);
+  }
+
+  /** Les vélodromes du réseau. */
+  get velodromes(): readonly VelodromeSite[] {
+    return this.network.velodromes;
+  }
+
+  /**
+   * Hauteur à ajouter à l'altitude de route en (x, z) et dévers de la surface : la piste relevée d'un vélodrome et sa
+   * rampe d'accès. Nulle ailleurs.
+   */
+  surfaceAt(x: number, z: number, out: Surface = { lift: 0, bank: 0 }): Surface {
+    out.lift = 0;
+    out.bank = 0;
+    for (const v of this.velodromes) {
+      v.surface(x, z, out);
+      if (out.lift) break;
+    }
+    return out;
+  }
+
+  /** Vrai si un vélodrome dessine lui-même la chaussée en (x, z) : ni asphalte, ni plaque, ni piquets du réseau. */
+  underVelodrome(x: number, z: number): boolean {
+    return this.velodromes.some((v) => v.covers(x, z));
   }
 }
+
+/** Le sol passe sous le modèle d'un vélodrome de cette hauteur, en m à l'image. */
+const VELODROME_SINK_M = 0.3;
