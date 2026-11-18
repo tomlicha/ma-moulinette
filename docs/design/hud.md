@@ -20,6 +20,7 @@ Référence permanente du HUD affiché par-dessus la vue 3D (écran **Sortie**, 
 | 2026-11-13 | **Version téléphone** (paysage) : échelle plancher de 0,75, panneaux à 100 %, bloc central étroit sur deux rangées, liste « À suivre » à 3 ou 2 éléments, bandeau du bas sur toute la largeur. Face à un bloc central large (zone et écart en colonne à droite des mesures) et à un bloc centré avec la ligne de zone dessous. | Des utilisateurs trouvaient l'application illisible sur mobile : la scène 1280 × 720 ajustée à la hauteur tombait à 0,54 sur un iPhone 13 couché, soit des libellés de 7,8 px et un en-tête « À suivre » de 6 px. Le bloc étroit garde toutes les données en laissant la route visible de part et d'autre. |
 | 2026-11-13 | Liste **« À suivre »** sous la tuile du palier, proposition **A′ · Pile compacte**, face à « Barres d'intensité » et « Fil du temps ». Une ligne par palier : les watts et la durée, sans le type. Une série d'intervalles tient dans un cadre, avec ses deux paliers et le numéro de répétition. | Lisible d'un regard en plein effort, sans second panneau. Le type de palier n'apporte rien : la couleur et les watts suffisent. Avec des 30/30, quatre lignes identiques ne disaient rien de plus ; le cadre montre la série et où on en est. |
 | 2026-11-13 | **Zones plus vives** dans tout le HUD (tuile, liste, barre de zones, profil de séance), Z1 en gris clair ; texte foncé sur toutes les pastilles, Z6 compris. | Les teintes de la planche de style paraissaient ternes sur le verre sombre, surtout en série d'intervalles. Le gris de Z1 reste gris, comme le veut l'usage, mais clair. |
+| 2026-11-18 | **Verre clair « Doux »** : panneaux crème translucides, texte foncé, accent orange brûlé (ERG / SIM, partie parcourue, message de séance cerclé d'orange sur fond pêche). Mise en page inchangée. Panneaux translucides (55 %, 60 % sans flou), sans halo. **Mode sombre** selon le réglage de l'appareil (`prefers-color-scheme: dark`) : verre sombre `rgba(24, 30, 40, .70)` (`.78` sans flou), texte blanc, libellés `#E4EAF2`, accent et message menthe `#5BE3C9`, zones vives en couleur de texte, mini-carte bleu nuit (`MAP_DARK`) ; libellés à au moins 5,1:1 devant le ciel le plus clair. Les commandes posées sur la vue (menu, vitesses, boutons de séance, encart des coureurs, mini-carte, chargement) suivent. Face aux palettes Alpage, Piste, Roubaix et Riviera ([planche](https://claude.ai/artifact/E4x617Uqdcp9GHZ3arTTzh), rangée « Thème clair »). | Un seul thème clair dans toute l'application, plus agréable pour la plupart des gens que le verre sombre ; l'orange était déjà l'accent des menus. Les zones gardent leurs teintes vives (Z1 un peu plus soutenu) ; la cible en couleur de zone prend une version assombrie (`--hzt1` … `--hzt6`), sinon l'orange ou le jaune tombent sous 3:1 sur le verre clair. |
 | 2026-11-18 | Le profil du bas montre la **route entière** sous le cycliste (de carrefour à carrefour), avec un point qui avance dessus, au lieu d'une fenêtre de 3 km qui défile. | Le col se lit d'un coup d'œil et l'avancement se voit sur la courbe ; le profil ne bouge plus entre deux carrefours. |
 
 ## Repère et mise en page
@@ -74,22 +75,28 @@ Une mesure absente ou muette depuis plus de 3 s s'affiche « – », jamais la d
 
 ## Style
 
-Couleurs fixes, indépendantes du thème clair ou sombre de la page : le HUD est toujours posé sur la scène.
+Couleurs fixes, indépendantes du thème clair ou sombre de la page : le HUD est toujours posé sur la scène. Verre clair « Doux » depuis le 2026-11-18 (avant : verre sombre `rgba(24, 30, 40, .70)`, texte blanc, accent menthe `#5BE3C9`).
 
 | Jeton | Valeur | Usage |
 |---|---|---|
-| `--hud-panel` | `rgba(24, 30, 40, .70)` | fond des panneaux, sous le flou |
+| `--hud-panel` | `rgba(255, 251, 246, .55)` | fond des panneaux, sous le flou : translucide, le décor se devine derrière |
+| `--hud-halo` | `none` | halo autour des textes, essayé puis retiré : il faisait « briller » le noir sur le blanc |
 | `--hud-blur` | `blur(16px) saturate(1.3)` | `backdrop-filter` des panneaux |
-| `--hud-panel-flat` | `rgba(24, 30, 40, .84)` | repli sans flou (qualité réduite, navigateur sans `backdrop-filter`) |
-| `--hud-edge` | `rgba(255, 255, 255, .14)` | bordure 1 px |
-| `--hud-shadow` | `0 8px 28px rgba(5, 10, 20, .25)` | détache le panneau du ciel |
-| `--hud-fg` | `#FFFFFF` | chiffres et titres |
-| `--hud-muted` | `#D3DCE8` | libellés et unités (et non plus `#A9B8CC`, trop faible devant un ciel clair) |
-| `--hud-accent` | `#5BE3C9` | pastilles ERG / SIM, partie parcourue du profil, capteur connecté |
-| `--hud-relief` | `#66758B` | profil du parcours à venir |
-| `--hz1` … `--hz6` | `#C4CDD8` `#2E9BFF` `#1FE07F` `#FFD60A` `#FF7A1A` `#FF2D55` | zones de puissance, version vive (celles de la planche de style étaient `#8C99A8` `#3B82D6` `#2FA36B` `#F2C230` `#F08A3C` `#B8322C`) ; texte foncé `#0B1422` sur les pastilles et les blocs, Z6 compris |
+| `--hud-panel-flat` | `rgba(255, 251, 246, .6)` | repli sans flou (qualité réduite, navigateur sans `backdrop-filter`) |
+| `--hud-edge` | `rgba(255, 255, 255, .55)` | liseré clair 1 px, qui dessine le verre |
+| `--hud-shadow` | `0 6px 20px rgba(80, 50, 20, .1)` | détache le panneau du ciel |
+| `--hud-fg` | `#14171A` | chiffres et titres |
+| `--hud-muted` | `#2A303A` | libellés et unités, plus foncé que dans les menus : le panneau translucide n'est pas garanti clair |
+| `--hud-accent` | `#C2410C` | pastilles ERG / SIM (texte blanc, 5,2:1), partie parcourue du profil, capteur connecté, bordure du message |
+| `--hud-msg-bg`, `--hud-msg-fg`, `--hud-msg-edge` | `#FBE3D6`, `#14171A`, `#C2410C` | message de séance : fond pêche, texte foncé, bordure orange (sombre : menthe, encre, sans bordure) |
+| `--hud-relief` | `#C3CBD5` | profil du parcours à venir, souligné de `--hud-relief-line` `#66758B` |
+| `--hz1` … `--hz6` | `#B8C2CE` `#2E9BFF` `#1FE07F` `#FFD60A` `#FF7A1A` `#FF2D55` | zones de puissance, version vive (celles de la planche de style étaient `#8C99A8` `#3B82D6` `#2FA36B` `#F2C230` `#F08A3C` `#B8322C`) ; texte foncé `#0B1422` sur les pastilles et les blocs, Z6 compris |
 
-Panneaux : rayon 14 px. Chiffres : ombre portée légère `0 1px 2px rgba(5, 10, 20, .35)`.
+Cible en couleur de zone : `--hzt1` … `--hzt6` = `#5B6675` `#1A6FD8` `#0F8048` `#8A6A00` `#C2410C` `#D61F45`, au moins 4,7:1 sur le panneau.
+
+Panneaux : rayon 14 px. Chiffres : sans ombre ni halo.
+
+Opacité choisie au calcul (2026-11-18, teintes des mondes, pire cas la nuit) : à 55 %, les libellés `#2A303A` gardent 4,9:1 et les chiffres 6,6:1 ; à 60 % (sans flou), 5,6:1 et 7,5:1. Un essai à 38 % tenu par un halo crème autour des lettres a été écarté : le texte paraissait briller.
 
 Typographie (polices servies par l'application via `@fontsource`, jamais depuis Google Fonts) :
 
