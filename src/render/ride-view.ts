@@ -13,6 +13,7 @@ import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
 import { IntervalGates } from './interval-gate';
 import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, SEATED_STATE, standingStep, type StandingState } from './ride-feel';
 import type { IntervalGate } from '../workout/gate';
+import type { Surface } from '../sim/velodrome-track';
 import { pixelRatioFor, type Quality } from './quality';
 
 export type { Quality } from './quality';
@@ -300,12 +301,24 @@ export class RideView {
     }
     const f = forwardOf(this.heading);
     const side = sideOf(this.heading);
-    const y = this.layout.y(pt.y);
-    const rise = this.layout.y(this.journey.pointAt(d + 2).y) - y; // montée sur 2 m
-    this.p.set(pt.x + side.x * LANE_M, y, pt.z + side.z * LANE_M);
+    const x = pt.x + side.x * LANE_M;
+    const z = pt.z + side.z * LANE_M;
+    // Sur la piste d'un vélodrome, le béton relevé porte le coureur plus haut, et il se penche avec le dévers.
+    const surf = this.layout.surfaceAt(x, z, this.surf);
+    const y = this.layout.y(pt.y) + surf.lift;
+    const ahead = this.journey.pointAt(d + 2);
+    const rise = this.layout.y(ahead.y) + this.layout.surfaceAt(ahead.x + side.x * LANE_M, ahead.z + side.z * LANE_M, this.surfAhead).lift - y; // montée sur 2 m
+    this.p.set(x, y, z);
     this.rider.group.position.set(this.p.x, this.p.y + 0.04, this.p.z);
     this.rider.group.lookAt(this.p.x + f.x * 2, this.p.y + 0.04 + rise, this.p.z + f.z * 2);
+    this.bank += (surf.bank - this.bank) * (1 - Math.exp(-dtS * 4));
+    if (this.bank) this.rider.group.rotateZ(-this.bank);
   }
+
+  private readonly surf: Surface = { lift: 0, bank: 0 };
+  private readonly surfAhead: Surface = { lift: 0, bank: 0 };
+  /** Dévers sous le coureur, lissé : il se penche en entrant dans le virage, pas d'un coup. */
+  private bank = 0;
 
   /**
    * Caméra de poursuite : 4,4 m derrière, 1,85 m au-dessus, et le regard posé sur la route 14 m devant. Ce regard monte
@@ -323,7 +336,8 @@ export class RideView {
     } else {
       this.camera.position.lerp(this.camTarget, 1 - Math.exp(-dtS * 7));
     }
-    const aheadY = this.layout.y(this.journey.pointAt(this.dist + LOOK_AHEAD_M).y);
+    const lookPt = this.journey.pointAt(this.dist + LOOK_AHEAD_M);
+    const aheadY = this.layout.y(lookPt.y) + this.layout.surfaceAt(lookPt.x, lookPt.z, this.surfAhead).lift;
     this.look.set(
       this.p.x + this.fwd.x * LOOK_AHEAD_M,
       lookHeight(this.p.y, aheadY),
@@ -382,6 +396,8 @@ export class RideView {
       this.mood = mood;
       this.world.setAmbiance(ambianceFor(mood));
     }
+    // Tours de piste bouclés : le tableau et l'écran géant du vélodrome les affichent (rien n'est redessiné s'ils n'ont pas changé).
+    this.world.setVelodromeLaps(this.journey.lapsAt(this.dist));
     this.world.update(dt, this.p);
     this.follow(dt);
     this.camera.updateMatrixWorld(); // les noms se projettent avec la caméra de cette image, pas celle de la précédente

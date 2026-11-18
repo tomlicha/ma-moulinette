@@ -14,7 +14,7 @@ La boucle de 6 km (une montée à 5 %, sa descente, sur un cercle) ne donnait ni
 
 ### Le monde des Érables et ses deux parcours
 
-Un seul réseau de 28,8 km (6 carrefours, 9 routes), des parcours qui s'y superposent. Données : [`src/sim/courses/col-des-erables.ts`](../../src/sim/courses/col-des-erables.ts), avec les repères de décor (arches, clôtures, Marie, Richard).
+Un seul réseau de 30,1 km (8 nœuds, 12 routes, vélodrome compris), des parcours qui s'y superposent. Données : [`src/sim/courses/col-des-erables.ts`](../../src/sim/courses/col-des-erables.ts), avec les repères de décor (arches, clôtures, Marie, Richard).
 
 ![Carte des parcours](parcours-carte.svg)
 
@@ -26,8 +26,9 @@ Un **parcours** (`CourseDef`) est une boucle recommandée : une suite de routes 
 |---|---|---|---|---|
 | **Col des Érables** (montagne) | Vallée, Col, Descente, Route du Lac | 16,0 km | +370 m | 9,8 % |
 | **Rive du lac** (plat) | Vallée, Prés, Canal | 9,2 km | plat (moins de 40 m) | moins de 2 % |
+| **Vélodrome** (piste) | Piste du vélodrome, deux moitiés | 0,5 km | plat | 0 % |
 
-Les deux parcours **se croisent** : ils partagent La Vallée et passent par les mêmes carrefours, le Village et surtout le Moulin, où l'on peut passer de l'un à l'autre. Les autres routes (Les Collines, Le Mur) ne sont dans aucun parcours : on les prend en explorant.
+Les deux parcours **se croisent** : ils partagent La Vallée et passent par les mêmes carrefours, le Village et surtout le Moulin, où l'on peut passer de l'un à l'autre. Les autres routes (Les Collines, Le Mur, l'Allée du Vélodrome) ne sont dans aucun parcours : on les prend en explorant. Le parcours **Vélodrome** est à part : il part de la ligne d'arrivée, devant la tribune, et tourne sur la piste ; à la porte, on peut toujours sortir par l'allée vers le Moulin.
 
 Ajouter un parcours : écrire ses routes dans les données (elles doivent passer `validateNetwork`), puis une entrée `courses` dont la suite de routes s'enchaîne ; le constructeur de `RoadNetwork` refuse une boucle qui ne se referme pas. Le monde 3D ne change pas.
 
@@ -35,10 +36,45 @@ Ajouter un parcours : écrire ses routes dans les données (elles doivent passer
 
 **Carte.** Dans le menu, une miniature du réseau : le parcours retenu en couleur, l'autre en retrait, les routes hors parcours en gris. Un clic l'ouvre en grand ([`course-map.ts`](../../src/ui/course-map.ts)) : noms et altitudes des carrefours, kilomètres de la boucle, sens de marche, Marie, Richard, et le profil d'altitude du parcours. Fermer : bouton, Échap ou clic sur le fond. La hauteur du dessin suit celle de la fenêtre (520 à 760 px) et la boîte défile en dessous. Les cartes viennent de [`network-map.ts`](../../src/sim/network-map.ts), les mêmes fonctions que la planche ci-dessus.
 
+### Le vélodrome
+
+Ajouté le 17 novembre 2026. Le vélodrome de Roubaix (modèle et fête : [velodrome.md](velodrome.md)) est posé à l'est du Moulin, à son altitude (15 m), sur un replat. On y va depuis le **Moulin**, carrefour des deux parcours, par l'**Allée du Vélodrome** (812 m, à plat), qui finit par 80 m de pavés et entre par la porte des coureurs, perpendiculaire à la piste.
+
+- **Venir** : au Moulin, prendre l'Allée du Vélodrome. Arrivé à la porte, on tourne à droite sur la piste sans rien choisir : c'est la seule route dans le bon sens.
+- **Tourner sans cesse** : la piste est faite de deux routes à sens unique, de la porte à la ligne d'arrivée et de la ligne à la porte (503 m le tour sur la ligne suivie). À la porte, tout droit (un tour de plus) est le choix par défaut : sans rien toucher, on tourne indéfiniment.
+- **Sortir** : pas de panneau « Carrefour » sur la piste (il revenait à chaque tour, 40 % du temps). Au pied de l'encart de droite, une touche **« Sortir du vélodrome → »** programme la sortie à la prochaine porte ; elle devient alors turquoise, « Sortie à 230 m ✕ », et un nouvel appui l'annule. Au clavier : flèche droite pour sortir, gauche pour rester. Une fois sorti, la consigne s'efface. Si la porte est à moins de 40 m (choix verrouillé), la sortie se fait au tour suivant. Code : `Journey.setTrackExit`, `trackExitInM`, [`ride-panel.ts`](../../src/ui/ride-panel.ts).
+- **Tours** : chaque passage sur la ligne compte (`Journey.lapsAt`). Le tableau au bord de la piste, avant la ligne, affiche « TOURS » et le nombre bouclé ; l'écran géant aussi ; la cloche sonne (visuellement) trois secondes à chaque tour.
+- La ligne d'arrivée et la porte, vues de la piste, ne sont jamais annoncées.
+- **Depuis l'accueil** : le parcours « Vélodrome », troisième touche du menu « Rouler », part directement de la ligne d'arrivée.
+
+**Sur la carte** ([`network-map.ts`](../../src/sim/network-map.ts)), le vélodrome est un lieu, pas des routes :
+- **l'icône** (`velodromeIcon`) : piste à la couleur de son parcours, bord haut assombri pour le dévers, ligne peinte, bande bleue, pelouse rayée et terrain, damier d'arrivée, porte entre deux piliers où arrive l'allée, et tribune de brique au toit sombre avec son pavillon d'entrée ;
+- **un seul nom**, « Vélodrome », et dessous « piste de 500 m » avec l'altitude ;
+- la piste ni ses nœuds de porte et d'arrivée ne sont tracés, ni nommés, ni comptés comme carrefours ;
+- l'icône est plus grande que le vrai vélodrome (180 m font 33 px à cette échelle), et grossit encore sur la miniature ;
+- quand un autre parcours est mis en avant, elle passe en retrait comme les routes.
+
+**Données.** `NetworkDef.velodromes` place le site (centre de la pelouse, orientation, altitude). `VelodromeSite.roads()` ([`velodrome-track.ts`](../../src/sim/velodrome-track.ts)) en déduit les deux nœuds et les deux moitiés de piste, au tracé exact (`EdgeDef.path`, pas de lissage), à sens unique (`oneWay`) et marquées `surface: 'track'`. L'allée finit sur l'axe de la rampe (`accessPoint`), pour que la route du réseau et la rampe dessinée coïncident.
+
+**Rendu.**
+- Le sol est aplani sur l'emprise du vélodrome (350 × 275 m), puis rejoint le relief en 90 m (`flatWeight`). Il passe 30 cm sous le modèle, pour qu'ils ne se battent pas à l'image.
+- Ni asphalte, ni plaque de carrefour, ni piquets, ni poteau indicateur là où le vélodrome dessine lui-même sa piste et sa route d'accès (`covers`).
+- Le décor ne plante rien sur l'emprise.
+- **Hauteur et dévers** : `WorldLayout.surfaceAt` donne, sous chaque coureur, la hauteur du béton relevé et le dévers. La vue de sortie et les autres coureurs s'en servent : on roule sur la piste, penché jusqu'à 15,4° dans les virages. La caméra, elle, reste droite.
+- La pente envoyée au home-trainer reste nulle : le dévers ne se roule pas.
+
+![Entrée par la porte des coureurs](captures/velodrome/monde-porte.png)
+
+![Dans le virage, penché avec le dévers](captures/velodrome/monde-virage.png)
+
+Vue de référence `13-velodrome` (`shot=ride&route=allee-velodrome&d=3430`).
+
 ## Carrefours
 
 - Annoncé **250 m** avant (`ANNOUNCE_M`). Le choix se **verrouille 40 m** avant le nœud (`LOCK_M`), plus que la fenêtre de lissage de la pente (25 m) : la pente envoyée au trainer ne voit jamais une route encore indécise.
 - Sans choix, on suit **la route du parcours** (marquée `onCourse`) ; hors parcours, on va **tout droit** (l'écart de cap le plus petit). Le trajet en avant (porte d'intervalle, profil du HUD) suit le choix en cours, sinon le tout droit, sans rien valider à la place du cycliste.
+- Un nœud qui n'offre qu'une route (La Rive, l'entrée sur la piste du vélodrome, sa ligne d'arrivée) n'est pas annoncé : il n'y a rien à choisir.
+- Une route **à sens unique** (`oneWay`, la piste du vélodrome) ne se propose jamais à contresens.
 - Chaque option donne nom, longueur, pente moyenne, montée et direction (flèche à huit sens selon l'écart de cap : tout droit, biais, angle droit, épingle).
 - **Saisie** : touches du panneau « Carrefour » du HUD (cibles de 56 à 64 px), ou flèches gauche et droite qui glissent la sélection d'une route à l'autre. Pas d'effet pendant une boîte de dialogue ni dans un champ de saisie.
 - Le coin est arrondi par un arc de 12 m de rayon (`CORNER_M`) : le cycliste tourne, il ne pivote pas. L'altitude et la distance n'en sont pas touchées.
@@ -115,7 +151,7 @@ Réglées le 14 novembre 2026 d'après la maquette « Col des Érables » (premi
 
 ### Vues de référence
 
-`node tools/preview/shoot.mjs --ref <dossier>` prend douze vues du réseau (départ, vallée, col, épingle, sommet, descente, prés, canal, rive, village, moulin, érables) dans le profil haut, celui de l'application. À lancer avant et après tout changement graphique. La photo est prise quand la page a fini de construire sa scène, par le protocole DevTools de Chrome ; `quality=low` en requête ajoutée donne le profil bas, `CLIP=x,y,largeur,hauteur,échelle` agrandit un détail.
+`node tools/preview/shoot.mjs --ref <dossier>` prend treize vues du réseau (départ, vallée, col, épingle, sommet, descente, prés, canal, rive, village, moulin, érables, vélodrome) dans le profil haut, celui de l'application. À lancer avant et après tout changement graphique. La photo est prise quand la page a fini de construire sa scène, par le protocole DevTools de Chrome ; `quality=low` en requête ajoutée donne le profil bas, `CLIP=x,y,largeur,hauteur,échelle` agrandit un détail.
 
 ## Le ressenti de la montée
 

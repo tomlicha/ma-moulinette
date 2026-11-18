@@ -28,6 +28,7 @@ export const REFERENCE = {
   '10-village': 'shot=ride&course=rive&d=9080',
   '11-moulin': 'shot=ride&d=2330',
   '12-erables': 'shot=ride&route=col&d=3600',
+  '13-velodrome': 'shot=ride&route=allee-velodrome&d=3430',
 };
 
 const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';

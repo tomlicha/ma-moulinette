@@ -37,6 +37,10 @@ export class RidePanel {
   private readonly junctionText = el('p', 'rn-junction');
   private readonly mapBox = el('div', 'rn-map');
   private readonly foot = el('p', 'rn-foot');
+  /** Sur la piste d'un vélodrome : programme la sortie à la prochaine porte (au lieu d'un panneau à chaque tour). */
+  private readonly exit = el('button', 'rn-exit');
+  /** Appelée par la touche « Sortir du vélodrome » : programme ou annule la sortie. */
+  onTrackExit?: () => void;
   private nearby: NearbyRiders | undefined;
   /** Le carrefour annoncé, gardé après le verrouillage tant qu'on ne l'a pas passé. */
   private lastJunction: MapJunction | undefined;
@@ -72,7 +76,13 @@ export class RidePanel {
     mapBox.append(this.mapBox, this.foot);
     const body = el('div', 'rn-body');
     body.append(listBox, mapBox);
-    host.replaceChildren(this.head, body);
+    this.exit.type = 'button';
+    this.exit.hidden = true;
+    this.exit.addEventListener('click', (e) => {
+      e.stopPropagation(); // pas de bascule Liste / Carte
+      this.onTrackExit?.();
+    });
+    host.replaceChildren(this.head, body, this.exit);
     host.hidden = false;
     this.list = new NearRiders(listBox);
     this.map = new RideMap(this.mapBox, o.journey.network);
@@ -112,8 +122,12 @@ export class RidePanel {
     this.list.clear();
   }
 
-  /** À appeler 4 fois par seconde : bascule automatique, en-tête, carte. */
-  update(i: { distanceM: number; pending: PendingJunction | undefined; now?: number }): void {
+  /**
+   * À appeler 4 fois par seconde : bascule automatique, en-tête, carte. `trackExit` : sur la piste d'un vélodrome, l'état
+   * de la sortie (programmée ou non) et la distance de la prochaine porte ; absent ailleurs.
+   */
+  update(i: { distanceM: number; pending: PendingJunction | undefined; now?: number; trackExit?: { armed: boolean; inM: number | undefined } }): void {
+    this.updateExit(i.trackExit);
     this.ctl.tick({ distanceM: i.distanceM, pending: i.pending ? { atM: i.pending.atM } : undefined, now: i.now ?? performance.now() });
     if (i.pending) this.lastJunction = junctionScene(this.o.journey, i.pending);
     else if (!this.ctl.junction) this.lastJunction = undefined;
@@ -122,6 +136,20 @@ export class RidePanel {
     const shown = this.lastJunction && this.ctl.junction && remaining >= 0 ? this.lastJunction : undefined;
     this.apply(shown ? junctionHeader(shown.name, remaining) : null);
     this.drawMap(shown, i.distanceM);
+  }
+
+  /** Touche de sortie : « Sortir du vélodrome », puis, une fois programmée, la distance de la porte et l'annulation. */
+  private updateExit(t: { armed: boolean; inM: number | undefined } | undefined): void {
+    this.exit.hidden = !t;
+    this.host.dataset.exit = t ? (t.armed ? 'armed' : 'ready') : '';
+    if (!t) return;
+    // Court : l'encart ne fait que 168 px sur téléphone. Le libellé complet est pour les lecteurs d'écran et l'infobulle.
+    const m = Math.max(0, Math.round((t.inM ?? 0) / 10) * 10);
+    const label = t.armed ? `Sortie à ${m} m ✕` : 'Sortir du vélodrome →';
+    if (this.exit.textContent !== label) this.exit.textContent = label;
+    this.exit.setAttribute('aria-pressed', String(t.armed));
+    this.exit.setAttribute('aria-label', t.armed ? `Sortie programmée à la porte, dans ${m} m. Annuler.` : 'Sortir du vélodrome à la prochaine porte');
+    this.exit.title = t.armed ? 'Annuler la sortie (←)' : 'Sortir à la prochaine porte (→)';
   }
 
   private apply(header: string | null | undefined = undefined): void {

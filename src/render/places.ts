@@ -5,6 +5,7 @@ import type { NodeDef } from '../sim/network';
 import { lumpy } from './geometry-utils';
 import { mulberry32 } from './noise';
 import { ROAD_HALF, type RoadHit, type WaterHit, type WorldLayout } from './world-layout';
+import { buildVelodrome } from './velodrome';
 
 /**
  * Les lieux du monde : ce qu'on trouve à chaque carrefour nommé (`NodeDef.place`). Un village et son clocher, un moulin
@@ -14,10 +15,12 @@ import { ROAD_HALF, type RoadHit, type WaterHit, type WorldLayout } from './worl
 
 export interface Places {
   group: THREE.Group;
-  /** Fait tourner les ailes du moulin. */
+  /** Fait tourner les ailes du moulin, anime les vélodromes. */
   update(dtS: number): void;
   /** Disques (x, z, rayon) où le décor ne plante rien : l'emprise des bâtiments. */
   clearings: { x: number; z: number; r: number }[];
+  /** Tours de piste bouclés par le joueur, affichés au vélodrome. */
+  setVelodromeLaps(n: number): void;
 }
 
 const COLORS = {
@@ -39,7 +42,7 @@ const COLORS = {
 const FOUNDATION_M = 2.5;
 
 /** Accumule des formes colorées dans le repère d'un objet, puis les fond en un seul maillage à facettes. */
-class Kit {
+export class Kit {
   private readonly parts: THREE.BufferGeometry[] = [];
 
   add(geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0, yaw = 0): this {
@@ -348,11 +351,32 @@ export function* buildPlaces(layout: WorldLayout): Steps<Places> {
     if (!k.isEmpty) group.add(k.mesh());
   }
 
+  // Vélodromes : le modèle, posé à l'altitude et dans l'orientation du site ; le décor ne plante rien sur son emprise.
+  const velodromes: { update(dtS: number): void; setLaps(n: number): void }[] = [];
+  for (const site of layout.velodromes) {
+    yield;
+    const v = buildVelodrome();
+    v.group.position.set(site.def.x, layout.y(site.def.altitude), site.def.z);
+    v.group.rotation.y = site.def.yaw;
+    group.add(v.group);
+    velodromes.push(v);
+    for (let lx = -175; lx <= 175; lx += 50) {
+      for (let lz = -150; lz <= 125; lz += 50) {
+        const [x, z] = site.toWorld(lx, lz);
+        clearings.push({ x, z, r: 40 });
+      }
+    }
+  }
+
   return {
     group,
     clearings,
     update(dtS) {
       for (const s of spinning) s.rotateZ(dtS * 0.5);
+      for (const v of velodromes) v.update(dtS);
+    },
+    setVelodromeLaps(n) {
+      for (const v of velodromes) v.setLaps(n);
     },
   };
 }

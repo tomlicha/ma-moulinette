@@ -18,14 +18,24 @@ describe('renderNetworkMap', () => {
   });
 
   it('nomme le monde, les parcours, les routes et les carrefours', () => {
+    const inVelodrome = (x: number, z: number) => COL_DES_ERABLES.velodromes.some((v) => v.covers(x, z));
     for (const name of [
       COL_DES_ERABLES.name,
       ...COL_DES_ERABLES.courses.map((c) => c.name),
-      ...[...COL_DES_ERABLES.edges.values()].map((e) => e.name),
-      ...[...COL_DES_ERABLES.nodes.values()].map((n) => n.name),
+      ...[...COL_DES_ERABLES.edges.values()].filter((e) => e.def.surface !== 'track').map((e) => e.name),
+      ...[...COL_DES_ERABLES.nodes.values()].filter((n) => !inVelodrome(n.x, n.z)).map((n) => n.name),
     ]) {
       expect(svg).toContain(name);
     }
+  });
+
+  it('dessine le vélodrome comme un lieu : une icône et un nom, sans sa piste ni ses deux nœuds', () => {
+    expect(svg).toContain('Vélodrome</text>');
+    expect(svg).not.toContain('Vélodrome · porte');
+    expect(svg).not.toContain('Vélodrome · arrivée');
+    // Pas de nom de route sur la carte : seul le profil du parcours nomme les deux moitiés de la piste.
+    expect(svg.split('Piste du vélodrome').length - 1).toBe(2);
+    expect(svg).toContain('6 carrefours · 1 vélodrome');
   });
 
   it("donne la longueur, la montée et la pente maximale de chaque parcours", () => {

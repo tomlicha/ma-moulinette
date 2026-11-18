@@ -4,6 +4,7 @@
  * nœuds, donc le réseau est continu par construction. Les 20 derniers mètres de chaque extrémité sont plats :
  * la pente envoyée au trainer ne saute pas au passage d'un carrefour.
  */
+import { VelodromeSite, type VelodromeDef } from './velodrome-track';
 
 export interface NodeDef {
   id: string;
@@ -25,6 +26,15 @@ export interface EdgeDef {
   plan: [number, number][];
   /** Altitudes intermédiaires : [fraction de la longueur, altitude en m]. Les extrémités viennent des nœuds. */
   profile: [number, number][];
+  /**
+   * Tracé exact, du nœud de départ au nœud d'arrivée compris, à suivre tel quel au lieu de lisser `plan` : la piste
+   * d'un vélodrome, dont la géométrie est imposée.
+   */
+  path?: [number, number][];
+  /** Route à sens unique : on ne la prend que dans son sens de définition (la piste d'un vélodrome). */
+  oneWay?: boolean;
+  /** `track` : piste de vélodrome, dessinée par le vélodrome lui-même (ni asphalte, ni piquets, ni parapets). */
+  surface?: 'track';
 }
 
 /** Éléments de décor posés sur une route, repérés par son identifiant et l'abscisse `s` depuis son nœud de départ. */
@@ -101,6 +111,8 @@ export interface NetworkDef {
   courses?: CourseDef[];
   /** Lacs du monde. */
   water?: WaterDef[];
+  /** Vélodromes : leurs routes (piste, porte) sont dans `nodes` et `edges`, données par `VelodromeSite.roads()`. */
+  velodromes?: VelodromeDef[];
 }
 
 export interface PlanPoint {
@@ -177,7 +189,11 @@ export class Edge {
   constructor(readonly def: EdgeDef, readonly from: NodeDef, readonly to: NodeDef) {
     this.id = def.id;
     this.name = def.name;
-    const pts = smoothCurve([[from.x, from.z], ...def.plan, [to.x, to.z]]);
+    if (def.path) {
+      const [a, b] = [def.path[0]!, def.path[def.path.length - 1]!];
+      if (dist(a, [from.x, from.z]) > 0.01 || dist(b, [to.x, to.z]) > 0.01) throw new Error(`arête ${def.id} : le tracé ne part pas de ${from.id} ou n'arrive pas à ${to.id}`);
+    }
+    const pts = def.path ?? smoothCurve([[from.x, from.z], ...def.plan, [to.x, to.z]]);
     let total = 0;
     for (let i = 0; i < pts.length; i++) {
       if (i > 0) total += dist(pts[i - 1]!, pts[i]!);
@@ -276,6 +292,25 @@ export class Edge {
     return Math.atan2(this.zs[k + 1]! - this.zs[k]!, this.xs[k + 1]! - this.xs[k]!);
   }
 
+  /**
+   * Cap continu à l'abscisse `s` : interpolé entre le cap d'un segment (en son milieu) et celui du voisin. `headingAt`
+   * avance par paliers, un par segment ; dans un virage serré (la piste d'un vélodrome : 2,6° tous les 2 m), la caméra
+   * qui le suit tressaute à chaque palier. Aux bouts de l'arête, c'est le cap du segment, comme `headingAt`.
+   */
+  smoothHeadingAt(s: number): number {
+    const x = Math.min(Math.max(s, 0), this.lengthM);
+    const k = segmentOf(this.cum, x);
+    const seg = (i: number) => Math.atan2(this.zs[i + 1]! - this.zs[i]!, this.xs[i + 1]! - this.xs[i]!);
+    const mid = (i: number) => (this.cum[i]! + this.cum[i + 1]!) / 2;
+    const j = x < mid(k) ? k - 1 : k + 1;
+    if (j < 0 || j > this.cum.length - 2) return seg(k);
+    const t = (x - mid(k)) / (mid(j) - mid(k));
+    let d = (seg(j) - seg(k)) % (2 * Math.PI);
+    if (d > Math.PI) d -= 2 * Math.PI;
+    if (d < -Math.PI) d += 2 * Math.PI;
+    return seg(k) + d * t;
+  }
+
   /** Points échantillonnés tous les `stepM` (pour l'index spatial, les tests et le rendu). */
   sample(stepM: number): { s: number; x: number; z: number; altitude: number }[] {
     const n = Math.max(1, Math.round(this.lengthM / stepM));
@@ -297,6 +332,7 @@ export class RoadNetwork {
   readonly landmarks: Landmark[];
   readonly courses: CourseDef[];
   readonly water: WaterDef[];
+  readonly velodromes: VelodromeSite[];
   private readonly incidentTo = new Map<string, Edge[]>();
 
   constructor(readonly def: NetworkDef) {
@@ -305,6 +341,7 @@ export class RoadNetwork {
     this.landmarks = def.landmarks ?? [];
     this.courses = def.courses ?? [];
     this.water = def.water ?? [];
+    this.velodromes = (def.velodromes ?? []).map((v) => new VelodromeSite(v));
     for (const n of def.nodes) {
       this.nodes.set(n.id, n);
       this.incidentTo.set(n.id, []);

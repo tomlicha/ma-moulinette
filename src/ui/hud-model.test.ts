@@ -100,6 +100,13 @@ describe('profileWindow', () => {
     expect(p.x(100)).toBeCloseTo(20); // 100 m sur 3 000 m
   });
 
+  it('laisse un plat plat : quelques mètres d’écart, ou un bruit de calcul, ne remplissent pas la hauteur', () => {
+    const flat = { altitudeAt: (d: number) => 15 + (d % 40 === 0 ? 1e-9 : 0) + Math.sin(d / 300) * 2 } as unknown as Parameters<typeof profileWindow>[0];
+    const p = profileWindow(flat, 1000, 600, 34);
+    const ys = [...p.line.matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(4); // 4 m sur 40 m : moins de 3 px sur 28
+  });
+
   it('suit le relief en glissant : même forme, un peu plus loin', () => {
     const a = profileWindow(DEMO_ROUTE, 1500, 600, 34);
     const b = profileWindow(DEMO_ROUTE, 1520, 600, 34);
