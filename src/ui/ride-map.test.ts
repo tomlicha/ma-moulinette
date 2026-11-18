@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COL_DES_ERABLES } from '../sim/courses/col-des-erables';
 import { Journey } from '../sim/journey';
-import { mapNetwork, mapSvg, riderColor } from './ride-map';
+import { MAP_DARK, mapNetwork, mapSvg, riderColor } from './ride-map';
 import { buildScene, junctionScene } from './ride-map-scene';
 
 const j = new Journey(COL_DES_ERABLES);
@@ -42,8 +42,16 @@ describe('mapSvg', () => {
     const svg = mapSvg(scene, net, 158, 214);
     for (const name of ['Le Col', 'Les Collines', 'Les Prés']) expect(svg).toContain(`>${name}</text>`);
     expect(svg).toContain('>plat</text>');
-    expect(svg).toMatch(/fill="#5BE3C9" stroke="#141C28"[^>]*>Le Col</);
+    expect(svg).toMatch(/fill="#C2410C" stroke="#FFFBF6"[^>]*>Le Col</);
     expect(svg).not.toMatch(/NaN|Infinity|undefined/);
+  });
+  it('en mode sombre, reprend le fond bleu nuit et la menthe', () => {
+    const p = j.pendingJunction(MOULIN - 210)!;
+    const scene = buildScene(j, MOULIN - 210, undefined, junctionScene(j, p));
+    const svg = mapSvg(scene, net, 158, 214, 'rm-clip', MAP_DARK);
+    expect(svg).toContain('fill="#243246"');
+    expect(svg).toMatch(/fill="#5BE3C9" stroke="#141C28"[^>]*>Le Col</);
+    expect(svg).not.toContain('#F3EEE6');
   });
   it('échappe les noms (ils viennent d’autres joueurs ou des données)', () => {
     const p = j.pendingJunction(MOULIN - 210)!;
@@ -58,8 +66,8 @@ describe('mapSvg', () => {
     const narrow = mapSvg(buildScene(j, 30, nearby), net, 158, 198);
     expect(wide).toContain('>N</text>');
     expect(narrow).not.toContain('>N</text>');
-    expect(wide).toContain('stroke="#0B1422" stroke-width="1.5"'); // flèches du sens de marche
-    expect(narrow).not.toContain('stroke="#0B1422" stroke-width="1.5"');
+    expect(wide).toContain('stroke="#14171A" stroke-width="1.5"'); // flèches du sens de marche
+    expect(narrow).not.toContain('stroke="#14171A" stroke-width="1.5"');
   });
   it('garde un coureur hors cadre au bord, plus pâle', () => {
     const far = { ahead: [], behind: [{ slot: 7, name: 'Loin', gapM: -900, x: 0, z: 5000 }] };

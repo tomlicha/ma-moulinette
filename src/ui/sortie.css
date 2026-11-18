@@ -6,19 +6,45 @@
 main:has([data-view='sortie']:not([hidden])) { max-width: none; padding: 0; }
 html:has([data-view='sortie']:not([hidden])), body:has([data-view='sortie']:not([hidden])) { overflow: hidden; height: 100dvh; padding: 0; }
 
-[data-view='sortie'] { position: fixed; inset: 0; background: #bcd8f0; }
+[data-view='sortie'] {
+  position: fixed; inset: 0; background: #bcd8f0;
+  /* Verre clair « Doux » des commandes posées sur la vue, le même que les panneaux du HUD (hud.css, 2026-11-18). */
+  --rg-glass: rgb(255 251 246 / .86); --rg-glass-strong: rgb(255 251 246 / .96); --rg-fg: #14171A; --rg-muted: #4F5865;
+  --rg-edge: rgb(90 60 30 / .18); --rg-shadow: 0 8px 24px rgb(80 50 20 / .18); --rg-tint: rgb(90 60 30 / .08); --rg-track: rgb(90 60 30 / .14);
+  --rg-accent: #C2410C; --rg-on-accent: #fff;
+  /* Encarts de lecture (coureurs, carte) : translucides comme les panneaux du HUD (hud.css), sans halo.
+     Les boutons gardent --rg-glass, plus couvrant : une icône fine se perdrait sur la route. */
+  --rg-panel: rgb(255 251 246 / .55); --rg-panel-flat: rgb(255 251 246 / .6); --rg-panel-edge: rgb(255 255 255 / .55);
+  --rg-halo: none;
+  --rg-panel-muted: #2A303A; /* libellés des encarts translucides : plus foncés, le fond n'est pas garanti clair */
+  --rg-line: rgb(90 60 30 / .22);
+  --rg-veil: rgb(244 237 227 / .55); /* voile du chargement */
+  --rg-out-shadow: 0 0 3px rgb(255 251 246), 0 0 6px rgb(255 251 246 / .9); /* « 100 % » posé à même la vue */
+}
+/* Mode sombre, selon le réglage de l'appareil : verre sombre et menthe, comme le HUD (hud.css). */
+@media (prefers-color-scheme: dark) {
+  [data-view='sortie'] {
+    --rg-glass: rgb(24 30 40 / .78); --rg-glass-strong: rgb(24 30 40 / .92); --rg-fg: #fff; --rg-muted: #E4EAF2;
+    --rg-edge: rgb(255 255 255 / .14); --rg-shadow: 0 8px 28px rgb(5 10 20 / .25); --rg-tint: rgb(255 255 255 / .08); --rg-track: rgb(255 255 255 / .16);
+    --rg-accent: #5BE3C9; --rg-on-accent: #0B1422;
+    --rg-panel: rgb(24 30 40 / .70); --rg-panel-flat: rgb(24 30 40 / .78); --rg-panel-edge: rgb(255 255 255 / .14); --rg-panel-muted: #E4EAF2;
+    --rg-line: rgb(255 255 255 / .22);
+    --rg-veil: rgb(12 18 28 / .5);
+    --rg-out-shadow: 0 1px 3px rgb(5 10 20 / .8);
+  }
+}
 .ride { position: absolute; inset: 0; --edge-t: max(12px, env(safe-area-inset-top)); --edge-r: max(12px, env(safe-area-inset-right)); }
 /* Téléphone couché, encoche à gauche : à droite, boutons au bord de l'écran, comme le HUD. */
 html[data-notch='left'] .ride { --edge-r: 12px; }
 .ride canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; background: #bcd8f0; }
 
-/* Bouton du menu : même verre sombre que les panneaux du HUD, dans le coin libre en haut à droite. */
+/* Bouton du menu : même verre que les panneaux du HUD, dans le coin libre en haut à droite. */
 .ride-menu-open {
   position: absolute; z-index: 3; top: var(--edge-t); right: var(--edge-r); width: 44px; height: 44px; padding: 0; display: grid; place-items: center;
-  border: 1px solid rgb(255 255 255 / .14); border-radius: 14px; background: rgb(24 30 40 / .78); color: #fff; box-shadow: 0 8px 28px rgb(5 10 20 / .25);
+  border: 1px solid var(--rg-edge); border-radius: 14px; background: var(--rg-glass); color: var(--rg-fg); box-shadow: var(--rg-shadow);
 }
-.ride-menu-open:hover { background: rgb(24 30 40 / .92); }
-.ride-menu-open:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ride-menu-open:hover { background: var(--rg-glass-strong); }
+.ride-menu-open:focus-visible { outline: 3px solid var(--rg-fg); outline-offset: 2px; }
 .ride-menu-open svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 /* Pastille quand il manque le trainer : la sortie ne peut pas démarrer, le menu dit pourquoi. */
 .ride-menu-open[data-alert]::after { content: ''; position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; border-radius: 50%; background: #F08A3C; border: 2px solid #fff; }
@@ -26,33 +52,33 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 /* Commandes de séance sur la vue : téléphone couché seulement (plus bas), absentes ailleurs. */
 .ride-quick { display: none; }
 
-/* Zwift Cog : sélecteur de vitesse virtuelle, à droite à mi-hauteur, sous le pouce ; même verre sombre que le bouton du menu. */
+/* Zwift Cog : sélecteur de vitesse virtuelle, à droite à mi-hauteur, sous le pouce ; même verre que le bouton du menu. */
 .ride-gears { position: absolute; z-index: 3; right: var(--edge-r); top: 50%; translate: 0 -50%; width: 44px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ride-gears[hidden] { display: none; }
-.ride-gears button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 12px; background: rgb(24 30 40 / .72); color: #fff; cursor: pointer; }
-.ride-gears button:active { background: rgb(24 30 40 / .95); }
+.ride-gears button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border: 1px solid var(--rg-edge); border-radius: 12px; background: var(--rg-glass); color: var(--rg-fg); box-shadow: var(--rg-shadow); cursor: pointer; }
+.ride-gears button:active { background: var(--rg-glass-strong); }
 .ride-gears button:disabled { opacity: .4; cursor: default; }
-.ride-gears button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ride-gears button:focus-visible { outline: 3px solid var(--rg-fg); outline-offset: 2px; }
 .ride-gears svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
-.ride-gears output { min-width: 44px; padding: 4px 0; border-radius: 10px; background: rgb(24 30 40 / .72); color: #fff; text-align: center; font: 700 20px 'Barlow Condensed', Barlow, system-ui, sans-serif; }
-/* Préparation de la vue 3D. Un voile sombre et flou couvre toute la sortie (HUD, commandes) : seule la carte reste nette.
+.ride-gears output { min-width: 44px; padding: 4px 0; border-radius: 10px; background: var(--rg-glass); color: var(--rg-fg); text-align: center; font: 700 20px 'Barlow Condensed', Barlow, system-ui, sans-serif; }
+/* Préparation de la vue 3D. Un voile crème et flou couvre toute la sortie (HUD, commandes) : seule la carte reste nette.
    Le bouton du menu passe au-dessus du voile, pour pouvoir quitter la sortie sans attendre. Apparition retardée (0,15 s) :
    ouverte sur une vue déjà prête, la sortie ne montre pas l'écran le temps d'une image. */
 .ride-loading {
   position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 16px;
-  background: rgb(12 18 28 / .5); -webkit-backdrop-filter: blur(6px) saturate(.8); backdrop-filter: blur(6px) saturate(.8);
+  background: var(--rg-veil); -webkit-backdrop-filter: blur(6px) saturate(.8); backdrop-filter: blur(6px) saturate(.8);
   animation: rl-in .25s ease-out .15s both;
 }
 .ride-loading[hidden] { display: none; }
 .ride:has(.ride-loading:not([hidden])) .ride-menu-open { z-index: 5; }
 .rl-card {
-  width: min(360px, 100%); padding: 20px 22px 22px; border-radius: 18px; border: 1px solid rgb(255 255 255 / .14);
-  background: rgb(24 30 40 / .82); color: #fff; box-shadow: 0 8px 28px rgb(5 10 20 / .25); text-align: center;
+  width: min(360px, 100%); padding: 20px 22px 22px; border-radius: 18px; border: 1px solid var(--rg-edge);
+  background: var(--rg-glass-strong); color: var(--rg-fg); box-shadow: var(--rg-shadow); text-align: center;
 }
 .rl-title { margin: 0; font: 700 1.5rem/1.1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; letter-spacing: .01em; }
-.rl-step { margin: 6px 0 14px; min-height: 1.3em; color: #D3DCE8; font: 500 .95rem/1.3 Barlow, system-ui, sans-serif; }
-.rl-bar { height: 6px; border-radius: 3px; background: rgb(255 255 255 / .16); overflow: hidden; }
-.rl-bar span { display: block; height: 100%; width: calc(var(--p, 0) * 100%); border-radius: inherit; background: #5BE3C9; transition: width .3s ease-out; }
+.rl-step { margin: 6px 0 14px; min-height: 1.3em; color: var(--rg-muted); font: 500 .95rem/1.3 Barlow, system-ui, sans-serif; }
+.rl-bar { height: 6px; border-radius: 3px; background: var(--rg-track); overflow: hidden; }
+.rl-bar span { display: block; height: 100%; width: calc(var(--p, 0) * 100%); border-radius: inherit; background: var(--rg-accent); transition: width .3s ease-out; }
 /* Vue 3D indisponible : plus de voile, la carte passe sous le HUD, qui doit rester lisible et utilisable. */
 .ride-loading[data-state='error'] { z-index: auto; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: none; }
 .ride-loading[data-state='error'] .rl-bar { display: none; }
@@ -128,22 +154,23 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
   .rm-sec .row button { min-height: 40px; }
   .rm-fold pre { height: 120px; }
   .ride-menu-open { width: 40px; height: 40px; }
-  /* Sous le bouton du menu, même verre sombre : pause, palier suivant, intensité. */
+  /* Sous le bouton du menu, même verre : pause, palier suivant, intensité. */
   .ride-quick { position: absolute; z-index: 3; top: calc(var(--edge-t) + 46px); right: var(--edge-r); width: 40px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
   /* Les commandes de séance occupent la colonne de droite : le sélecteur de vitesse leur cède la place (en ERG il est sans effet). */
   .ride-quick:not([hidden]) ~ .ride-gears { display: none; }
   .ride-quick button {
-    width: 46px; height: 42px; padding: 0; display: grid; place-items: center; border-radius: 12px; border: 1px solid rgb(255 255 255 / .22);
-    background: rgb(24 30 40 / .78); color: #fff; font: 700 14px Barlow, system-ui, sans-serif; white-space: nowrap;
+    width: 46px; height: 42px; padding: 0; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--rg-edge);
+    background: var(--rg-glass); color: var(--rg-fg); font: 700 14px Barlow, system-ui, sans-serif; white-space: nowrap;
     -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   }
-  .ride-quick button:active { background: rgb(24 30 40 / .95); }
-  .ride-quick button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .ride-quick button:active { background: var(--rg-glass-strong); }
+  .ride-quick button:focus-visible { outline: 3px solid var(--rg-fg); outline-offset: 2px; }
   .ride-quick svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
   .ride-quick .rq-ico-play { display: none; fill: currentColor; }
   .ride-quick [aria-pressed='true'] .rq-ico-pause { display: none; }
   .ride-quick [aria-pressed='true'] .rq-ico-play { display: block; }
-  .ride-quick output { color: #fff; font: 700 13px Barlow, system-ui, sans-serif; white-space: nowrap; text-shadow: 0 1px 3px rgb(5 10 20 / .8); }
+  /* Posé à même la vue : un halo crème garde le texte foncé lisible devant le ciel comme devant la route. */
+  .ride-quick output { color: var(--rg-fg); font: 700 13px Barlow, system-ui, sans-serif; white-space: nowrap; text-shadow: var(--rg-out-shadow); }
   /* Les statistiques de rendu, si on les demande, passent à gauche des commandes. */
   .view-stats { right: calc(var(--edge-r) + 56px); }
   .view-stats { top: calc(var(--edge-t) + 48px); }
@@ -163,10 +190,10 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .ride-crowd {
   position: absolute; z-index: 3; top: var(--edge-t); right: calc(var(--edge-r) + 52px); height: 44px; box-sizing: border-box;
   display: flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 14px; max-width: 46vw;
-  border: 1px solid rgb(255 255 255 / .14); background: rgb(24 30 40 / .78); color: #fff;
+  border: 1px solid var(--rg-edge); background: var(--rg-glass); color: var(--rg-fg); box-shadow: var(--rg-shadow);
   font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.ride-crowd::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #1FE07F; }
+.ride-crowd::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #2B8A3E; }
 .ride-crowd[data-state='off']::before { background: #F08A3C; }
 
 /*
@@ -179,36 +206,38 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .ride-near {
   position: absolute; z-index: 2; top: calc(var(--edge-t) + 54px); right: var(--edge-r); width: 188px; box-sizing: border-box;
   display: flex; flex-direction: column; gap: 5px; padding: 5px; border-radius: 14px;
-  border: 1px solid rgb(255 255 255 / .14); background: rgb(24 30 40 / .7); box-shadow: 0 8px 28px rgb(5 10 20 / .25);
+  border: 1px solid var(--rg-panel-edge); background: var(--rg-panel); box-shadow: 0 6px 20px rgb(80 50 20 / .1);
   -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
   transform: scale(var(--near-s, 1)); transform-origin: 100% 0;
-  color: #fff; font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  color: var(--rg-fg); font: 500 .8125rem/1.2 Barlow, system-ui, sans-serif; text-shadow: var(--rg-halo); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  --rg-muted: var(--rg-panel-muted);
 }
 .ride-near[hidden] { display: none; }
+.rn-tab[aria-selected='true'], .rn-exit[aria-pressed='true'] { text-shadow: none; }
 /* Écran tactile : verre sans flou, comme le reste du HUD (qualité réduite par défaut). */
-@media (pointer: coarse) { .ride-near { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgb(24 30 40 / .84); } }
+@media (pointer: coarse) { .ride-near { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--rg-panel-flat); } }
 .rn-head[hidden], .rn-tabs[hidden], .rn-junction[hidden] { display: none; }
 /* L'en-tête garde la hauteur des onglets : l'encart ne bouge pas quand il passe en carrefour. */
 .rn-head { min-height: 28px; display: flex; flex-direction: column; justify-content: center; }
-.rn-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: rgb(255 255 255 / .08); }
+.rn-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--rg-tint); }
 .rn-tab {
-  flex: 1; min-height: 24px; padding: 5px 0; border: 0; border-radius: 7px; background: transparent; color: #D3DCE8;
+  flex: 1; min-height: 24px; padding: 5px 0; border: 0; border-radius: 7px; background: transparent; color: var(--rg-muted);
   font: 600 13px/1 Barlow, system-ui, sans-serif; cursor: pointer;
 }
-.rn-tab[aria-selected='true'] { background: #5BE3C9; color: #0B1422; }
-.rn-tab:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
-.rn-junction { margin: 0; padding: 4px 4px 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/1.25 Barlow, system-ui, sans-serif; text-shadow: 0 1px 2px rgb(5 10 20 / .6); }
+.rn-tab[aria-selected='true'] { background: var(--rg-accent); color: var(--rg-on-accent); }
+.rn-tab:focus-visible { outline: 2px solid var(--rg-fg); outline-offset: 1px; }
+.rn-junction { margin: 0; padding: 4px 4px 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/1.25 Barlow, system-ui, sans-serif; }
 /*
  * Sur la piste d'un vélodrome : la touche de sortie, au pied de l'encart (docs/design/parcours.md, « Le vélodrome »).
- * Neutre tant qu'on tourne ; turquoise, avec la distance de la porte, une fois la sortie programmée.
+ * Neutre tant qu'on tourne ; à l'accent, avec la distance de la porte, une fois la sortie programmée.
  */
 .rn-exit {
-  min-height: 44px; padding: 6px 8px; border-radius: 9px; border: 1px solid rgb(255 255 255 / .22); background: rgb(255 255 255 / .1);
-  color: #fff; font: 700 14px/1.15 Barlow, system-ui, sans-serif; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-height: 44px; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--rg-edge); background: var(--rg-tint);
+  color: var(--rg-fg); font: 700 14px/1.15 Barlow, system-ui, sans-serif; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rn-exit[hidden] { display: none; }
-.rn-exit[aria-pressed='true'] { background: #5BE3C9; border-color: transparent; color: #0B1422; }
-.rn-exit:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.rn-exit[aria-pressed='true'] { background: var(--rg-accent); border-color: transparent; color: var(--rg-on-accent); }
+.rn-exit:focus-visible { outline: 2px solid var(--rg-fg); outline-offset: 1px; }
 /* Liste et carte occupent la même cellule : l'encart garde la taille de la plus haute, quel que soit l'onglet. */
 .rn-body { display: grid; }
 .rn-list-box, .rn-map-box { grid-area: 1 / 1; min-width: 0; }
@@ -216,17 +245,17 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
 .ride-near[data-tab='list'] .rn-map-box, .ride-near[data-tab='map'] .rn-list-box { visibility: hidden; }
 .rn-map { flex: 1; min-height: 0; border-radius: 9px; overflow: hidden; }
 .rn-map svg { display: block; }
-.rn-foot { margin: 0; min-height: 16px; text-align: center; color: #D3DCE8; font: 500 12.5px/1.3 Barlow, system-ui, sans-serif; white-space: nowrap; }
+.rn-foot { margin: 0; min-height: 16px; text-align: center; color: var(--rg-muted); font: 500 12.5px/1.3 Barlow, system-ui, sans-serif; white-space: nowrap; }
 .rn-list-box[hidden] { display: none; }
 .rn-list { list-style: none; margin: 0; padding: 0 3px; display: flex; flex-direction: column; gap: 1px; }
-.rn-row { display: flex; align-items: center; gap: 8px; min-height: 22px; text-shadow: 0 1px 2px rgb(5 10 20 / .6); }
-.rn-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5BE3C9; box-shadow: 0 0 0 1px rgb(255 255 255 / .55); }
+.rn-row { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.rn-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--rg-accent); box-shadow: 0 0 0 1px rgb(20 23 26 / .25); }
 .rn-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rn-gap { flex: none; color: #D3DCE8; font-variant-numeric: tabular-nums; }
+.rn-gap { flex: none; color: var(--rg-muted); font-variant-numeric: tabular-nums; }
 /* Le joueur : repère au milieu de la liste, un trait au-dessus et au-dessous. */
-.rn-me { font-weight: 700; margin: 2px 0; padding: 2px 0; border-block: 1px solid rgb(255 255 255 / .22); }
-.rn-me .rn-dot { background: #5BE3C9; }
-.rn-drafting .rn-gap { color: #5BE3C9; font-weight: 700; } /* aspiration : l'air épargné derrière le coureur de devant */
+.rn-me { font-weight: 700; margin: 2px 0; padding: 2px 0; border-block: 1px solid var(--rg-line); }
+.rn-me .rn-dot { background: var(--rg-accent); }
+.rn-drafting .rn-gap { color: var(--rg-accent); font-weight: 700; } /* aspiration : l'air épargné derrière le coureur de devant */
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   /* Écran toujours rendu sans bordure : la colonne de droite (menu, pastille, encart, commandes) est à 6 px du haut et
      de la droite, comme les panneaux du HUD, quelle que soit l'encoche (docs/design/sortie.md). */

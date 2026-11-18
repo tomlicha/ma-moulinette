@@ -3,26 +3,41 @@
  * Mis en page dans un repère fixe 1280 × 720, mis à l'échelle de la vue par --hud-s, widgets à 90 % (--hud-k).
  * Verre dépoli : le décor derrière chaque panneau est flouté, d'où un contraste stable même devant un ciel clair.
  * Couleurs fixes (indépendantes du thème de la page) : le HUD est toujours posé sur la scène.
+ * Verre clair « Doux » depuis le 2026-11-18 (crème translucide, texte foncé, accent orange brûlé) : mêmes couleurs que les
+ * menus. Mise en page inchangée.
  */
 .hud {
-  --hud-panel: rgba(24, 30, 40, .70);
-  --hud-panel-flat: rgba(24, 30, 40, .84);
-  --hud-fg: #FFFFFF;
-  --hud-muted: #D3DCE8;
-  --hud-off: rgba(255, 255, 255, .35);
+  /* Panneaux translucides (2026-11-18) : le décor se devine derrière, le texte reste net sans halo (un halo crème faisait
+     « briller » le noir sur le blanc). 55 % sous le flou, 60 % sans flou (téléphone, qualité réduite) : avec les libellés
+     en #2A303A, au moins 4,9:1 devant la scène la plus sombre (nuit), 6,6:1 pour les chiffres. Voir docs/design/hud.md. */
+  --hud-panel: rgba(255, 251, 246, .55);
+  --hud-panel-flat: rgba(255, 251, 246, .6);
+  --hud-halo: none;
+  --hud-fg: #14171A;
+  --hud-muted: #2A303A; /* plus foncé que celui des menus : le panneau translucide n'est pas garanti clair */
+  --hud-off: rgba(20, 23, 26, .3);
   --hud-ink: #0B1422;
-  --hud-accent: #5BE3C9;
-  --hud-track: rgba(255, 255, 255, .16);
-  --hud-divider: rgba(255, 255, 255, .14);
-  --hud-relief: #66758B;
-  --hud-relief-line: #DDE6F0;
-  --hud-edge: rgba(255, 255, 255, .14);
-  --hud-shadow: 0 8px 28px rgba(5, 10, 20, .25);
+  --hud-accent: #C2410C;
+  --hud-on-accent: #FFFFFF;
+  --hud-msg-bg: #FBE3D6; --hud-msg-fg: #14171A; --hud-msg-edge: #C2410C; /* message de séance */
+  --hud-tint: rgba(90, 60, 30, .06); /* fond des touches et des cadres dans un panneau */
+  --hud-frame: rgba(90, 60, 30, .22); /* cadre d'une série d'intervalles */
+  --hud-zseg: .8; /* opacité des segments de la barre de zones */
+  --hud-track: rgba(255, 251, 246, .6);
+  --hud-divider: rgba(20, 23, 26, .2);
+  --hud-relief: #C3CBD5;
+  --hud-relief-line: #66758B;
+  --hud-edge: rgba(255, 255, 255, .55); /* liseré clair : dessine le verre même quand il est presque transparent */
+  --hud-shadow: 0 6px 20px rgba(80, 50, 20, .1);
+  --hud-num-shadow: var(--hud-halo);
   --hud-blur: blur(16px) saturate(1.3);
   --hud-k: .9;
   --hud-m: 24px; /* marge entre un panneau et le bord de la fenêtre, en pixels de scène */
-  /* Zones, version vive (2026-11-13) : mêmes teintes de jour comme de nuit, la scène ne change pas avec le thème. */
-  --hz1: #C4CDD8; --hz2: #2E9BFF; --hz3: #1FE07F; --hz4: #FFD60A; --hz5: #FF7A1A; --hz6: #FF2D55;
+  /* Zones, version vive (2026-11-13) : mêmes teintes de jour comme de nuit, la scène ne change pas avec le thème.
+     Z1 un peu plus soutenu sur verre clair (2026-11-18), sinon le bloc se perd dans le panneau. */
+  --hz1: #B8C2CE; --hz2: #2E9BFF; --hz3: #1FE07F; --hz4: #FFD60A; --hz5: #FF7A1A; --hz6: #FF2D55;
+  /* Les mêmes zones en couleur de texte (la cible) : assombries pour tenir 4,5:1 sur le verre clair. */
+  --hzt1: #5B6675; --hzt2: #1A6FD8; --hzt3: #0F8048; --hzt4: #8A6A00; --hzt5: #C2410C; --hzt6: #D61F45;
   --hud-num: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
   --hud-text: Barlow, system-ui, sans-serif;
 
@@ -30,14 +45,46 @@
   position: absolute; inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   overflow: hidden; pointer-events: none;
 }
+/*
+ * Mode sombre, selon le réglage de l'appareil (2026-11-18) : verre sombre, texte blanc, accent menthe, comme le HUD
+ * d'avant le thème clair. 70 % sous le flou, 78 % sans flou : libellés `#E4EAF2` à au moins 5,1:1 devant le ciel le plus
+ * clair (nuages blancs), chiffres blancs à 6,2:1. La mise en page ne change pas.
+ */
+@media (prefers-color-scheme: dark) {
+  .hud {
+    --hud-panel: rgba(24, 30, 40, .70);
+    --hud-panel-flat: rgba(24, 30, 40, .78);
+    --hud-fg: #FFFFFF;
+    --hud-muted: #E4EAF2;
+    --hud-off: rgba(255, 255, 255, .35);
+    --hud-accent: #5BE3C9;
+    --hud-on-accent: #0B1422;
+    --hud-msg-bg: #5BE3C9; --hud-msg-fg: #0B1422; --hud-msg-edge: transparent;
+    --hud-tint: rgba(255, 255, 255, .06);
+    --hud-frame: rgba(255, 255, 255, .16);
+    --hud-zseg: .55;
+    --hud-track: rgba(255, 255, 255, .16);
+    --hud-divider: rgba(255, 255, 255, .14);
+    --hud-relief: #66758B;
+    --hud-relief-line: #DDE6F0;
+    --hud-edge: rgba(255, 255, 255, .14);
+    --hud-shadow: 0 8px 28px rgba(5, 10, 20, .25);
+    --hud-num-shadow: 0 1px 2px rgba(5, 10, 20, .35);
+    --hz1: #C4CDD8;
+    /* Sur verre sombre, la cible prend directement la teinte vive de sa zone. */
+    --hzt1: var(--hz1); --hzt2: var(--hz2); --hzt3: var(--hz3); --hzt4: var(--hz4); --hzt5: var(--hz5); --hzt6: var(--hz6);
+  }
+}
 /* Téléphone couché : la zone sûre n'est gardée que du côté de l'encoche ; de l'autre, les panneaux vont jusqu'au bord de l'écran. */
 html[data-notch='left'] .hud.compact { right: 0; }
 html[data-notch='right'] .hud.compact { left: 0; }
 .hud-stage {
   position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
   transform-origin: 0 0; transform: translate(var(--hud-x, 0px), var(--hud-y, 0px)) scale(var(--hud-s, .5));
-  color: var(--hud-fg); font: 500 16px/1.25 var(--hud-text);
+  color: var(--hud-fg); font: 500 16px/1.25 var(--hud-text); text-shadow: var(--hud-halo);
 }
+/* Textes posés sur un aplat de couleur (pastilles, blocs de la liste, message) : pas de halo, il baverait sur l'aplat. */
+.hud-pill, .hud-chip, .hud-up-pw, .hud-message { text-shadow: none; }
 
 .hud-p {
   position: absolute; box-sizing: border-box; border-radius: 14px;
@@ -47,8 +94,8 @@ html[data-notch='right'] .hud.compact { left: 0; }
 }
 /* Qualité réduite ou navigateur sans flou : même teinte, plus opaque. */
 .hud.flat .hud-p { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--hud-panel-flat); }
-/* Le message de séance garde son fond coloré : sans lui, son texte sombre disparaît sur le fond sombre des autres panneaux. */
-.hud.flat .hud-message { background: var(--hud-accent); }
+/* Le message de séance garde son fond teinté : il se distingue ainsi des autres panneaux. */
+.hud.flat .hud-message { background: var(--hud-msg-bg); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .hud-p { background: var(--hud-panel-flat); }
 }
@@ -61,7 +108,7 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud-center { left: 340px; top: calc(var(--hud-m) - var(--hud-oy, 0px)); width: 600px; padding: 14px 20px; gap: 10px; transform-origin: 50% 0; }
 .hud-bottom { left: 64px; top: calc(630px - var(--hud-m) + var(--hud-oy, 0px)); width: 1152px; height: 90px; padding: 10px 20px; justify-content: center; transform-origin: 50% 100%; }
 /* Message de la séance (consigne écrite dans le fichier), sous le panneau central. */
-.hud-message { left: 340px; top: calc(178px + var(--hud-m) - var(--hud-oy, 0px)); width: 600px; padding: 12px 20px; transform-origin: 50% 0; background: var(--hud-accent); color: var(--hud-ink); border-color: transparent; font-size: 24px; font-weight: 700; text-align: center; }
+.hud-message { left: 340px; top: calc(178px + var(--hud-m) - var(--hud-oy, 0px)); width: 600px; padding: 12px 20px; transform-origin: 50% 0; background: var(--hud-msg-bg); color: var(--hud-msg-fg); border: 2px solid var(--hud-msg-edge); font-size: 24px; font-weight: 700; text-align: center; }
 
 /* Carrefour : une touche par route, sous le panneau central. Seul élément du HUD qu'on touche, d'où pointer-events. */
 .hud-junction { left: 290px; top: calc(196px + var(--hud-m) - var(--hud-oy, 0px)); width: 700px; padding: 10px 14px 14px; gap: 8px; transform-origin: 50% 0; pointer-events: auto; }
@@ -73,12 +120,12 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud-junction-opts { display: flex; gap: 10px; }
 .hud-junction-opt {
   flex: 1 1 0; min-width: 0; min-height: 64px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left;
-  padding: 8px 12px; border-radius: 10px; border: 2px solid var(--hud-edge); background: rgba(255, 255, 255, .06); color: var(--hud-fg); font: inherit; cursor: pointer;
+  padding: 8px 12px; border-radius: 10px; border: 2px solid var(--hud-edge); background: var(--hud-tint); color: var(--hud-fg); font: inherit; cursor: pointer;
 }
 .hud-junction-opt .arrow { grid-row: 1 / 3; font: 600 34px/1 var(--hud-num); color: var(--hud-muted); }
 .hud-junction-opt .nm { font-weight: 700; font-size: 20px; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hud-junction-opt .meta { font-size: 15px; line-height: 1.15; color: var(--hud-muted); }  /* passe à la ligne : jamais de montée coupée */
-.hud-junction-opt.on { border-color: var(--hud-accent); background: rgba(91, 227, 201, .18); }
+.hud-junction-opt.on { border-color: var(--hud-accent); background: color-mix(in srgb, var(--hud-accent) 12%, transparent); }
 .hud-junction-opt.on .arrow { color: var(--hud-accent); }
 .hud-junction-opt:focus-visible { outline: 2px solid var(--hud-accent); outline-offset: 2px; }
 
@@ -89,7 +136,8 @@ html[data-notch='right'] .hud.compact { left: 0; }
 
 .hud .lab, .hud .u { font-size: 16px; color: var(--hud-muted); }
 .hud .u { font-weight: 500; }
-.hud .n { font-family: var(--hud-num); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(5, 10, 20, .35); }
+.hud .n { font-family: var(--hud-num); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: var(--hud-num-shadow); }
+.hud-pill .n, .hud-chip .n, .hud-up-pw .n { text-shadow: none; }
 .hud .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .hud .col { display: flex; flex-direction: column; }
 .hud .title { font-size: 18px; font-weight: 700; }
@@ -108,7 +156,7 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud-metrics .col { gap: 2px; }
 
 .hud-pill { display: inline-block; font-size: 16px; font-weight: 700; color: var(--hud-ink); background: var(--hud-track); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
-.hud-chip { display: inline-block; font-size: 16px; font-weight: 700; color: var(--hud-ink); background: var(--hud-accent); border-radius: 6px; padding: 2px 10px; letter-spacing: .04em; white-space: nowrap; }
+.hud-chip { display: inline-block; font-size: 16px; font-weight: 700; color: var(--hud-on-accent); background: var(--hud-accent); border-radius: 6px; padding: 2px 10px; letter-spacing: .04em; white-space: nowrap; }
 .hud-pill[data-z='z1'], .hud-fill[data-z='z1'] { background: var(--hz1); }
 .hud-pill[data-z='z2'], .hud-fill[data-z='z2'] { background: var(--hz2); }
 .hud-pill[data-z='z3'], .hud-fill[data-z='z3'] { background: var(--hz3); }
@@ -116,16 +164,16 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud-pill[data-z='z5'], .hud-fill[data-z='z5'] { background: var(--hz5); }
 .hud-pill[data-z='z6'], .hud-fill[data-z='z6'] { background: var(--hz6); }
 .hud-pill[data-z=''] { color: var(--hud-fg); }
-.hud-zfg[data-z='z1'] { color: var(--hz1); } .hud-zfg[data-z='z2'] { color: var(--hz2); }
-.hud-zfg[data-z='z3'] { color: var(--hz3); } .hud-zfg[data-z='z4'] { color: var(--hz4); }
-.hud-zfg[data-z='z5'] { color: var(--hz5); } .hud-zfg[data-z='z6'] { color: var(--hz6); }
+.hud-zfg[data-z='z1'] { color: var(--hzt1); } .hud-zfg[data-z='z2'] { color: var(--hzt2); }
+.hud-zfg[data-z='z3'] { color: var(--hzt3); } .hud-zfg[data-z='z4'] { color: var(--hzt4); }
+.hud-zfg[data-z='z5'] { color: var(--hzt5); } .hud-zfg[data-z='z6'] { color: var(--hzt6); }
 
 .hud-prog { position: relative; height: 8px; border-radius: 4px; background: var(--hud-track); overflow: hidden; }
 .hud-prog .hud-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background: var(--hz4); transition: width .25s linear; }
 
 .hud-zbar { position: relative; height: 22px; }
 .hud-zbar .segs { position: absolute; left: 0; right: 0; top: 7px; height: 8px; display: flex; gap: 2px; }
-.hud-zbar .segs span { height: 100%; border-radius: 2px; opacity: .55; }
+.hud-zbar .segs span { height: 100%; border-radius: 2px; opacity: var(--hud-zseg); }
 .hud-zbar .band { position: absolute; top: 3px; height: 16px; box-sizing: border-box; border-radius: 4px; border: 2px solid var(--hz4); background: rgba(242, 194, 48, .25); }
 .hud-zbar .mark { position: absolute; top: 0; width: 4px; height: 22px; margin-left: -2px; border-radius: 2px; background: var(--hud-fg); transition: left .4s ease-out; }
 
@@ -166,7 +214,7 @@ html[data-notch='right'] .hud.compact { left: 0; }
   font: 700 20px/1 var(--hud-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud-up-pw small { font-size: 13px; margin-left: 2px; opacity: .7; }
 .hud-up.ramp .hud-up-pw { background: linear-gradient(90deg, var(--z-from), var(--z-to)); font-size: 17px; }
-.hud-up.free .hud-up-pw { background: transparent; color: var(--hud-fg); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .7); font-weight: 600; }
+.hud-up.free .hud-up-pw { background: transparent; color: var(--hud-fg); box-shadow: inset 0 0 0 1.5px var(--hud-muted); font-weight: 600; }
 .hud-up-dur { text-align: right; font: 600 19px/1 var(--hud-num); font-variant-numeric: tabular-nums; color: var(--hud-muted); }
 .hud-up.first { height: 38px; background: linear-gradient(90deg, color-mix(in srgb, var(--zc) 38%, transparent), color-mix(in srgb, var(--zc) 6%, transparent));
   box-shadow: inset 0 0 0 1.5px var(--zc), 0 0 20px -6px var(--zc); }
@@ -175,13 +223,13 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud-up.first .hud-up-dur { font-size: 23px; color: var(--hud-fg); }
 
 .hud-up-grp { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 6px; align-items: center; padding: 4px; border-radius: 11px;
-  background: rgba(255, 255, 255, .07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+  background: var(--hud-tint); box-shadow: inset 0 0 0 1px var(--hud-frame); }
 .hud-up-rows { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .hud-up-grp .hud-up { height: 28px; }
 .hud-up-grp .hud-up.first { height: 34px; }
 .hud-up-x { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .hud-up-x small { font-size: 12px; color: var(--hud-muted); }
-.hud-up-x b { font: 700 25px/1 var(--hud-num); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: 0 1px 2px rgba(5, 10, 20, .35); }
+.hud-up-x b { font: 700 25px/1 var(--hud-num); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: var(--hud-num-shadow); }
 .hud-up-x i { font-style: normal; font-size: 16px; color: var(--hud-muted); }
 
 @media (prefers-reduced-motion: reduce) { .hud-prog .hud-fill, .hud-zbar .mark { transition: none; } .hud-next-list.enter { animation: none; } }
