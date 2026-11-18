@@ -75,6 +75,59 @@ function ribbon(rows: V[][]): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * Normales adoucies : un sommet prend la moyenne des faces voisines qui ne s'écartent pas de la sienne de plus de
+ * `creaseDeg`. Le sol du vélodrome (maillage à facettes, deux triangles par bande) montrait sinon une bande d'ombrage
+ * à chaque pas du maillage ; les vraies arêtes (piste relevée contre la bordure plate, talus) restent nettes.
+ */
+function softenNormals(g: THREE.BufferGeometry, creaseDeg: number): void {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  const tris = pos.count / 3;
+  const face = new Float32Array(tris * 3);
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  for (let t = 0; t < tris; t++) {
+    a.fromBufferAttribute(pos, t * 3);
+    b.fromBufferAttribute(pos, t * 3 + 1).sub(a);
+    c.fromBufferAttribute(pos, t * 3 + 2).sub(a);
+    b.cross(c); // longueur = 2 × aire : les grandes faces pèsent plus
+    face.set([b.x, b.y, b.z], t * 3);
+  }
+  const key = (i: number) => `${Math.round(pos.getX(i) * 1000)},${Math.round(pos.getY(i) * 1000)},${Math.round(pos.getZ(i) * 1000)}`;
+  const at = new Map<string, number[]>();
+  for (let i = 0; i < pos.count; i++) {
+    const kk = key(i);
+    const list = at.get(kk);
+    if (list) list.push((i / 3) | 0);
+    else at.set(kk, [(i / 3) | 0]);
+  }
+  const cos = Math.cos((creaseDeg * Math.PI) / 180);
+  const out = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const own = (i / 3) | 0;
+    const ol = Math.hypot(face[own * 3]!, face[own * 3 + 1]!, face[own * 3 + 2]!) || 1;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (const t of at.get(key(i))!) {
+      const tl = Math.hypot(face[t * 3]!, face[t * 3 + 1]!, face[t * 3 + 2]!) || 1;
+      const d = (face[t * 3]! * face[own * 3]! + face[t * 3 + 1]! * face[own * 3 + 1]! + face[t * 3 + 2]! * face[own * 3 + 2]!) / (tl * ol);
+      if (d >= cos) {
+        x += face[t * 3]!;
+        y += face[t * 3 + 1]!;
+        z += face[t * 3 + 2]!;
+      }
+    }
+    const l = Math.hypot(x, y, z) || 1;
+    out.set([x / l, y / l, z / l], i * 3);
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(out, 3));
+}
+
+/** Pas du maillage de la piste, de son mur et de ses traits peints, en m. */
+const LAP_STEP_M = 0.5;
+
 /** Abscisses de `a` à `b` par pas d'au plus `step`, extrémités comprises. */
 function span(a: number, b: number, step: number): number[] {
   const n = Math.max(1, Math.ceil((b - a) / step));
@@ -107,7 +160,9 @@ export function buildVelodrome(): Velodrome {
     const p = track.point(s, u);
     return [p.x, y, p.z];
   };
-  const lap = span(0, L, 2);
+  // Pas du maillage le long de la piste : à 2 m, le cap change de 2,7° d'une bande à l'autre dans les virages (rayon de
+  // 43 m) et les traits peints, vus de près, montrent des cassures ; à 0,5 m elles disparaissent (0,7°).
+  const lap = span(0, L, LAP_STEP_M);
 
   // --- Piste : bande bleue, béton, lignes peintes -------------------------------------------------------------------
   flat.add(ribbon(lap.map((s) => [P(s, 0), P(s, U_TRACK)])), C.blue);
@@ -163,7 +218,7 @@ export function buildVelodrome(): Velodrome {
       colors: [C.wall, C.wallCap, C.wall, C.walkway, C.bank, C.bank],
     };
   };
-  const ring = span(gapTo, gapFrom + L, 2);
+  const ring = span(gapTo, gapFrom + L, LAP_STEP_M);
   const profiles = ring.map((s) => profile(s).pts.map(([u, y]) => P(s, u, y)));
   // Le mur projette son ombre sur la piste ; la coursive et le talus, non.
   profile(0).colors.forEach((color, j) => (j < 3 ? k : flat).add(ribbon(profiles.map((row) => [row[j]!, row[j + 1]!])), color));
@@ -420,6 +475,7 @@ export function buildVelodrome(): Velodrome {
   // Dans la carte d'ombre, les faces arrière des volumes : pas d'acné sur leurs faces éclairées.
   mat.shadowSide = THREE.BackSide;
   const ground = flat.mesh();
+  softenNormals(ground.geometry, 5);
   (ground.material as THREE.Material).side = THREE.DoubleSide;
   ground.castShadow = false;
   group.add(mesh, ground);

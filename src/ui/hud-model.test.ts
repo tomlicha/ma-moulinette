@@ -107,6 +107,20 @@ describe('profileWindow', () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(4); // 4 m sur 40 m : moins de 3 px sur 28
   });
 
+  it('montre une route entière : le point avance, le profil ne bouge pas', () => {
+    const j = new Journey(COL_DES_ERABLES);
+    j.update(0);
+    const road = j.roadAt(10);
+    expect(road.startM).toBe(0);
+    expect(j.roadAt(road.lengthM - 1)).toEqual(road); // toute la route, jusqu'au carrefour
+    const a = profileWindow(j, road.startM, 600, 34, road.lengthM, 0);
+    expect(a.startM).toBe(0);
+    expect(a.endM).toBe(road.lengthM);
+    expect(a.x(0)).toBeCloseTo(0);
+    expect(a.x(road.lengthM / 2)).toBeCloseTo(300);
+    expect(a.x(road.lengthM)).toBeCloseTo(600);
+  });
+
   it('suit le relief en glissant : même forme, un peu plus loin', () => {
     const a = profileWindow(DEMO_ROUTE, 1500, 600, 34);
     const b = profileWindow(DEMO_ROUTE, 1520, 600, 34);

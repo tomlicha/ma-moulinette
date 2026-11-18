@@ -622,14 +622,16 @@ export function buildFestivities(ctx: FeteContext): Fete {
       const row = n % msgs.length;
       const v0 = 1 - (row + 1) / msgs.length;
       const v1 = 1 - row / msgs.length;
-      for (let i = 0; i < 3; i++) {
-        const sa = s + i * 2;
-        const sb = sa + 2;
+      // Bâche de 6 m en bandes de 1 m : elle suit la courbe du mur au lieu de la couper en trois pans.
+      const PANELS = 6;
+      for (let i = 0; i < PANELS; i++) {
+        const sa = s + i;
+        const sb = sa + 1;
         const [pa, pb] = [track.point(sa, U_TOP - 0.03), track.point(sb, U_TOP - 0.03)];
         const [ya, yb] = [track.height(sa, U_TOP), track.height(sb, U_TOP)];
         // Le texte se lit de gauche à droite depuis la piste, c'est-à-dire à rebours de `s`.
-        const ua = 1 - i / 3;
-        const ub = 1 - (i + 1) / 3;
+        const ua = 1 - i / PANELS;
+        const ub = 1 - (i + 1) / PANELS;
         const A = [pa.x, ya + 0.12, pa.z];
         const B = [pa.x, ya + 1.0, pa.z];
         const Cc = [pb.x, yb + 0.12, pb.z];
