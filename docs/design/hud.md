@@ -20,6 +20,7 @@ Référence permanente du HUD affiché par-dessus la vue 3D (écran **Sortie**, 
 | 2026-11-13 | **Version téléphone** (paysage) : échelle plancher de 0,75, panneaux à 100 %, bloc central étroit sur deux rangées, liste « À suivre » à 3 ou 2 éléments, bandeau du bas sur toute la largeur. Face à un bloc central large (zone et écart en colonne à droite des mesures) et à un bloc centré avec la ligne de zone dessous. | Des utilisateurs trouvaient l'application illisible sur mobile : la scène 1280 × 720 ajustée à la hauteur tombait à 0,54 sur un iPhone 13 couché, soit des libellés de 7,8 px et un en-tête « À suivre » de 6 px. Le bloc étroit garde toutes les données en laissant la route visible de part et d'autre. |
 | 2026-11-13 | Liste **« À suivre »** sous la tuile du palier, proposition **A′ · Pile compacte**, face à « Barres d'intensité » et « Fil du temps ». Une ligne par palier : les watts et la durée, sans le type. Une série d'intervalles tient dans un cadre, avec ses deux paliers et le numéro de répétition. | Lisible d'un regard en plein effort, sans second panneau. Le type de palier n'apporte rien : la couleur et les watts suffisent. Avec des 30/30, quatre lignes identiques ne disaient rien de plus ; le cadre montre la série et où on en est. |
 | 2026-11-13 | **Zones plus vives** dans tout le HUD (tuile, liste, barre de zones, profil de séance), Z1 en gris clair ; texte foncé sur toutes les pastilles, Z6 compris. | Les teintes de la planche de style paraissaient ternes sur le verre sombre, surtout en série d'intervalles. Le gris de Z1 reste gris, comme le veut l'usage, mais clair. |
+| 2026-11-18 | Le profil du bas montre la **route entière** sous le cycliste (de carrefour à carrefour), avec un point qui avance dessus, au lieu d'une fenêtre de 3 km qui défile. | Le col se lit d'un coup d'œil et l'avancement se voit sur la courbe ; le profil ne bouge plus entre deux carrefours. |
 
 ## Repère et mise en page
 
@@ -29,13 +30,13 @@ Le HUD est mis en page dans une scène fixe de **1280 × 720 px**, puis ajustée
 |---|---|---|---|
 | Gauche | coin haut gauche de la fenêtre, à 24 px ; l 250 | haut gauche | Sortie libre : nom du parcours, temps, distance, dénivelé positif. Séance : palier (type, n° / total, ou « rép. 3 / 10 » dans une série), compte à rebours, barre de progression, temps fait / durée, cadence visée, puis la liste « À suivre » (voir plus bas). |
 | Centre | x 340, à 24 px du haut de la fenêtre ; l 600 | haut centre | Puissance 3 s (76 px), séparateur, puis trois colonnes à 38 px : FC, cadence, vitesse (sortie libre) ou cible, FC, cadence (séance). Barre de zones. Ligne du bas : pastille de zone et % de la FTP, ou en séance pastille de zone, ERG, écart, plage cible ± 5 %. |
-| Bas | x 64, à 24 px du bas de la fenêtre ; l 1152, h 90 | bas centre | Sortie libre : pente, profil des prochains kilomètres (400 m derrière le cycliste, 2,6 km devant, glissant avec lui) avec le prochain sommet en pointillé, mode SIM ou ERG, état du trainer et de la ceinture. Séance : nom, temps fait / total, palier suivant, profil de la séance avec curseur, paliers passés atténués. |
+| Bas | x 64, à 24 px du bas de la fenêtre ; l 1152, h 90 | bas centre | Sortie libre : pente, profil de la route entière sous le cycliste, de carrefour à carrefour (le col au complet : le profil reste en place et un point avance dessus ; il change à chaque carrefour franchi), avec le prochain sommet en pointillé s'il est sur cette route, mode SIM ou ERG, état du trainer et de la ceinture. Séance : nom, temps fait / total, palier suivant, profil de la séance avec curseur, paliers passés atténués. |
 | Message | x 340, sous le panneau central ; l 600 | haut centre | Message de la séance en cours (consigne du fichier), sous le panneau central ; absent sans message. |
 | Haut droit | libre | | Bouton du menu de la sortie ; réservé en dessous à la liste du groupe (multijoueur). Le compteur de rendu (`view-stats`), masqué par défaut, s'y affiche si on le demande dans le menu. |
 
 États :
 
-- **Sortie libre**, y compris avant le départ : les trois panneaux, version sortie. Avant le départ, le parcours et la pente sont en « – », le profil montre le départ et les premiers kilomètres ; le HUD ne change donc pas de forme au démarrage.
+- **Sortie libre**, y compris avant le départ : les trois panneaux, version sortie. Avant le départ, le parcours et la pente sont en « – », le profil montre la première route en entier ; le HUD ne change donc pas de forme au démarrage.
 - **Séance** : les trois panneaux, version séance ; la vitesse sort du bloc central pour laisser la place à la cible.
 
 **Porte du palier suivant** (dans la scène 3D, pas dans le HUD) : en séance, 30 s avant chaque changement de palier, une arche enjambe la route devant le cycliste, de la couleur de la zone du palier qui commence (`--hz1` … `--hz6`, blanc devant un palier libre). La séance avançant au temps, la porte est posée là où le cycliste sera à sa vitesse du moment (au moins 2 m/s, au plus 400 m devant) et se recale en douceur ; il la franchit au début du palier, puis elle s'efface. Rien sur le dernier palier ni en pause. Logique dans `workout/gate.ts`, rendu dans `render/interval-gate.ts`.
@@ -111,7 +112,7 @@ Typographie (polices servies par l'application via `@fontsource`, jamais depuis 
 | Vitesse | vitesse virtuelle pendant la sortie, sinon celle mesurée par le trainer |
 | Temps, distance, pente | `RideSnapshot` de la sortie virtuelle |
 | Dénivelé positif | `ClimbCounter`, cumul des altitudes de la sortie |
-| Prochain sommet, profil à venir | altitude du trajet (`nextSummitM`, `profileWindow`) : le trajet par défaut au-delà du prochain carrefour |
+| Prochain sommet, profil à venir | altitude du trajet (`nextSummitM`, `profileWindow`, `Journey.roadAt` pour les bornes de la route) : le trajet par défaut au-delà du prochain carrefour |
 | Carrefour annoncé | `Journey.pendingJunction` ; panneau « Carrefour » sous le panneau central ([parcours.md](parcours.md)) |
 | Zone | `zoneOf` de `workout/profile.ts`, FTP de la séance ou saisie |
 | Cible, écart, palier, profil de séance | `WorkoutState` du déroulement de séance, `profileShapes` |

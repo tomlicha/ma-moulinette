@@ -9,4 +9,6 @@ export interface Course {
   gradeAt(distanceM: number, halfWindowM?: number): number;
   /** Appelée par la simulation avec la distance du cycliste : un trajet y valide ses choix de carrefour. */
   update?(distanceM: number): void;
+  /** La route (de carrefour à carrefour) sous `distanceM` : où elle commence sur le trajet et sa longueur, en m. */
+  roadAt?(distanceM: number): { startM: number; lengthM: number };
 }
