@@ -7,3 +7,4 @@ dist
 .logs/
 .wrangler/
 .dev.vars
+.vscode/
