@@ -1,0 +1,75 @@
+# Déploiement de production : une fois par jour, à 2 h (heure de Montréal), avec la dernière version de main.
+#
+# Cloudflare (Workers Builds) ne déploie plus main tout seul : sa commande de déploiement est `npx wrangler versions upload`
+# (la version est construite et gardée, mais pas mise en ligne ; voir « Déploiement » dans le README). Les branches et les
+# pull requests, elles, vont toujours sur le serveur d'aperçu (`npx wrangler preview`).
+#
+# GitHub ne connaît que l'UTC et ignore l'heure d'été. Deux déclenchements sont donc programmés (6 h et 7 h UTC) et le job
+# ne continue que s'il est 2 h à Montréal : 6 h UTC = 2 h en heure d'été (EDT), 7 h UTC = 2 h en heure d'hiver (EST).
+# GitHub peut retarder un déclenchement de quelques minutes : tout lancement entre 2 h 00 et 2 h 59 convient.
+#
+# « Run workflow » (workflow_dispatch) déploie tout de suite, sans condition d'heure.
+#
+# Secrets du dépôt : les mêmes que migrations.yml (CLOUDFLARE_API_TOKEN avec « Workers Scripts : modifier »,
+# CLOUDFLARE_ACCOUNT_ID). Les migrations D1 de production sont appliquées à la poussée sur main (migrations.yml), donc
+# avant ce déploiement : le code neuf trouve toujours ses tables.
+name: Déploiement de production
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Est-il 2 h à Montréal ?
+        id: heure
+        run: |
+          heure="$(TZ=America/Toronto date +%H)"
+          echo "Heure à Montréal : $(TZ=America/Toronto date '+%Y-%m-%d %H:%M %Z')"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || [ "$heure" = "02" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pas 2 h à Montréal : l'autre déclenchement s'en charge."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Secrets Cloudflare présents ?
+        if: steps.heure.outputs.go == 'true'
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Secrets CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID absents : la production n'a pas été déployée."
+            exit 1
+          fi
+
+      # Toujours main, même si le workflow est lancé à la main depuis une autre branche.
+      - uses: actions/checkout@v4
+        if: steps.heure.outputs.go == 'true'
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        if: steps.heure.outputs.go == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.heure.outputs.go == 'true'
+
+      # Types, build de production, puis `wrangler deploy -c wrangler.app.toml` (package.json : deploy:app).
+      - name: Build et déploiement
+        if: steps.heure.outputs.go == 'true'
+        run: npm run deploy:app
