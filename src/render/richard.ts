@@ -8,8 +8,7 @@ import { ROAD_HALF, sideOf, type WorldLayout } from './world-layout';
 
 /**
  * Richard, le même avatar et le même vélo que le cycliste, en équilibre sur la roue arrière : il monte puis descend
- * un escalier de pierre au bord de la route, fait demi-tour sur place (la roue arrière pour pivot) et refait le
- * chemin en sens inverse. Même modèle, même palette (un maillot orange) : seul le vélo est cabré autour du point de
+ * un escalier de pierre au bord de la route, puis repart en sens inverse, sans jamais se retourner : il pédale comme le coureur, en boucle. Même modèle, même palette (un maillot orange) : seul le vélo est cabré autour du point de
  * contact du pneu arrière avec les marches.
  *
  * Repère local du groupe : l'escalier est posé le long de z, au milieu (z = 0), à x = 0 ; origine au sol.
@@ -26,54 +25,63 @@ const RISE_M = 0.17;
 const TREAD_M = 0.5;
 const TOP_HALF_M = 0.6;
 const WIDTH_M = 1.5;
-/** Longueur sur laquelle la roue monte (ou descend) d'une marche. */
-const CLIMB_M = 0.32;
-/** Roulage au sol de part et d'autre de l'escalier, avant de faire demi-tour. */
+/** Roulage au sol de part et d'autre de l'escalier, avant de repartir dans l'autre sens. */
 const RUNWAY_M = 1.3;
-const SPEED_MS = 1.0;
-const TURN_S = 1.7;
 const CADENCE_RPM = 50;
 
 const DEG = Math.PI / 180;
 /** Cabrage : l'angle du cadre au-dessus de l'horizontale, proche du point d'équilibre. */
 const PITCH = 54 * DEG;
 
-const smooth = (x: number) => {
-  const c = Math.min(1, Math.max(0, x));
-  return c * c * (3 - 2 * c);
-};
-
-/** Abscisse (dans le sens de la marche, 0 au milieu du palier) de la marche `k` (1 à `STEPS`) en montée. */
+/** Abscisse (dans le sens de la marche, 0 au milieu du palier) de la contremarche `k` (1 à `STEPS`) en montée. */
 const riser = (k: number) => -TOP_HALF_M - (STEPS - k) * TREAD_M;
 const HALF_LENGTH_M = TOP_HALF_M + (STEPS - 1) * TREAD_M + RUNWAY_M;
+/** Rayon du pneu arrière, en m, quand le modèle n'en dit rien de mieux. */
+const WHEEL_RADIUS_M = 0.34;
 
-/**
- * Hauteur du point de contact du pneu arrière à l'abscisse `u`, et part de saut (0 à 1) : la roue se lève juste avant
- * chaque marche, redescend après chaque arête. L'escalier est symétrique, donc valable dans les deux sens.
- */
-export function wheelHeight(u: number): { h: number; hop: number } {
-  let h = 0;
-  let hop = 0;
+/** Hauteur de l'escalier à l'abscisse `x` : une pyramide de `STEPS` marches. */
+export function stairHeight(x: number): number {
+  let up = 0;
+  let down = 0;
   for (let k = 1; k <= STEPS; k++) {
-    const up = (u - (riser(k) - CLIMB_M)) / CLIMB_M;
-    h += RISE_M * smooth(up);
-    if (up > 0 && up < 1) hop = Math.max(hop, Math.sin(Math.PI * up));
-    const down = (u - -riser(k)) / CLIMB_M;
-    h -= RISE_M * smooth(down);
+    if (x >= riser(k)) up++;
+    if (x < -riser(k)) down++;
   }
-  return { h, hop };
+  return RISE_M * Math.min(up, down);
 }
 
-/** Où se trouve Richard à l'instant `t` du cycle : abscisse z, cap (0 vers +z, π vers −z), sens de marche. */
-export function cycleAt(t: number): { z: number; yaw: number; dir: 1 | -1; moving: boolean } {
-  const run = (2 * HALF_LENGTH_M) / SPEED_MS;
-  const period = 2 * (run + TURN_S);
-  const c = ((t % period) + period) % period;
-  const ease = (x: number) => smooth(x / TURN_S);
-  if (c < run) return { z: -HALF_LENGTH_M + c * SPEED_MS, yaw: 0, dir: 1, moving: true };
-  if (c < run + TURN_S) return { z: HALF_LENGTH_M, yaw: Math.PI * ease(c - run), dir: 1, moving: false };
-  if (c < 2 * run + TURN_S) return { z: HALF_LENGTH_M - (c - run - TURN_S) * SPEED_MS, yaw: Math.PI, dir: -1, moving: true };
-  return { z: -HALF_LENGTH_M, yaw: Math.PI + Math.PI * ease(c - 2 * run - TURN_S), dir: -1, moving: false };
+/** Hauteur du moyeu arrière : la roue roule sur le profil des marches, arêtes comprises, sans y entrer. */
+export function hubHeight(z: number, radius = WHEEL_RADIUS_M): number {
+  // Le point le plus contraignant est sous le moyeu, ou sur l'une des arêtes à portée de la roue.
+  let hub = stairHeight(z) + radius;
+  for (let k = 1; k <= STEPS; k++) {
+    for (const e of [riser(k), -riser(k)]) {
+      const dx = e - z;
+      if (Math.abs(dx) >= radius) continue;
+      const corner = Math.max(stairHeight(e - 1e-6), stairHeight(e + 1e-6));
+      hub = Math.max(hub, corner + Math.sqrt(radius * radius - dx * dx));
+    }
+  }
+  return hub;
+}
+
+/** Hauteur du point de contact du pneu arrière et part de saut (0 à 1, la pente que la roue gravit ou descend). */
+export function wheelHeight(z: number, radius = WHEEL_RADIUS_M): { h: number; hop: number } {
+  const h = hubHeight(z, radius) - radius;
+  const slope = Math.abs(hubHeight(z + 0.05, radius) - hubHeight(z - 0.05, radius)) / 0.1;
+  return { h, hop: Math.min(1, slope / 1.5) };
+}
+
+/** Durée d'un aller-retour complet, en s. */
+const PERIOD_S = 12;
+
+/**
+ * Où se trouve Richard à l'instant `t` : abscisse z et vitesse (m/s, négative en descendant à reculons). Il va et
+ * vient sur l'escalier sans jamais se retourner, en ralentissant doucement aux deux bouts.
+ */
+export function cycleAt(t: number): { z: number; speed: number } {
+  const w = (2 * Math.PI) / PERIOD_S;
+  return { z: -HALF_LENGTH_M * Math.cos(w * t), speed: HALF_LENGTH_M * w * Math.sin(w * t) };
 }
 
 export interface Richard {
@@ -106,9 +114,11 @@ export function buildRichard(layout: WorldLayout, assets: RiderAssets, edge: Edg
 
   /* ---------- Richard : le vélo cabré autour du contact du pneu arrière ---------- */
   const rider = new Rider(assets, { jersey: { color: 0xf08a24 }, sock: { color: 0xf08a24 }, helmetAlt: { color: 0xf08a24 }, frame: { color: 0x2d6cdf } });
-  const rearZ = assets.bike.getObjectByName(BIKE_NODE.rearWheel)!.position.z; // négatif : derrière le pédalier
-  rider.group.position.set(0, 0, -rearZ); // le contact du pneu arrière à l'origine du pivot
   const pivot = new THREE.Group();
+  const rearZ = assets.bike.getObjectByName(BIKE_NODE.rearWheel)!.position.z; // négatif : derrière le pédalier
+  const wheelR = assets.bike.getObjectByName(BIKE_NODE.rearWheel)!.position.y; // hauteur du moyeu
+  rider.group.position.set(0, -wheelR, -rearZ); // le moyeu arrière à l'origine du pivot : la roue reste posée sur la marche
+  pivot.position.set(0, wheelR, 0);
   pivot.add(rider.group);
   const walker = new THREE.Group();
   walker.add(pivot);
@@ -129,14 +139,12 @@ export function buildRichard(layout: WorldLayout, assets: RiderAssets, edge: Edg
   let t = 0;
   const apply = () => {
     const c = cycleAt(t);
-    const u = c.dir * c.z;
-    const { h, hop } = wheelHeight(u);
+    const { h, hop } = wheelHeight(c.z, wheelR);
     walker.position.set(0, h, c.z);
-    walker.rotation.y = c.yaw;
     // L'équilibre : le cadre oscille autour du point mort, se cabre un peu plus au saut.
     const pitch = PITCH + 3 * DEG * Math.sin(t * 1.7) + 7 * DEG * hop;
     pivot.rotation.set(-pitch, 0, 2.5 * DEG * Math.sin(t * 1.1), 'XYZ');
-    return c.moving;
+    return c.speed;
   };
   apply();
 
@@ -147,8 +155,7 @@ export function buildRichard(layout: WorldLayout, assets: RiderAssets, edge: Edg
       if (riderPos) root.visible = Math.hypot(riderPos.x - x, riderPos.z - z) < VISIBLE_RANGE_M;
       if (!root.visible) return;
       t += dtS;
-      const moving = apply();
-      rider.animate(dtS, CADENCE_RPM, moving ? SPEED_MS : 0);
+      rider.animate(dtS, CADENCE_RPM, apply());
     },
   };
 }
