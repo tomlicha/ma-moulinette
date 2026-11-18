@@ -237,6 +237,12 @@ export class Journey implements Course {
     return pos;
   }
 
+  /** La route sous `distanceM`, de carrefour à carrefour : début sur le trajet et longueur, en m. */
+  roadAt(distanceM: number): { startM: number; lengthM: number } {
+    const { startM, lengthM } = this.legAt(Math.max(0, distanceM));
+    return { startM, lengthM };
+  }
+
   /** Nom de la route sous le cycliste. */
   edgeNameAt(distanceM: number): string {
     return this.legAt(Math.max(0, distanceM)).edge.name;

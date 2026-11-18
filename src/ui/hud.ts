@@ -208,8 +208,9 @@ export class RideHud {
     summit: SVGLineElement;
     cursor: SVGLineElement;
     dot: SVGCircleElement;
-    /** Fenêtre dessinée, et le pas de 4 m auquel elle l'a été : on ne la redessine que quand le cycliste avance d'un pas. */
+    /** Profil dessiné, la route qu'il montre (`roadAt`) et le pas de 4 m du dernier calcul du sommet. */
     win?: ReturnType<typeof profileWindow>;
+    road?: string;
     step: number;
     toSummit?: number;
   };
@@ -251,7 +252,7 @@ export class RideHud {
     this.mark = Object.assign(document.createElement('div'), { className: 'mark' });
     zbar.append(segs, this.band, this.mark);
 
-    // Profil des prochains kilomètres du parcours : une fenêtre qui glisse avec le cycliste (`drawRoute`).
+    // Profil de la route sous le cycliste, en entier, avec un point qui avance dessus (`drawRoute`).
     const svg = this.node('routeSvg');
     const clipId = `hud-route-${Math.random().toString(36).slice(2, 8)}`;
     const clip = svgEl('rect', { x: 0, y: 0, width: 0, height: ROUTE_H }, svgEl('clipPath', { id: clipId }, svgEl('defs', {}, svg)));
@@ -402,23 +403,32 @@ export class RideHud {
   refreshRoute() {
     this.text('routeName', this.routeDef.name);
     this.text('routeInfo', this.routeDef.name);
-    this.route.step = -1;
+    this.route.road = undefined;
   }
 
   /**
-   * Dessine le profil d'altitude de la fenêtre autour de `distanceM` (400 m derrière, 2,6 km devant), le prochain sommet,
-   * et place le cycliste. La fenêtre se redessine tous les 4 m : le relief glisse sous un curseur qui reste en place.
+   * Dessine le profil d'altitude de la route entière sous `distanceM` (de carrefour à carrefour : le col au complet), le
+   * prochain sommet s'il est sur cette route, et place le cycliste. Le profil reste en place et seul le point avance ; il
+   * n'est redessiné qu'en changeant de route (`r.road`). Le prochain sommet se recalcule tous les 4 m.
    */
   private drawRoute(distanceM: number) {
     const r = this.route;
+    const road = this.routeDef.roadAt?.(distanceM);
+    const roadKey = road ? `${road.startM}|${road.lengthM}` : '';
     const step = Math.floor(distanceM / 4);
-    if (step !== r.step || !r.win) {
-      r.step = step;
-      const win = profileWindow(this.routeDef, distanceM, ROUTE_W, ROUTE_H);
+    if (roadKey !== r.road || !r.win) {
+      r.road = roadKey;
+      const win = road
+        ? profileWindow(this.routeDef, road.startM, ROUTE_W, ROUTE_H, road.lengthM, 0, road.lengthM / Math.ceil(road.lengthM / 20))
+        : profileWindow(this.routeDef, distanceM, ROUTE_W, ROUTE_H);
       r.win = win;
       r.relief.setAttribute('d', win.area);
       r.done.setAttribute('d', win.area);
       r.line.setAttribute('d', win.line);
+      r.step = -1;
+    }
+    if (step !== r.step) {
+      r.step = step;
       r.toSummit = nextSummitM(this.routeDef, distanceM);
       this.text('summit', r.toSummit === undefined ? '' : `sommet dans ${fmt1(r.toSummit / 1000)} km`);
     }
