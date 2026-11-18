@@ -34,6 +34,8 @@ Sources : la fiche Wikipédia du vélodrome et ses reprises (longueur, largeur, 
 
 Code : [`src/render/velodrome.ts`](../../src/render/velodrome.ts), un seul maillage à facettes (le `Kit` des lieux) plus trois enseignes.
 
+**Finesse du maillage** (18 novembre 2026) : à grande vitesse, les traits peints au sol laissaient voir le tracé en lignes droites (bandes de 2 m, soit 2,7° de cap d'une bande à l'autre dans les virages de 43 m de rayon). Le tour est maillé tous les 0,5 m (`LAP_STEP_M`, 0,7°), les bâches du mur par 1 m, et les normales du sol sont adoucies (`softenNormals`, arêtes de plus de 5° conservées) pour qu'aucune bande d'ombrage ne marque le pas du maillage. Coût : environ 28 000 triangles de plus.
+
 ## Un jour d'arrivée
 
 Ajouté le 17 novembre 2026 (seconde passe). Code : [`src/render/velodrome-fete.ts`](../../src/render/velodrome-fete.ts).
