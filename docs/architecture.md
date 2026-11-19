@@ -53,7 +53,7 @@ src/
 │  ├─ storage/        KeyValueStore, reprise des anciennes clés
 │  └─ native/         coquille iOS (Capacitor)
 ├─ render/            three.js : core/ (moteur, ambiance, matériaux), world/ (décor, terrain, route), riders/ (coureurs, avatar)
-├─ ui/                un dossier par écran : home/, ride/, devices/, editor/ (vue + block-shelf, block-mover, phone-controls, library-view, dom), recap/, account/ ; shared/ (routeur, aide au blocage…)
+├─ ui/                un dossier par écran : home/, ride/, devices/, editor/ (orchestrateur + inspector, chart, summary, shelf, mover, phone-controls, library, cadence, dom), recap/, account/ ; shared/ (routeur, aide au blocage…)
 ├─ shared/
 │  ├─ protocol/       ce que le serveur et la page se disent : codes de fermeture, utilisateur, en-tête anti-CSRF
 │  └─ util/           journal, erreurs, travail en tâche de fond, émetteur d'événements, type du stockage de clés
@@ -98,4 +98,4 @@ Quelques liens restent à surveiller, permis par la règle mais discutables : `s
 `main.ts` fait encore ~1100 lignes : il ne garde plus de logique de sortie, de séance, d'appareils ni de vue 3D, mais encore tout le DOM (boutons, champs, écrans) et le câblage. Découpage prévu :
 
 1. Les `setupX()` de `ui/` et les morceaux de DOM de `main.ts` (écran Appareils, boutons de la séance, bouton de sortie, écran de chargement) transformés en classes `View` qui possèdent leur DOM (plus de `$('…')` dans `main.ts`).
-2. `ui/editor/workout-editor.ts` (855 lignes, contre 1600) : l'état est dans `EditorSession`, et l'étagère de blocs (`block-shelf.ts`), le déplacement par la poignée (`block-mover.ts`), les commandes du téléphone et la saisie exacte (`phone-controls.ts`) et la bibliothèque (`library-view.ts`) ont leur fichier. Il reste, dans la fermeture de la vue : le profil et son info-bulle, l'inspecteur (la ligne de réglages du bloc), le temps par zone et le résumé, le clavier et le dialogue de cadence.
+2. `ui/editor/workout-editor.ts` (410 lignes, contre 1600) n'est plus que l'orchestrateur de l'écran : il crée les morceaux, relie la session à l'affichage (`render`), et garde la barre du bloc, le clavier et les boutons de l'en-tête. Le reste a son fichier : `EditorSession` (état), `block-inspector`, `cadence-dialog`, `profile-chart` (profil, info-bulle, sélection), `workout-summary`, `block-shelf`, `block-mover`, `phone-controls`, `library-view`.

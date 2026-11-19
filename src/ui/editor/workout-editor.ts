@@ -7,16 +7,15 @@ import {
   type EditorBlock,
   type WorkoutStats,
 } from '../../domain/workout/blocks';
-import { blockIndexAt, blockRanges, blockShort, nudgeDuration, nudgePower } from '../../domain/workout/block-ops';
+import { blockShort, nudgeDuration, nudgePower } from '../../domain/workout/block-ops';
 import { EditorSession, type EditorDraft } from '../../app/editor-session';
 import type { BlockLibrary } from '../../domain/workout/block-library';
 import type { SavedWorkout, WorkoutLibrary } from '../../domain/workout/library';
-import { targetWatts, type Workout } from '../../domain/workout/model';
-import { profilePeakW, profileShapes, zoneOf, type Zone } from '../../domain/workout/profile';
-import { effortSeconds, intensityWord, timeInZones, ZONES, zoneName, zoneReading, type ZoneTimes } from '../../domain/workout/zones';
+import type { Workout } from '../../domain/workout/model';
+import { zoneOf } from '../../domain/workout/profile';
+import { timeInZones, type ZoneTimes } from '../../domain/workout/zones';
 import { setBlocked, type BlockReason } from '../shared/blocked';
 import './seances.css';
-import { formatDuration } from '../shared/duration';
 import { BlockInspector } from './block-inspector';
 import { BlockMover } from './block-mover';
 import { BlockShelf } from './block-shelf';
@@ -24,10 +23,10 @@ import { CadenceDialog } from './cadence-dialog';
 import { LibraryView } from './library-view';
 import { DURATION_STEP_S, POWER_STEP } from './constants';
 import { PhoneBlockControls } from './phone-controls';
-import { download, el, fmtLong, isElsewhere, isTyping, slug, svg } from './dom';
+import { ProfileChart } from './profile-chart';
+import { WorkoutSummary } from './workout-summary';
+import { download, el, fmtLong, isElsewhere, isTyping, slug } from './dom';
 
-const W = 1000;
-const H = 120;
 
 type Draft = EditorDraft;
 
@@ -207,98 +206,12 @@ export function setupWorkoutEditor(o: EditorOptions) {
     setBlocked($<HTMLButtonElement>('ed-ride'), errors.length ? `À corriger d’abord : ${errors[0]}` : o.rideBlock());
   }
 
-  function delta(now: number, before: number | undefined, digits = 0, unit = '') {
-    if (before === undefined) return '';
-    const d = +(now - before).toFixed(digits);
-    if (d === 0) return '';
-    return `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(digits).replace('.', ',')}${unit}`;
-  }
-
-  function renderSummary(s: WorkoutStats, z: ZoneTimes) {
-    const f = ftp();
-    const cell = (k: string, v: string, h: string, d = '', small = '') =>
-      el(
-        'div',
-        { title: h },
-        el('div', { className: 'k', textContent: k }),
-        el('div', { className: 'v' }, v, small ? el('small', { textContent: ` ${small}` }) : '', d ? el('span', { className: 'delta', textContent: d }) : ''),
-      );
-    $('ed-summary').replaceChildren(
-      cell('Durée', fmtLong(s.durationS), `dont ${fmtLong(effortSeconds(z))} d'effort`, delta(s.durationS / 60, session.baseStats && session.baseStats.durationS / 60, 0, ' min')),
-      cell('Moyenne', `${s.avgW} W`, `${Math.round((s.avgW / f) * 100)} % de ta FTP (${f} W)`, delta(s.avgW, session.baseStats?.avgW)),
-      cell('Intensité', s.intensity.toFixed(2).replace('.', ','), '1,00 = tenir sa FTP', delta(s.intensity, session.baseStats?.intensity, 2), intensityWord(s.intensity)),
-      cell('Charge', String(s.load), '1 h à la FTP = 100', delta(s.load, session.baseStats?.load)),
-    );
-  }
-
-  function renderChart(w: Workout, f: number) {
-    const peak = profilePeakW(w, f);
-    const y = (watts: number) => H - (watts / peak) * H;
-    const top = (watts: number) => `${(1 - watts / peak) * 100}%`;
-    const total = w.steps.reduce((t, s) => t + s.durationS, 0) || 1;
-
-    // Axe vertical : % de FTP et watts, FTP en gras.
-    const yaxis = $('ed-yaxis');
-    yaxis.replaceChildren(
-      ...[
-        [peak, `${Math.round((peak / f) * 100)} % · ${Math.round(peak)} W`, ''],
-        [f, `FTP · ${f} W`, 'ftp'],
-        [0.75 * f, `75 % · ${Math.round(0.75 * f)} W`, ''],
-        [0.5 * f, `50 % · ${Math.round(0.5 * f)} W`, ''],
-        [0, '0', ''],
-      ].map(([watts, label, cls]) => {
-        const s = el('span', { textContent: label as string, className: cls as string });
-        s.style.top = top(watts as number);
-        return s;
-      }),
-    );
-
-    // Bandes de zones, puis paliers, ligne de FTP et cadre du bloc sélectionné.
-    const root = $('ed-svg');
-    const bands = svg('g', {});
-    const labels: HTMLElement[] = [];
-    const selZone = selectedZone();
-    ZONES.forEach((z, i) => {
-      const lo = z.from * f;
-      const hi = Math.min(peak, (ZONES[i + 1]?.from ?? Infinity) * f);
-      if (lo >= peak) return;
-      bands.append(svg('rect', { x: 0, y: y(hi), width: W, height: y(lo) - y(hi), fill: `var(--${z.id})`, 'fill-opacity': 0.1 }));
-      const label = el('span', { textContent: z.name, className: z.id === selZone ? 'on' : '' });
-      label.style.top = top((lo + hi) / 2);
-      labels.push(label);
-    });
-    $('ed-zone-labels').replaceChildren(...labels);
-
-    const bars = svg('g', { class: 'ed-svg-bars' });
-    for (const s of profileShapes(w, f, W, H)) bars.append(svg('path', { d: s.d, class: s.zone }));
-    const ftpLine = svg('line', { x1: 0, x2: W, y1: y(f), y2: y(f), stroke: 'currentColor', 'stroke-opacity': 0.55, 'stroke-dasharray': '8 6', 'vector-effect': 'non-scaling-stroke' });
-    root.replaceChildren(bands, bars, ftpLine);
-    const r = blockRanges(session.draft!.blocks)[session.selected];
-    if (r) {
-      root.append(
-        svg('rect', {
-          x: (r.start / total) * W,
-          y: 0.5,
-          width: ((r.end - r.start) / total) * W,
-          height: H - 1,
-          fill: 'none',
-          stroke: 'var(--accent)',
-          'stroke-width': 2,
-          'vector-effect': 'non-scaling-stroke',
-        }),
-      );
-    }
-    root.setAttribute('aria-label', `Profil de la séance, ${session.draft!.blocks.length} blocs, ${fmtLong(total)}`);
-
-    $('ed-xaxis').replaceChildren(...[0, 0.25, 0.5, 0.75, 1].map((k) => el('span', { textContent: fmtLong(Math.round(k * total)) })));
-  }
-
-  function selectedZone(): Zone | undefined {
-    const b = session.draft?.blocks[session.selected];
-    if (!b || b.type === 'free') return undefined;
-    const main = b.type === 'steady' ? b.power : b.type === 'intervals' ? b.onPower : (b.from + b.to) / 2;
-    return zoneOf(main);
-  }
+  // Le résumé et le temps par zone (workout-summary.ts), le profil, son info-bulle et sa sélection (profile-chart.ts).
+  const summary = new WorkoutSummary({ session, ftp });
+  const chart = new ProfileChart({ session, ftp, plot, tip });
+  const renderSummary = (s: WorkoutStats, z: ZoneTimes) => summary.renderSummary(s, z);
+  const renderChart = (w: Workout, f: number) => chart.render(w, f);
+  const renderZones = (z: ZoneTimes) => summary.renderZones(z);
 
   /**
    * Barre du bloc sélectionné, sous le profil : le profil montre déjà tous les blocs, en couleur, et se touche pour en
@@ -358,90 +271,6 @@ export function setupWorkoutEditor(o: EditorOptions) {
   const renderInspector = () => inspectorView.render();
   const refreshInspectorText = () => inspectorView.refreshText();
   const deleteSelected = () => session.deleteSelected();
-
-  // --- Temps par zone ---
-
-  /** Une ligne : barre de répartition, puis le temps passé dans chaque zone. Le détail (écarts, lecture) est en info-bulle. */
-  function renderZones(z: ZoneTimes) {
-    const total = Object.values(z).reduce((a, b) => a + b, 0) || 1;
-    const ids = [...ZONES.map((x) => x.id), 'free'] as Zone[];
-    const color = (id: Zone) => (id === 'free' ? 'var(--muted)' : `var(--${id})`);
-    const bar = el('div', { className: 'zone-bar' });
-    bar.setAttribute('aria-hidden', 'true');
-    for (const id of ids) {
-      if (!z[id]) continue;
-      const s = el('span');
-      s.style.width = `${(z[id] / total) * 100}%`;
-      s.style.background = color(id);
-      bar.append(s);
-    }
-    const items = ids
-      .filter((id) => z[id] || session.baseZones?.[id])
-      .sort((a, b) => z[b] - z[a])
-      .map((id) => {
-        const swatch = el('i');
-        swatch.style.background = color(id);
-        const was = session.baseZones && session.baseZones[id] !== z[id] ? ` (avant : ${formatDuration(session.baseZones[id])})` : '';
-        return el('li', { title: `${zoneName(id)}${was}` }, swatch, `${zoneName(id)} `, el('strong', { textContent: formatDuration(z[id]) }));
-      });
-    const parts = [el('span', { className: 'k', textContent: 'Zones' }), bar, el('ul', {}, ...items)];
-    for (const id of ['ed-zones', 'ed-zones-m']) {
-      $(id).title = zoneReading(z, formatDuration);
-      $(id).replaceChildren(...parts.map((n) => n.cloneNode(true)));
-    }
-  }
-
-  // --- Info-bulle et sélection sur le profil ---
-
-  function timeAt(e: MouseEvent): number {
-    const r = plot.getBoundingClientRect();
-    const total = workout().steps.reduce((t, s) => t + s.durationS, 0);
-    return Math.max(0, Math.min(total - 0.001, ((e.clientX - r.left) / r.width) * total));
-  }
-
-  plot.addEventListener('mousemove', (e) => {
-    if (!session.draft?.blocks.length) return;
-    const t = timeAt(e);
-    const bi = blockIndexAt(session.draft.blocks, t);
-    const b = session.draft.blocks[bi]!;
-    const range = blockRanges(session.draft.blocks)[bi]!;
-    const w = workout();
-    let acc = 0;
-    let stepLeft = 0;
-    let watts: number | undefined;
-    for (const s of w.steps) {
-      if (t < acc + s.durationS) {
-        watts = targetWatts(s, t - acc, ftp());
-        stepLeft = acc + s.durationS - t;
-        break;
-      }
-      acc += s.durationS;
-    }
-    let what: string = BLOCK_LABEL[b.type];
-    if (b.type === 'intervals') {
-      const inRep = t - range.start;
-      const rep = Math.floor(inRep / (b.onS + b.offS)) + 1;
-      what = `${inRep % (b.onS + b.offS) < b.onS ? 'effort' : 'récupération'} ${rep} sur ${b.repeat}`;
-    }
-    const f = ftp();
-    tip.replaceChildren(
-      el('strong', { textContent: formatDuration(Math.floor(t)) }),
-      ` · ${what}`,
-      el('br'),
-      watts === undefined ? 'sans consigne' : `${watts} W · ${Math.round((watts / f) * 100)} % · ${zoneName(zoneOf(watts / f))}`,
-      el('br'),
-      el('span', { className: 'muted', textContent: `encore ${formatDuration(Math.ceil(stepLeft))} dans ce palier` }),
-    );
-    tip.hidden = false;
-    const r = plot.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    tip.style.left = x > r.width * 0.6 ? '' : `${x + 12}px`;
-    tip.style.right = x > r.width * 0.6 ? `${r.width - x + 12}px` : '';
-  });
-  plot.addEventListener('mouseleave', () => (tip.hidden = true));
-  plot.addEventListener('click', (e) => {
-    if (session.draft?.blocks.length) select(blockIndexAt(session.draft.blocks, timeAt(e)));
-  });
 
   // --- Saisie d'une valeur exacte et commandes posées sur le bloc, au toucher (téléphone en paysage) : phone-controls.ts ---
 
