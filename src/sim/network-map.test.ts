@@ -29,13 +29,19 @@ describe('renderNetworkMap', () => {
     }
   });
 
+  it('dessine l’ascenseur par son icône, à son pied, avec les deux altitudes', () => {
+    expect(svg).toContain('Ascenseur céleste</text>');
+    expect(svg).toContain('100 → 480 m · Gare céleste');
+    expect(svg).toContain('stroke="#F5D547"');
+  });
+
   it('dessine le vélodrome comme un lieu : une icône et un nom, sans sa piste ni ses deux nœuds', () => {
     expect(svg).toContain('Vélodrome</text>');
     expect(svg).not.toContain('Vélodrome · porte');
     expect(svg).not.toContain('Vélodrome · arrivée');
     // Pas de nom de route sur la carte : seul le profil du parcours nomme les deux moitiés de la piste.
     expect(svg.split('Piste du vélodrome').length - 1).toBe(2);
-    expect(svg).toContain('6 carrefours · 1 vélodrome');
+    expect(svg).toContain('9 carrefours · 1 vélodrome · 1 ascenseur');
   });
 
   it("donne la longueur, la montée et la pente maximale de chaque parcours", () => {
@@ -60,7 +66,7 @@ describe('renderNetworkMap : variantes pour l\u2019écran', () => {
   it('une miniature n\u2019écrit aucun texte et reste légère', () => {
     const thumb = renderNetworkMap(COL_DES_ERABLES, { layout: 'plan', labels: 'none', stepM: 60, selected: 'rive' });
     expect(thumb.svg).not.toMatch(/<text /);
-    expect(thumb.svg.length).toBeLessThan(25_000);
+    expect(thumb.svg.length).toBeLessThan(32_000);
   });
 
   it('met le parcours choisi en avant : l\u2019autre est en retrait, ses flèches et ses kilomètres disparaissent', () => {
@@ -123,7 +129,8 @@ describe('renderCourseSparkline', () => {
 
   it('garde l\u2019échelle commune : le plat reste bas, la montagne monte haut', () => {
     const top = (id: string) => Math.min(...[...renderCourseSparkline(COL_DES_ERABLES, id).svg.matchAll(/[ML]([\d.]+) ([\d.]+)/g)].map((m) => Number(m[2])));
-    expect(top('col')).toBeLessThan(10); // le sommet frôle le haut du cadre
+    expect(top('arc-en-ciel')).toBeLessThan(10); // le Zénith (650 m) frôle le haut du cadre
+    expect(top('col')).toBeLessThan(30); // le Sommet du col (372 m), à mi-hauteur
     expect(top('rive')).toBeGreaterThan(40); // le plat reste près du bas (cadre de 52)
   });
 });

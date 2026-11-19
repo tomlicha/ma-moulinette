@@ -70,7 +70,8 @@ function geometryOf(network: RoadNetwork, course: CourseDef, index: number): Cou
   const edges = course.guide.map((id) => network.edges.get(id)!);
   const stats = network.courseStats(course);
   let maxGradePct = 0;
-  for (const e of edges) for (let s = 0; s <= e.lengthM; s += 5) maxGradePct = Math.max(maxGradePct, e.gradePctAt(s));
+  // La « pente » d'un ascenseur n'en est pas une : on ne la pédale pas.
+  for (const e of edges) if (!e.isLift) for (let s = 0; s <= e.lengthM; s += 5) maxGradePct = Math.max(maxGradePct, e.gradePctAt(s));
   return {
     course,
     color: COLORS.courses[index % COLORS.courses.length]!,
@@ -178,6 +179,18 @@ export function velodromeIcon(track: string, k = 1): string {
   return out.join('');
 }
 
+/**
+ * Icône d'un ascenseur, centrée sur l'origine : une pastille sombre cerclée de jaune pâle, une flèche vers le haut.
+ * `k` règle la taille (1 : 22 unités de diamètre).
+ */
+export function liftIcon(k = 1): string {
+  const r = 11 * k;
+  return (
+    `<circle r="${n1(r + 2.5 * k)}" fill="#fff"/><circle r="${n1(r)}" fill="#1B1840" stroke="#F5D547" stroke-width="${n1(2.5 * k)}"/>` +
+    `<path d="M0 ${n1(-6 * k)} L${n1(5 * k)} ${n1(0)} M0 ${n1(-6 * k)} L${n1(-5 * k)} 0 M0 ${n1(-6 * k)} V${n1(6 * k)}" stroke="#FFF6C8" stroke-width="${n1(2.2 * k)}" stroke-linecap="round" fill="none"/>`
+  );
+}
+
 /** Points de la route échantillonnés tous les `stepM`, convertis par `to`. */
 function polyline(edge: Edge, to: (x: number, z: number) => Pt, stepM: number): string {
   return edge
@@ -207,6 +220,8 @@ function profileChart(g: CourseGeometry, range: { lo: number; hi: number }, x: n
   marks.forEach((m, i) => {
     if (i > 0) out.push(`<line x1="${n1(px(m.d))}" y1="${n1(py(lo))}" x2="${n1(px(m.d))}" y2="${n1(py(lo) + 7 * fs)}" stroke="${COLORS.muted}"/>`);
     const wPx = px(m.to) - px(m.d);
+    // Trop court pour son nom (la Jetée, l'ascenseur) : le nom chevaucherait ses voisins.
+    if (wPx < m.name.length * 5.5 * fs) return;
     out.push(
       `<text x="${n1((px(m.d) + px(m.to)) / 2)}" y="${n1(py(lo) + 22 * fs)}" font-size="${n1((wPx < 80 * fs ? 11 : 12) * fs)}" fill="${COLORS.ink}" text-anchor="middle">${esc(m.name)}</text>`,
     );
@@ -272,7 +287,9 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
   const spanX = b.maxX - b.minX;
   const spanZ = b.maxZ - b.minZ;
   const scale = (1500 - 2 * PAD) / spanZ;
-  const H = Math.round(spanZ * scale + 2 * PAD);
+  // La planche s'allonge si la colonne de droite (légende et un profil par parcours) dépasse la carte.
+  const column = 128 + 26 * (network.courses.length + 2) + 140 + (network.velodromes.length ? 36 : 0) + network.courses.length * 268 + 30;
+  const H = Math.max(Math.round(spanZ * scale + 2 * PAD), sheet ? column : 0);
   const W = sheet ? 1400 : MAP_W;
   const ox = PAD + (MAP_W - 2 * PAD - spanX * scale) / 2;
   const to = (x: number, z: number): Pt => ({ x: ox + (x - b.minX) * scale, y: PAD + (z - b.minZ) * scale });
@@ -312,8 +329,10 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
   }
 
   /* ---------- Routes hors parcours, puis parcours ---------- */
-  // La piste d'un vélodrome est dessinée par son icône, et ses deux nœuds (porte, ligne d'arrivée) n'en sont pas.
-  const edges = [...network.edges.values()].filter((e) => e.def.surface !== 'track');
+  // La piste d'un vélodrome est dessinée par son icône, et ses deux nœuds (porte, ligne d'arrivée) n'en sont pas. Un
+  // ascenseur n'a pas de tracé en plan : il est dessiné par son icône, à son pied.
+  const edges = [...network.edges.values()].filter((e) => e.def.surface !== 'track' && !e.isLift);
+  const lifts = [...network.edges.values()].filter((e) => e.isLift);
   const inVelodrome = (x: number, z: number) => network.velodromes.some((v) => v.covers(x, z));
   out.push(`<g fill="none" stroke-linecap="round" stroke-linejoin="round">`);
   for (const e of edges.filter((e) => !inCourse.has(e.id))) {
@@ -332,6 +351,11 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     out.push(`<path d="${d}" stroke="${(chosen ?? owners[0]!).color}" stroke-width="${n1(8 * lw)}"/>`);
     // Une route commune à plusieurs parcours, sans choix : les couleurs en tirets alternés.
     if (!chosen) owners.slice(1).forEach((g) => out.push(`<path d="${d}" stroke="${g.color}" stroke-width="${n1(8 * lw)}" stroke-dasharray="11 11"/>`));
+  }
+  // Routes du ciel : un filet de lumière au milieu, pour les distinguer des routes au sol qu'elles survolent.
+  for (const e of edges.filter((e) => e.def.surface === 'sky')) {
+    const dim = chosen && !(inCourse.get(e.id) ?? []).includes(chosen);
+    out.push(`<path d="${polyline(e, to, stepM)}" stroke="#FFF6C8" stroke-width="${n1(2 * lw)}" stroke-dasharray="${n1(2 * lw)} ${n1(7 * lw)}"${dim ? ' opacity=".3"' : ''}/>`);
   }
   out.push('</g>');
 
@@ -422,9 +446,27 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     }
   }
 
+  /* ---------- Ascenseurs ---------- */
+  for (const e of lifts) {
+    const q = to(e.from.x, e.from.z);
+    const k = thin ? 1.8 : fs > 1 ? 1.25 * fs : 1;
+    const dim = chosen !== undefined && !(inCourse.get(e.id) ?? []).includes(chosen);
+    out.push(`<g transform="translate(${n1(q.x)} ${n1(q.y)})"${dim ? ' opacity=".55"' : ''}>${liftIcon(k)}</g>`);
+    if (labels !== 'none') {
+      const right = e.from.x < (b.minX + b.maxX) / 2;
+      const lx = q.x + (right ? 20 : -20) * k;
+      const anchor = right ? 'start' : 'end';
+      out.push(label(lx, q.y - 2 * fs, e.name, { size: T(16), weight: 800, anchor }));
+      out.push(label(lx, q.y + 15 * fs, `${Math.round(e.from.altitude)} → ${Math.round(e.to.altitude)} m · ${e.to.name}`, { size: T(13), weight: 500, fill: COLORS.muted, anchor }));
+    }
+  }
+
   /* ---------- Carrefours ---------- */
-  const summit = edges.reduce((m, e) => (e.to.altitude > m.to.altitude ? e : m)).to;
-  const junctions = [...network.nodes.values()].filter((n) => !inVelodrome(n.x, n.z));
+  // Le triangle du sommet marque le point le plus haut au sol (le Sommet du col), pas celui de la route du ciel.
+  const ground = edges.filter((e) => e.def.surface !== 'sky');
+  const summit = (ground.length ? ground : edges).reduce((m, e) => (e.to.altitude > m.to.altitude ? e : m)).to;
+  const liftNodes = new Set(lifts.flatMap((e) => [e.from.id, e.to.id]));
+  const junctions = [...network.nodes.values()].filter((n) => !inVelodrome(n.x, n.z) && !liftNodes.has(n.id));
   for (const node of junctions) {
     const q = to(node.x, node.z);
     const degree = network.incident(node.id).length;
@@ -466,7 +508,7 @@ export function renderNetworkMap(network: RoadNetwork, opts: MapOptions = {}): N
     out.push(`<text x="${X}" y="62" font-size="38" font-weight="800" fill="${COLORS.ink}">${esc(network.name)}</text>`);
     out.push(
       `<text x="${X}" y="90" font-size="16" fill="${COLORS.muted}">${esc(
-        `${fr(network.lengthM / 1000)} km de routes · ${junctions.length} carrefours${network.velodromes.length ? ` · ${network.velodromes.length} vélodrome` : ''} · pentes jusqu'à ${fr(Math.max(...courses.map((g) => g.maxGradePct)), 0)} %`,
+        `${fr(network.lengthM / 1000)} km de routes · ${junctions.length} carrefours${network.velodromes.length ? ` · ${network.velodromes.length} vélodrome` : ''}${lifts.length ? ` · ${lifts.length} ascenseur` : ''} · pentes jusqu'à ${fr(Math.max(...courses.map((g) => g.maxGradePct)), 0)} %`,
       )}</text>`,
     );
 

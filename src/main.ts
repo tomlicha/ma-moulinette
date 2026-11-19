@@ -570,7 +570,7 @@ const homeRideBtn = $<HTMLButtonElement>('home-ride');
 // Fond de l'accueil : trois scènes qui se relaient toutes les minutes.
 // L'accueil montre le parcours retenu (nom, description, scène qui lui ressemble, sans rotation). On le choisit dans le menu
 // que « Rouler » ouvre (`course-dialog`) : la carte de l'accueil n'a pas la place d'un sélecteur.
-const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'Rive du lac' };
+const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'Rive du lac', 'arc-en-ciel': 'Route arc-en-ciel' };
 const courseScenes = COL_DES_ERABLES.courses.map((c) => HOME_SCENES.find((s) => s.name === COURSE_SCENE[c.id]) ?? HOME_SCENES[0]!);
 const homeBackground = setupHomeBackground($('home-scenes'), undefined, undefined, courseScenes, Infinity);
 // Carte du parcours : miniature dans le menu, agrandie dans sa propre boîte. Créée avant le menu, qui l'appelle d'emblée.

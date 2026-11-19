@@ -4,7 +4,7 @@ import '@fontsource/barlow/700.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './hud.css';
-import type { Course } from '../sim/course';
+import type { Course, LiftState } from '../sim/course';
 import type { PendingJunction } from '../sim/journey';
 import type { RideSnapshot } from '../sim/ride';
 import { STEP_LABEL, type Workout } from '../workout/model';
@@ -16,6 +16,7 @@ import {
   findSeries,
   fmt1,
   junctionLabel,
+  liftBanner,
   nextSummitM,
   profileWindow,
   repetitionAt,
@@ -56,6 +57,8 @@ const ZBAR_MAX = 1.5;
 const TARGET_BAND = 0.05;
 const ROUTE_W = 744;
 const ROUTE_H = 34;
+/** Épaisseur de la barre de la montée en ascenseur, dans le bandeau du bas. */
+const LIFT_BAR_H = 12;
 const WO_W = 1112;
 /** Bout de l'échelle des blocs de puissance de la liste « À suivre », en fraction de FTP. */
 const UP_MAX = 1.5;
@@ -131,8 +134,8 @@ const TEMPLATE = `
   <section class="hud-p hud-bottom">
     <div data-when="ride" style="display:flex; align-items:center; gap:24px">
       <div class="col" style="width:120px; flex:none">
-        <span class="lab">Pente</span>
-        <span class="n hud-grade"><span data-h="grade">–</span> %</span>
+        <span class="lab" data-h="gradeLab">Pente</span>
+        <span class="n hud-grade"><span data-h="grade">–</span> <span data-h="gradeUnit">%</span></span>
       </div>
       <div class="col" style="gap:4px; width:${ROUTE_W}px; flex:none">
         <div class="row lab"><span data-h="routeInfo"></span><span style="color:var(--hud-fg); font-weight:600" data-h="summit"></span></div>
@@ -393,6 +396,36 @@ export class RideHud {
     });
   }
 
+  /**
+   * Dans un ascenseur, le bas du HUD change de sens : l'altitude à la place de la pente (elle est nulle), la montée en
+   * barre de progression à la place du profil (la route fait 20 m), et le temps qui reste avant l'arrivée.
+   */
+  private drawLift(lift: LiftState) {
+    const r = this.route;
+    const t = liftBanner(lift);
+    if (r.road !== 'lift') {
+      r.road = 'lift';
+      r.win = undefined;
+      this.text('gradeLab', t.label);
+      this.text('gradeUnit', t.unit);
+      this.text('routeInfo', t.info);
+      const y0 = ROUTE_H / 2 - LIFT_BAR_H / 2;
+      const bar = `M0 ${y0}H${ROUTE_W}V${y0 + LIFT_BAR_H}H0Z`;
+      r.relief.setAttribute('d', bar);
+      r.done.setAttribute('d', bar);
+      r.line.setAttribute('d', '');
+      r.summit.style.display = 'none';
+      r.step = -1;
+    }
+    const x = lift.progress * ROUTE_W;
+    this.text('grade', t.value);
+    this.text('summit', t.right);
+    r.clip.setAttribute('width', String(x));
+    this.line(r.cursor, x);
+    r.dot.setAttribute('cx', String(x));
+    r.dot.setAttribute('cy', String(ROUTE_H / 2));
+  }
+
   /** Sortie pas encore démarrée : tirets et position au départ du parcours. */
   private resetRide() {
     for (const k of ['time', 'dist', 'climb', 'grade']) this.text(k, '–');
@@ -413,6 +446,15 @@ export class RideHud {
    */
   private drawRoute(distanceM: number) {
     const r = this.route;
+    const lift = this.routeDef.liftAt?.(distanceM);
+    if (lift) return this.drawLift(lift);
+    if (r.road === 'lift') {
+      // Sorti de l'ascenseur : la pente et le nom du parcours reviennent.
+      this.text('gradeLab', 'Pente');
+      this.text('gradeUnit', '%');
+      this.text('routeInfo', this.routeDef.name);
+      r.summit.style.display = '';
+    }
     const road = this.routeDef.roadAt?.(distanceM);
     const roadKey = road ? `${road.startM}|${road.lengthM}` : '';
     const step = Math.floor(distanceM / 4);

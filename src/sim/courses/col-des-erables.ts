@@ -1,5 +1,6 @@
 import { RoadNetwork, type NetworkDef } from '../network';
 import { U_TOP, VelodromeSite, type VelodromeDef } from '../velodrome-track';
+import { ARC_EN_CIEL_COURSE, ARC_EN_CIEL_EDGES, ARC_EN_CIEL_NODES } from './arc-en-ciel';
 
 /**
  * Le vélodrome, à l'est du Moulin, sur un replat à l'altitude du Moulin : l'Allée du Vélodrome y mène depuis le Moulin
@@ -49,6 +50,8 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       description: 'La piste de Roubaix : 500 m de béton relevé, tribune comble, des tours tant qu’on veut.',
       guide: [`${VELODROME_DEF.id}-piste-2`, `${VELODROME_DEF.id}-piste-1`],
     },
+    // La Route arc-en-ciel, de nuit : du Lac, l'ascenseur, puis la route du ciel ; retour par la Descente.
+    ARC_EN_CIEL_COURSE,
   ],
   landmarks: [
     { kind: 'arch', edge: 'vallee', s: 12, text: 'LES ÉRABLES' },
@@ -59,6 +62,7 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
     { kind: 'arch', edge: 'mur', s: 8, text: 'LE MUR · 2,0 km · jusqu’à 10 %' },
     { kind: 'arch', edge: 'collines-est', s: 8, text: 'LES COLLINES' },
     { kind: 'arch', edge: 'allee-velodrome', s: 8, text: 'VÉLODROME · PISTE DE 500 m' },
+    { kind: 'arch', edge: 'jetee', s: 8, text: 'ROUTE ARC-EN-CIEL · ASCENSEUR' },
     { kind: 'fence', edge: 'vallee', from: 150, to: 1100 },
     { kind: 'fence', edge: 'descente', from: 300, to: 1500 },
     // Les érables roux qui donnent son nom au col : du pied de la montée à la limite des arbres.
@@ -133,6 +137,7 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
     { id: 'belvedere', name: 'Belvédère', x: 1300, z: -1400, altitude: 110, place: 'viewpoint' },
     { id: 'rive', name: 'La Rive', x: 1200, z: 3000, altitude: 8, place: 'harbour' },
     ...velodromeRoads.nodes,
+    ...ARC_EN_CIEL_NODES,
   ],
   velodromes: [VELODROME_DEF],
   edges: [
@@ -224,6 +229,7 @@ export const COL_DES_ERABLES_DEF: NetworkDef = {
       profile: [],
     },
     ...velodromeRoads.edges,
+    ...ARC_EN_CIEL_EDGES,
   ],
 };
 

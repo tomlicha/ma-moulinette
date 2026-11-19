@@ -14,7 +14,7 @@ const nearby = {
 
 describe('mapNetwork', () => {
   it('prend toutes les routes et tous les lacs du réseau', () => {
-    expect(net.roads).toHaveLength(COL_DES_ERABLES.edges.size);
+    expect(net.roads).toHaveLength([...COL_DES_ERABLES.edges.values()].filter((e) => !e.isLift).length);
     expect(net.water).toHaveLength(COL_DES_ERABLES.water.length);
     expect(net.roads.every((r) => r.length > 5)).toBe(true);
   });

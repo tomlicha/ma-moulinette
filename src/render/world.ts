@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { SunLight } from 'three/addons/lights/SunLight.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { attribute, cameraPosition, color, float, mix, normalWorld, normalize, positionLocal, positionWorld, pow, sin, smoothstep as tslSmoothstep, time, transformNormalToView, vec3 } from 'three/tsl';
+import { attribute, cameraPosition, color, dot, exp, float, floor, fract, mix, normalWorld, normalize, positionLocal, positionWorld, pow, sin, smoothstep as tslSmoothstep, time, transformNormalToView, vec3 } from 'three/tsl';
 import type { Edge } from '../sim/network';
 import { createTones, DAY, type Ambiance, type Tones } from './ambiance';
 import type { RiderAssets } from './assets';
@@ -14,6 +14,7 @@ import { fbm, mulberry32, smoothstep, valueNoise } from './noise';
 import { PALETTE } from './palette';
 import { buildPlaces } from './places';
 import { buildRoadside } from './roadside';
+import { buildSkyRoad } from './sky-road';
 import { asphaltGrain, cloudShade } from './shade';
 import { Terrain } from './terrain';
 import { forestCover } from './vegetation';
@@ -50,6 +51,11 @@ export interface World {
   update(dtS: number, rider?: { x: number; z: number }): void;
   /** Tours de piste bouclés par le joueur : le vélodrome les affiche (tableau, écran géant) et sonne la cloche. */
   setVelodromeLaps(n: number): void;
+  /**
+   * La vitesse du cycliste fait courir la lumière sur la Route arc-en-ciel ; `cabinY` (hauteur à l'image) monte la
+   * plateforme de l'ascenseur pendant qu'il y est.
+   */
+  setRide(speedMs: number, cabinY?: number): void;
   /** Ce qui est construit en ce moment, pour les mesures. */
   stats(): { chunks: number; decorInstances: number; coarseNearRoad: number };
 }
@@ -163,7 +169,7 @@ function* buildRoad(layout: WorldLayout): Steps<THREE.Group> {
   // Plaque d'asphalte à chaque carrefour : elle couvre l'angle entre deux routes qui ne se prolongent pas.
   const discs: THREE.BufferGeometry[] = [];
   for (const n of layout.network.nodes.values()) {
-    if (layout.underVelodrome(n.x, n.z)) continue;
+    if (layout.underVelodrome(n.x, n.z) || layout.skyNodes.has(n.id)) continue;
     discs.push(new THREE.CircleGeometry(JUNCTION_RADIUS_M, 28).rotateX(-Math.PI / 2).translate(n.x, layout.y(n.altitude) + 0.035, n.z));
   }
   const junctions = new THREE.Mesh(merge(discs), asphaltMat);
@@ -386,6 +392,10 @@ function buildWater(layout: WorldLayout, tones: Tones): THREE.Group {
 
 /** Exposant du dégradé du ciel : plus il est petit, plus le bleu du zénith descend vers l'horizon. */
 const SKY_CURVE = 0.5;
+/** Finesse du semis d'étoiles : cases du ciel par rayon (une étoile occupe une case). */
+const STAR_GRID = 420;
+/** Axe du grand cercle de la Voie lactée. */
+const MILKY_WAY = new THREE.Vector3(0.35, 0.45, 0.82).normalize();
 /** Cosinus du rayon apparent du disque du soleil (2,2°, plus gros que le vrai : style des maquettes). */
 const SUN_DISC_COS = Math.cos((2.2 * Math.PI) / 180);
 /** Portée des ombres portées autour de la caméra, en m. */
@@ -521,7 +531,16 @@ function buildSky(tones: Tones): THREE.Mesh {
   const toSun = dir.dot(tones.sunDirection).max(0);
   const halo = pow(toSun, 5).mul(tones.haloWide).add(pow(toSun, 90).mul(tones.haloTight));
   const disc = tslSmoothstep(SUN_DISC_COS, SUN_DISC_COS + 0.0003, toSun);
-  mat.colorNode = base.add(tones.glow.mul(halo.add(disc.mul(2.5)))) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
+  // De nuit (`tones.stars`) : des étoiles, une sur trois cents cases de ciel environ, qui scintillent, et la bande
+  // pâle de la Voie lactée en travers du ciel. Rien sous l'horizon.
+  const cell = floor(dir.mul(STAR_GRID));
+  const h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
+  const twinkle = float(0.65).add(sin(time.mul(2.3).add(h.mul(90))).mul(0.35));
+  const star = tslSmoothstep(0.9968, 0.9995, h).mul(twinkle);
+  // Une bande douce, plus dense par endroits le long du grand cercle (variation lente : pas de taches).
+  const band = exp(dot(dir, vec3(MILKY_WAY.x, MILKY_WAY.y, MILKY_WAY.z)).pow(2).mul(-34)).mul(float(0.7).add(sin(dot(dir, vec3(3.1, 1.3, -2.2)).mul(4)).mul(0.3)));
+  const night = vec3(0.8, 0.85, 1).mul(star.mul(1.6).add(band.mul(0.1))).mul(tones.stars).mul(tslSmoothstep(0, 0.12, dir.y));
+  mat.colorNode = base.add(tones.glow.mul(halo.add(disc.mul(2.5)))).add(night) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
   const m = new THREE.Mesh(new THREE.SphereGeometry(6000, 32, 16), mat);
   m.renderOrder = -1;
   return m;
@@ -543,7 +562,9 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
   const terrain = yield* Terrain.build(layout, opts.terrainRadiusM);
   const places = yield* buildPlaces(layout);
   yield;
-  const decor = new Decor(layout, opts.decor, opts.decorRadiusM, SHADOW_RANGE_M, places.clearings);
+  const skyRoad = buildSkyRoad(layout, tones);
+  yield;
+  const decor = new Decor(layout, opts.decor, opts.decorRadiusM, SHADOW_RANGE_M, [...places.clearings, ...skyRoad.clearings]);
   yield;
   const road = yield* buildRoad(layout);
   yield;
@@ -567,7 +588,7 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
   yield;
   const roadside = yield* buildRoadside(layout);
   yield;
-  group.add(plane, water, places.group, roadside);
+  group.add(plane, water, places.group, roadside, skyRoad.group);
 
   // Soleil et ciel à parts presque égales : les faces à l'ombre restent colorées, comme sur les maquettes.
   const sun = new SunLight(DAY.sunColor, DAY.sunIntensity);
@@ -597,6 +618,8 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
   scene.add(group, sky, sun, fill);
   let lastRider: { x: number; z: number } | undefined;
   let filling = false;
+  let rideSpeed = 0;
+  let cabinY: number | undefined;
   return {
     group,
     sky,
@@ -640,8 +663,13 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
       richard?.update(dtS, rider);
       clouds.rotation.y += dtS * CLOUD_DRIFT_RAD_S;
       places.update(dtS);
+      skyRoad.update(dtS, rideSpeed, cabinY);
     },
     setVelodromeLaps: (n) => places.setVelodromeLaps(n),
+    setRide(speedMs, y) {
+      rideSpeed = speedMs;
+      cabinY = y;
+    },
     stats: () => ({ chunks: terrain.chunkCount, decorInstances: decor.instanceCount, coarseNearRoad: lastRider ? terrain.coarseNear(lastRider.x, lastRider.z, 300) : 0 }),
   };
 }

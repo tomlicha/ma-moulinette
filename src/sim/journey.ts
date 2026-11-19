@@ -1,4 +1,4 @@
-import type { Course } from './course';
+import type { Course, LiftState } from './course';
 import type { CourseDef, Edge, RoadNetwork } from './network';
 import { edgeS, endNodeId, findLeg, trackPoint, type JourneyPoint, type Leg, type NetPosition } from './track';
 
@@ -92,7 +92,7 @@ export class Journey implements Course {
     const start = this.courseDef ? { edge: this.courseDef.guide[0]!, forward: true } : this.network.start;
     const first = this.network.edges.get(start.edge)!;
     this.committed.length = 0;
-    this.committed.push({ edge: first, forward: start.forward, startM: 0, lengthM: first.lengthM });
+    this.committed.push({ edge: first, forward: start.forward, startM: 0, lengthM: first.lengthM, liftedM: 0 });
     this.tentative = [];
     this.choice = undefined;
     this.exitTrack = false;
@@ -110,7 +110,7 @@ export class Journey implements Course {
       const last = this.committed[this.committed.length - 1]!;
       const options = this.optionsAfter(last);
       const index = this.choice ?? this.defaultFor(last, options);
-      const leg = this.legFor(options[index]!, last.startM + last.lengthM);
+      const leg = this.legFor(options[index]!, last);
       this.committed.push(leg);
       this.choice = undefined;
       this.tentative = [];
@@ -203,10 +203,38 @@ export class Journey implements Course {
     return true;
   }
 
+  /**
+   * Altitude pédalée : celle du monde, moins la hauteur que les ascenseurs ont donnée jusque-là. C'est celle de la
+   * simulation (pente envoyée au trainer), du récapitulatif et du fichier FIT : une montée en ascenseur n'y compte pas.
+   * L'image, elle, suit l'altitude du monde (`pointAt`).
+   */
   altitudeAt(distanceM: number): number {
     const d = Math.max(0, distanceM);
     const leg = this.legAt(d);
-    return leg.edge.altitudeAt(edgeS(leg, d));
+    const world = leg.edge.altitudeAt(edgeS(leg, d));
+    return world - (leg.liftedM ?? 0) - (leg.edge.isLift ? world - legStartAltitude(leg) : 0);
+  }
+
+  /**
+   * L'ascenseur sous la distance `distanceM`, s'il y en a un : où il commence sur le trajet, sa longueur et sa durée.
+   * La simulation y fait avancer le cycliste au rythme de la cabine, pas à celui de ses jambes.
+   */
+  liftAt(distanceM: number): LiftState | undefined {
+    const d = Math.max(0, distanceM);
+    const leg = this.legAt(d);
+    const lift = leg.edge.isLift ? leg.edge.def.lift : undefined;
+    if (!lift) return undefined;
+    return {
+      startM: leg.startM,
+      lengthM: leg.lengthM,
+      durationS: lift.durationS,
+      progress: (d - leg.startM) / leg.lengthM,
+      fromAltitudeM: legStartAltitude(leg),
+      toAltitudeM: legEndAltitude(leg),
+      altitudeM: leg.edge.altitudeAt(edgeS(leg, d)),
+      toName: (leg.forward ? leg.edge.to : leg.edge.from).name,
+      name: leg.edge.name,
+    };
   }
 
   /** Pente lissée sur 2 × `halfWindowM`, sans reculer avant le départ. */
@@ -248,9 +276,11 @@ export class Journey implements Course {
     return this.legAt(Math.max(0, distanceM)).edge.name;
   }
 
-  private legFor(option: JunctionOption, startM: number): Leg {
+  /** La route `option` mise au bout de `prev`, avec la hauteur donnée par les ascenseurs jusque-là. */
+  private legFor(option: JunctionOption, prev: Leg): Leg {
     const edge = this.network.edges.get(option.edgeId)!;
-    return { edge, forward: option.forward, startM, lengthM: edge.lengthM };
+    const liftedM = (prev.liftedM ?? 0) + (prev.edge.isLift ? legEndAltitude(prev) - legStartAltitude(prev) : 0);
+    return { edge, forward: option.forward, startM: prev.startM + prev.lengthM, lengthM: edge.lengthM, liftedM };
   }
 
   /** Les routes qui partent du nœud où finit `leg`, de la gauche vers la droite, demi-tour exclu. */
@@ -271,7 +301,7 @@ export class Journey implements Course {
         name: edge.name,
         lengthM: edge.lengthM,
         onCourse: forward && edge.id === onCourse,
-        avgGradePct: ((forward ? edge.to.altitude - edge.from.altitude : edge.from.altitude - edge.to.altitude) / edge.lengthM) * 100,
+        avgGradePct: edge.isLift ? 0 : ((forward ? edge.to.altitude - edge.from.altitude : edge.from.altitude - edge.to.altitude) / edge.lengthM) * 100,
         climbM: climbOf(edge, forward),
         turnDeg,
         turn: Math.abs(turnDeg) < STRAIGHT_DEG ? 'straight' : turnDeg > 0 ? 'right' : 'left',
@@ -311,7 +341,7 @@ export class Journey implements Course {
       const options = this.optionsAfter(last);
       // Seul le prochain carrefour tient compte du choix en cours ; les suivants prennent le tout droit.
       const index = this.tentative.length === 0 && this.choice !== undefined ? this.choice : this.defaultFor(last, options);
-      this.tentative.push(this.legFor(options[index]!, last.startM + last.lengthM));
+      this.tentative.push(this.legFor(options[index]!, last));
     }
     return findLeg(this.tentative, d);
   }
@@ -332,6 +362,8 @@ export class Journey implements Course {
 }
 
 const isTrack = (leg: Leg) => leg.edge.def.surface === 'track';
+const legStartAltitude = (leg: Leg) => (leg.forward ? leg.edge.from.altitude : leg.edge.to.altitude);
+const legEndAltitude = (leg: Leg) => (leg.forward ? leg.edge.to.altitude : leg.edge.from.altitude);
 
 /** La route du parcours si elle est proposée ; sinon l'option la plus droite (à égalité, la première de gauche à droite). */
 function defaultIndex(options: JunctionOption[]): number {
@@ -342,8 +374,9 @@ function defaultIndex(options: JunctionOption[]): number {
   return best;
 }
 
-/** Somme des montées sur la route, dans le sens de marche, échantillonnée tous les 20 m. */
+/** Somme des montées sur la route, dans le sens de marche, échantillonnée tous les 20 m ; nulle en ascenseur. */
 function climbOf(edge: Edge, forward: boolean): number {
+  if (edge.isLift) return 0;
   const pts = edge.sample(20).map((p) => p.altitude);
   if (!forward) pts.reverse();
   let up = 0;

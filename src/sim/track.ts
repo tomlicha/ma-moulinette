@@ -19,6 +19,11 @@ export interface Leg {
   forward: boolean;
   startM: number;
   lengthM: number;
+  /**
+   * Hauteur donnée par les ascenseurs avant cette route, en m (négative après une descente en ascenseur) : le trajet la
+   * retranche de l'altitude du monde pour obtenir l'altitude pédalée.
+   */
+  liftedM?: number;
 }
 
 /**
@@ -100,6 +105,9 @@ export function trackPoint(legAt: (d: number) => Leg, d: number, firstM = 0, las
   if (leg.startM > firstM && toStart < CORNER_M) boundary = leg.startM;
   else if (toEnd < CORNER_M && leg.startM + leg.lengthM < lastM) boundary = leg.startM + leg.lengthM;
   if (boundary === undefined) return rawPoint(legAt, d);
+  // Pas d'arc autour d'un ascenseur : la plateforme ne bouge pas, le cycliste y tourne sur place en montant.
+  const other = legAt(boundary === leg.startM ? boundary - 1e-3 : boundary + 1e-3);
+  if (leg.edge.isLift || other.edge.isLift) return rawPoint(legAt, d);
 
   const a = rawPoint(legAt, boundary - CORNER_M);
   const c = rawPoint(legAt, boundary);

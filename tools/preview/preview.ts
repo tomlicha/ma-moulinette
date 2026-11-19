@@ -181,16 +181,20 @@ if (shot === 'marie' || shot === 'richard' || shot === 'marie-chase' || shot ===
     const p = new THREE.Vector3(lx, y, lz);
     const rider = place({}, p.x, p.z, 0, p.y + 0.04);
     const aheadLift = layout.surfaceAt(ahead.x + sd.x * -1.6, ahead.z + sd.z * -1.6).lift;
-    rider.group.lookAt(p.x + f.x * 2, p.y + 0.04 + (layout.y(ahead.y) + aheadLift - y), p.z + f.z * 2);
+    rider.group.lookAt(p.x + f.x * 2, p.y + 0.04 + (journey.liftAt(d) ? 0 : layout.y(ahead.y) + aheadLift - y), p.z + f.z * 2);
     if (surf.bank) rider.group.rotateZ(-surf.bank);
     // Même caméra que dans l'application (`RideView.follow`) : regard sur la route devant, champ de vision selon la pente.
     camera.fov = fovFor(journey.gradeAt(d), num('speed', 25));
     camera.near = 0.3;
     camera.far = CAMERA_FAR_M;
-    const back = num('camback', 4.4);
+    // Dans l'ascenseur, comme `RideView.follow` : la caméra recule et monte, le regard reste à hauteur du cycliste.
+    const lift = journey.liftAt(d);
+    const k = lift ? Math.sin(Math.PI * lift.progress) : 0;
+    const back = num('camback', 4.4 + 1.2 * k);
     const lookPt = journey.pointAt(d + LOOK_AHEAD_M);
-    const aheadY = layout.y(lookPt.y) + layout.surfaceAt(lookPt.x, lookPt.z).lift;
+    const aheadY = lift ? p.y + 1.5 : layout.y(lookPt.y) + layout.surfaceAt(lookPt.x, lookPt.z).lift;
     camera.position.set(p.x - f.x * back, p.y + num('camup', 1.85), p.z - f.z * back);
+    world.setRide(num('speed', 25) / 3.6, lift ? p.y : undefined);
     camera.lookAt(p.x + f.x * LOOK_AHEAD_M, lookHeight(p.y, aheadY), p.z + f.z * LOOK_AHEAD_M);
     worldRider = { x: p.x, z: p.z };
     if (params.has('gate')) {

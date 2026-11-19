@@ -196,6 +196,8 @@ export function* buildRoadside(layout: WorldLayout): Steps<THREE.Group> {
   for (const node of layout.network.nodes.values()) {
     yield;
     if (layout.underVelodrome(node.x, node.z)) continue;
+    // Ni dans le ciel, ni au pied d'un ascenseur : la plateforme y tient lieu de carrefour.
+    if (layout.skyNodes.has(node.id) || layout.network.incident(node.id).some((e) => e.isLift)) continue;
     const ways = layout.network.incident(node.id).map((e) => ({ e, h: e.from.id === node.id ? e.headingAt(0) : e.headingAt(e.lengthM) + Math.PI }));
     if (ways.length < 2) continue;
     const sorted = ways.map((w) => ((w.h % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)).sort((a, b) => a - b);

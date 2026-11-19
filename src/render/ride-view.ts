@@ -53,6 +53,11 @@ const MAX_DT_S = 0.1;
 const LANE_M = -1.6;
 /** Raideur du suivi du cap, en 1/s : le cycliste tourne dans un carrefour sans à-coup. */
 const HEADING_RATE = 5;
+/** Dans l'ascenseur, à mi-montée, la caméra recule de tant (et monte de tant), en m à l'image. */
+const LIFT_CAM_BACK_M = 1.2;
+const LIFT_CAM_UP_M = 0;
+/** Dans l'ascenseur, le regard se lève un peu au-dessus du cycliste : plus de vallée, moins de plancher. */
+const LIFT_LOOK_UP_M = 1.5;
 
 const wrapPi = (a: number) => {
   let x = (a + Math.PI) % (2 * Math.PI);
@@ -307,7 +312,8 @@ export class RideView {
     const surf = this.layout.surfaceAt(x, z, this.surf);
     const y = this.layout.y(pt.y) + surf.lift;
     const ahead = this.journey.pointAt(d + 2);
-    const rise = this.layout.y(ahead.y) + this.layout.surfaceAt(ahead.x + side.x * LANE_M, ahead.z + side.z * LANE_M, this.surfAhead).lift - y; // montée sur 2 m
+    // Dans l'ascenseur, la route 2 m plus loin est 40 m plus haut : le cycliste reste à plat sur la cabine.
+    const rise = this.journey.liftAt(d) ? 0 : this.layout.y(ahead.y) + this.layout.surfaceAt(ahead.x + side.x * LANE_M, ahead.z + side.z * LANE_M, this.surfAhead).lift - y; // montée sur 2 m
     this.p.set(x, y, z);
     this.rider.group.position.set(this.p.x, this.p.y + 0.04, this.p.z);
     this.rider.group.lookAt(this.p.x + f.x * 2, this.p.y + 0.04 + rise, this.p.z + f.z * 2);
@@ -328,16 +334,23 @@ export class RideView {
   private follow(dtS: number) {
     const f = forwardOf(this.heading);
     this.fwd.set(f.x, 0, f.z);
-    // La caméra reste dans l'axe de la route : seul le coureur se balance, sinon l'image paraît ballotter.
-    this.camTarget.set(this.p.x - this.fwd.x * 4.4, this.p.y + 1.85, this.p.z - this.fwd.z * 4.4);
+    // La caméra reste dans l'axe de la route : seul le coureur se balance, sinon l'image paraît ballotter. Dans
+    // l'ascenseur, elle recule et monte un peu, pour montrer le lac et la vallée qui s'éloignent.
+    const lift = this.journey.liftAt(this.dist);
+    const k = lift ? Math.sin(Math.PI * lift.progress) : 0;
+    const back = 4.4 + LIFT_CAM_BACK_M * k;
+    this.camTarget.set(this.p.x - this.fwd.x * back, this.p.y + 1.85 + LIFT_CAM_UP_M * k, this.p.z - this.fwd.z * back);
     if (!this.cameraReady) {
       this.camera.position.copy(this.camTarget);
       this.cameraReady = true;
     } else {
       this.camera.position.lerp(this.camTarget, 1 - Math.exp(-dtS * 7));
+      // La cabine monte jusqu'à 20 m/s à l'image : amortie, la caméra resterait sous son plancher.
+      if (lift) this.camera.position.y = this.camTarget.y;
     }
     const lookPt = this.journey.pointAt(this.dist + LOOK_AHEAD_M);
-    const aheadY = this.layout.y(lookPt.y) + this.layout.surfaceAt(lookPt.x, lookPt.z, this.surfAhead).lift;
+    // Dans la cabine, le regard reste à hauteur du cycliste : la route d'après est 600 m plus haut.
+    const aheadY = lift ? this.p.y + LIFT_LOOK_UP_M : this.layout.y(lookPt.y) + this.layout.surfaceAt(lookPt.x, lookPt.z, this.surfAhead).lift;
     this.look.set(
       this.p.x + this.fwd.x * LOOK_AHEAD_M,
       lookHeight(this.p.y, aheadY),
@@ -374,7 +387,9 @@ export class RideView {
     const dt = Math.min(dtMs / 1000, MAX_DT_S);
 
     const speedMs = this.state.speedKmh / 3.6;
-    this.dist += speedMs * dt;
+    // Dans l'ascenseur, la distance avance au pas de la cabine, pas à la vitesse des jambes (voir `Ride`).
+    const lift = this.journey.liftAt(this.dist);
+    this.dist += (lift ? lift.lengthM / lift.durationS : speedMs) * dt;
     this.dist += (this.state.distanceM - this.dist) * Math.min(1, dt * 3); // recalage doux sur la simulation
     this.place(this.dist, dt);
     this.standing = standingStep(
@@ -398,6 +413,7 @@ export class RideView {
     }
     // Tours de piste bouclés : le tableau et l'écran géant du vélodrome les affichent (rien n'est redessiné s'ils n'ont pas changé).
     this.world.setVelodromeLaps(this.journey.lapsAt(this.dist));
+    this.world.setRide(speedMs, this.journey.liftAt(this.dist) ? this.p.y : undefined);
     this.world.update(dt, this.p);
     this.follow(dt);
     this.camera.updateMatrixWorld(); // les noms se projettent avec la caméra de cette image, pas celle de la précédente

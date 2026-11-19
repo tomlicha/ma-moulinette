@@ -26,6 +26,8 @@ export interface RideSnapshot {
   gradePct: number;
   altitudeM: number;
   elapsedS: number;
+  /** Dans un ascenseur : avancement de la montée, de 0 à 1. */
+  liftProgress?: number;
 }
 
 /** Sortie virtuelle : intègre la puissance mesurée le long d'un parcours (boucle, ou trajet sur un réseau routier). */
@@ -55,12 +57,14 @@ export class Ride {
     this.accMs += Math.min(Math.max(0, Math.round(dtS * 1000)), MAX_CATCHUP_MS);
     while (this.accMs >= STEP_MS) {
       this.route.update?.(this.dist); // un trajet valide ici ses carrefours, avant que la pente en dépende
-      const grade = this.route.gradeAt(this.dist);
+      // Dans un ascenseur, la cabine monte en un temps fixe : le cycliste pédale à plat, sa vitesse ne la presse pas.
+      const lift = this.route.liftAt?.(this.dist);
+      const grade = lift ? 0 : this.route.gradeAt(this.dist);
       this.idleSteps = powerW <= IDLE_POWER_W ? this.idleSteps + 1 : 0;
       const idle = this.idleSteps * STEP_S >= IDLE_DELAY_S && grade > DESCENT_GRADE_PCT;
       const r = step(this.v, powerW, grade, STEP_S, this.rider, 0, idle ? IDLE_BRAKE_MS2 : 0, this.draft);
       this.v = r.v;
-      this.dist += r.dist;
+      this.dist += lift ? (lift.lengthM / lift.durationS) * STEP_S : r.dist;
       this.steps++;
       this.accMs -= STEP_MS;
     }
@@ -68,12 +72,14 @@ export class Ride {
   }
 
   snapshot(): RideSnapshot {
+    const lift = this.route.liftAt?.(this.dist);
     return {
       speedKmh: this.v * 3.6,
       distanceM: this.dist,
-      gradePct: this.route.gradeAt(this.dist),
+      gradePct: lift ? 0 : this.route.gradeAt(this.dist),
       altitudeM: this.route.altitudeAt(this.dist),
       elapsedS: this.steps * STEP_S,
+      ...(lift ? { liftProgress: lift.progress } : {}),
     };
   }
 }
