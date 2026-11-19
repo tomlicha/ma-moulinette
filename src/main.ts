@@ -33,6 +33,7 @@ import { RideSession } from './app/ride-session';
 import { RideViewLoader } from './app/ride-view-loader';
 import { WorkoutSession } from './app/workout-session';
 import { DeviceManager } from './app/device-manager';
+import { ManualControl } from './app/manual-control';
 import { SensorReadings } from './app/sensor-readings';
 import { SettingsStore } from './app/settings-store';
 import { TrainerController } from './app/trainer-controller';
@@ -41,6 +42,8 @@ import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
 import { setupWorkoutEditor } from './ui/editor/workout-editor';
 import { RideHud } from './ui/ride/hud';
+import { RideControlsView } from './ui/ride/ride-controls-view';
+import { needTrainer as needTrainerReason, noControl as noControlReason } from './ui/ride/trainer-reasons';
 import { DevicesView } from './ui/devices/devices-view';
 import { LogView } from './ui/devices/log-view';
 import { HudPresenter } from './ui/ride/hud-presenter';
@@ -82,21 +85,11 @@ installNativeBluetooth(openDeviceChooser);
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 setupBlockedHints();
 
-/** Raison « pas de trainer », avec le raccourci qui mène à l'écran des appareils. */
-const needTrainer = (text: string): BlockReason => ({
-  text,
-  action: { label: 'Connecter le trainer', run: () => router.go('appareils') },
-});
-const noControl = (what: string): BlockReason => ({
-  text: `${trainerCtl.name ?? 'Cet appareil'} mesure ta puissance mais ne pilote pas la résistance (pas de ${what}). Il faut un home trainer connecté pour ça.`,
-  action: { label: 'Changer d’appareil', run: () => router.go('appareils') },
-});
+/** Raisons « pas de trainer » et « ce trainer ne pilote pas cela », avec le raccourci qui mène à l'écran des appareils. */
+const needTrainer = (text: string): BlockReason => needTrainerReason(() => router.go('appareils'), text);
+const noControl = (what: string): BlockReason => noControlReason(() => router.go('appareils'), trainerCtl.name, what);
 
 const logView = new LogView();
-const ergBtn = $<HTMLButtonElement>('erg-send');
-const simBtn = $<HTMLButtonElement>('sim-send');
-const ergInput = $<HTMLInputElement>('erg');
-const gradeInput = $<HTMLInputElement>('grade');
 
 const hub = new SensorHub();
 
@@ -113,7 +106,6 @@ function newBleTrainer(): WebBluetoothTrainer {
 
 /** Dernières mesures des capteurs, tant qu'elles sont fraîches (au-delà de 3 s de silence, le cycliste est à l'arrêt). */
 const readings = new SensorReadings();
-const rideBtn = $<HTMLButtonElement>('ride-toggle');
 const massInput = $<HTMLInputElement>('mass');
 /** Pente envoyée au trainer (lissage, braquet virtuel, fréquence d'envoi) et état « ERG engagé » : la consigne de puissance prime sur la pente. */
 const grade = new GradeController();
@@ -177,45 +169,18 @@ const telemetry = setupTelemetry({
   },
 });
 
-/** Menu de la sortie, rubrique Zwift Cog : qui applique le braquet, le trainer ou la pente corrigée. */
-function renderCogMode() {
-  $('cog-mode').textContent =
-    !trainerCtl.connected
-      ? ''
-      : trainerCtl.capabilities?.virtualGears
-        ? 'Braquet géré par le trainer (protocole Zwift).'
-        : devicesView.forcedProtocol === 'zwift'
-          ? 'Ce trainer ne répond pas au protocole Zwift : braquet simulé par la pente envoyée.'
-          : 'Braquet simulé par la pente envoyée au trainer. Pour que le trainer le gère lui-même, choisis « Zwift » comme protocole de pilotage sur l’écran Appareils, puis reconnecte-le.';
-}
-
 function setState(s: ConnectionState, detail?: string) {
-  renderCogMode();
   exporter.onTrainerState(s);
   devicesView.showTrainerState(s, detail);
   const connected = s === 'connected';
   // Les boutons de connexion sont réglés par renderDevices, plus bas.
-  setBlocked(
-    ergBtn,
-    !connected
-      ? needTrainer('Connecte d’abord ton home trainer pour lui imposer une puissance.')
-      : !trainerCtl.capabilities?.targetPower
-        ? noControl('mode ERG')
-        : undefined,
-  );
-  setBlocked(
-    simBtn,
-    !connected
-      ? needTrainer('Connecte d’abord ton home trainer pour lui imposer une pente.')
-      : !trainerCtl.capabilities?.simulation
-        ? noControl('mode SIM')
-        : rideSession.active
-          ? 'Pendant la sortie virtuelle, la pente vient du parcours. Arrête la sortie pour régler la pente à la main.'
-          : undefined,
-  );
-  // La puissance seule suffit à rouler : la pente n'est envoyée que si le trainer sait la simuler.
-  const needPowerToRide = connected || rideSession.active ? undefined : needTrainer('La sortie avance avec la puissance de ton home trainer : connecte-le d’abord.');
-  setBlocked(rideBtn, needPowerToRide);
+  const needPowerToRide = rideControls.render({
+    trainerConnected: connected,
+    trainerName: trainerCtl.name,
+    capabilities: trainerCtl.capabilities,
+    rideActive: rideSession.active,
+    forcedProtocol: devicesView.forcedProtocol,
+  });
   setBlocked(homeRideBtn, needPowerToRide);
   refreshWorkoutButtons();
   if (s === 'connected') rideSession.resume();
@@ -236,10 +201,7 @@ function setState(s: ConnectionState, detail?: string) {
 
 // Le trainer change d'état (connexion, perte, reconnexion automatique) : l'écran et la sortie suivent.
 trainerCtl.on('state', (s, d) => setState(s, d));
-trainerCtl.on('erg', (engaged) => {
-  ergBtn.textContent = engaged ? "Désengager l'ERG" : "Engager l'ERG";
-  ergBtn.classList.toggle('secondary', engaged);
-});
+trainerCtl.on('erg', (engaged) => rideControls.showErgEngaged(engaged));
 
 hub.on('log', log);
 hub.on('raw', (src, data) => {
@@ -299,7 +261,7 @@ function showRiderStill(distanceM: number) {
 }
 
 rideSession.on('started', (massKg) => {
-  rideBtn.textContent = 'Arrêter la sortie';
+  rideControls.showRideActive(true);
   massInput.readOnly = true;
   massInput.title = 'La masse se règle avant de démarrer la sortie.';
   setState(trainerCtl.state, trainerCtl.name);
@@ -317,53 +279,22 @@ rideSession.on('paused', (distanceM) => {
 rideSession.on('resumed', () => log('trainer reconnecté : sortie reprise'));
 rideSession.on('stopped', (distanceM) => {
   showRiderStill(distanceM);
-  rideBtn.textContent = 'Démarrer la sortie';
+  rideControls.showRideActive(false);
   massInput.readOnly = false;
   massInput.title = '';
   log('sortie virtuelle arrêtée');
   setState(trainerCtl.state, trainerCtl.name);
 });
 
-rideBtn.addEventListener('click', () => {
+/** Démarrer la sortie, ou l'arrêter : un arrêt volontaire, hors séance, fige la sortie et ouvre son récapitulatif (docs/design/recap.md). */
+function toggleRide() {
   if (!rideSession.active) return startRide();
   stopRide();
-  // Arrêt volontaire, hors séance : la sortie est figée et son récapitulatif s'affiche (docs/design/recap.md).
   if (workoutSession.running) return;
   exporter.onRideStopped();
   offerRecap();
-});
+}
 
-ergBtn.addEventListener('click', async () => {
-  if (trainerCtl.ergActive) {
-    trainerCtl.setErgActive(false);
-    if (workoutSession.running) workoutSession.optOutErg();
-    if (rideSession.active) {
-      log("ERG désengagé : pente du parcours reprise");
-    } else {
-      // Hors sortie, le trainer ne quitte l'ERG qu'avec une consigne de pente.
-      const g = Number(gradeInput.value);
-      await trainerCtl.sendGradeAfterErg('ERG désengagé', g);
-    }
-    return;
-  }
-  // Pendant une séance, réengager rend la main à la séance, qui renvoie aussitôt sa consigne du moment.
-  if (workoutSession.running) return workoutSession.reengageErg();
-  const w = Number(ergInput.value);
-  await trainerCtl.engageErg(w);
-});
-// Changer la cible pendant que l'ERG est engagé l'applique aussitôt.
-ergInput.addEventListener('change', () => {
-  if (!trainerCtl.ergActive || workoutSession.running) return; // en séance, c'est la séance qui fixe la consigne
-  const w = Number(ergInput.value);
-  void trainerCtl.retargetErg(w);
-});
-simBtn.addEventListener('click', async () => {
-  const g = Number(gradeInput.value);
-  await trainerCtl.setManualGrade(g); // le SIM remplace l'ERG
-});
-gradeInput.addEventListener('input', () => {
-  $('grade-out').textContent = `${gradeInput.value} %`;
-});
 // --- Séance structurée ---
 
 const woFtp = $<HTMLInputElement>('wo-ftp');
@@ -438,9 +369,22 @@ const workoutSession = new WorkoutSession({
   trainer: trainerCtl,
   ftpW: () => readFtp(),
   rideActive: () => rideSession.active,
-  manualGradePct: () => Number(gradeInput.value),
+  manualGradePct: () => rideControls.manualGradePct,
   log,
 });
+
+/** ERG et pente demandés à la main, selon ce qui tourne (app/manual-control.ts). */
+const manual = new ManualControl({ trainer: trainerCtl, rideSession, workoutSession, log });
+/** Les commandes de la sortie : démarrer, ERG, pente (ride-controls-view.ts). */
+const rideControls = new RideControlsView(
+  {
+    toggleRide,
+    toggleErg: (targetW, gradePct) => void manual.toggleErg(targetW, gradePct),
+    retargetErg: (targetW) => manual.retargetErg(targetW),
+    sendGrade: (gradePct) => void manual.setGrade(gradePct),
+  },
+  () => router.go('appareils'),
+);
 
 const savedFtp = settings.ftpW();
 if (savedFtp !== undefined) woFtp.value = String(savedFtp);
