@@ -24,7 +24,7 @@ import { DeviceRegistry } from './infra/sensors/device-registry';
 import { browserStore } from './infra/storage/key-value-store';
 import { PROTOCOL_LABEL } from './infra/sensors/protocols/trainer-profiles';
 import { formatDuration } from './ui/shared/duration';
-import { setBlocked, setupBlockedHints, type BlockReason } from './ui/shared/blocked';
+import { setupBlockedHints, type BlockReason } from './ui/shared/blocked';
 import { setupRouter } from './ui/shared/router';
 import { normalizeFtp, normalizeMass } from './domain/sim/rider-limits';
 import { GradeController } from './app/grade-controller';
@@ -42,6 +42,7 @@ import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
 import { setupWorkoutEditor } from './ui/editor/workout-editor';
 import { RideHud } from './ui/ride/hud';
+import { HomeView } from './ui/home/home-view';
 import { RideControlsView } from './ui/ride/ride-controls-view';
 import { WorkoutControlsView } from './ui/ride/workout-controls-view';
 import { needTrainer as needTrainerReason, noControl as noControlReason } from './ui/ride/trainer-reasons';
@@ -56,9 +57,6 @@ import { summarize } from './ui/recap/recap-model';
 import { createRadar } from './ui/ride/radar';
 import portraitFallback from './assets/rider-portrait.jpg';
 import { setupHomeBackground } from './ui/home/home-background';
-import { HOME_SCENES } from './ui/home/home-scenes';
-import { setupCoursePicker } from './ui/home/course-picker';
-import { setupCourseMap } from './ui/home/course-map';
 import { setupAccount } from './ui/account/account-chip';
 import { WorldClient } from './infra/net/world-client';
 import { RiderTags } from './ui/ride/rider-tags';
@@ -181,7 +179,7 @@ function setState(s: ConnectionState, detail?: string) {
     rideActive: rideSession.active,
     forcedProtocol: devicesView.forcedProtocol,
   });
-  setBlocked(homeRideBtn, needPowerToRide);
+  home.setRideBlock(needPowerToRide);
   refreshWorkoutButtons();
   if (s === 'connected') rideSession.resume();
   else {
@@ -247,7 +245,7 @@ void keepAwake.set(true);
 
 function startRide() {
   autoStart = false;
-  rideSession.start(Number(massInput.value) || DEFAULT_RIDER.massKg, coursePicker.selected());
+  rideSession.start(Number(massInput.value) || DEFAULT_RIDER.massKg, home.selectedCourseId());
 }
 
 function stopRide(resetTrainer = true) {
@@ -298,52 +296,22 @@ function toggleRide() {
 // --- Séance structurée ---
 
 const woFtp = $<HTMLInputElement>('wo-ftp');
-const homeRideBtn = $<HTMLButtonElement>('home-ride');
-// Fond de l'accueil : trois scènes qui se relaient toutes les minutes.
-// L'accueil montre le parcours retenu (nom, description, scène qui lui ressemble, sans rotation). On le choisit dans le menu
-// que « Rouler » ouvre (`course-dialog`) : la carte de l'accueil n'a pas la place d'un sélecteur.
-const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'Rive du lac', 'arc-en-ciel': 'Route arc-en-ciel' };
-const courseScenes = COL_DES_ERABLES.courses.map((c) => HOME_SCENES.find((s) => s.name === COURSE_SCENE[c.id]) ?? HOME_SCENES[0]!);
-const homeBackground = setupHomeBackground($('home-scenes'), undefined, undefined, courseScenes, Infinity);
-// Carte du parcours : miniature dans le menu, agrandie dans sa propre boîte. Créée avant le menu, qui l'appelle d'emblée.
-const courseMap = setupCourseMap(COL_DES_ERABLES, {
-  thumb: $<HTMLButtonElement>('course-map'),
-  dialog: $<HTMLDialogElement>('map-dialog'),
-  title: $('map-title'),
-  description: $('map-desc'),
-  plan: $('map-plan'),
-  profile: $('map-profile'),
-  close: $<HTMLButtonElement>('map-close'),
-});
-// Le HUD n'existe pas encore quand le menu se crée (il appelle `onSelect` d'emblée) : on ne le touche qu'ensuite.
+// L'accueil : parcours retenu, menu du parcours, bouton « Rouler » (home-view.ts). Le HUD n'existe pas encore quand le menu
+// se crée (il annonce le premier choix d'emblée) : on ne le touche qu'ensuite.
 let courseUiReady = false;
-const coursePicker = setupCoursePicker({
-  root: $('course-options'),
-  network: COL_DES_ERABLES,
-  store: prefs,
-  storeKey: 'mamoulinette.course',
-  onSelect: (course) => {
-    $('home-title').textContent = course.name;
-    $('home-desc').textContent = course.description;
-    homeBackground.show(COL_DES_ERABLES.courses.indexOf(course));
-    courseMap.show(course);
-    if (!rideSession.active) {
-      journey.setCourse(course.id);
-      if (courseUiReady) hud.refreshRoute();
-    }
+const home = new HomeView(COL_DES_ERABLES, prefs, () => rideSession.active, {
+  courseSelected: (course) => {
+    if (rideSession.active) return;
+    journey.setCourse(course.id);
+    if (courseUiReady) hud.refreshRoute();
   },
+  startRide: () => {
+    router.go('sortie');
+    startRide();
+  },
+  resumeRide: () => router.go('sortie'),
 });
 courseUiReady = true;
-const courseDialog = $<HTMLDialogElement>('course-dialog');
-$('course-cancel').addEventListener('click', () => courseDialog.close());
-courseDialog.addEventListener('click', (e) => {
-  if (e.target === courseDialog) courseDialog.close(); // un clic sur le fond ferme, comme Échap
-});
-$('course-go').addEventListener('click', () => {
-  courseDialog.close();
-  router.go('sortie');
-  startRide();
-});
 // L'écran Séances a le même fond, sans titre ni description.
 setupHomeBackground($('sea-scenes'));
 // Et l'écran Appareils.
@@ -471,15 +439,6 @@ function startWorkout() {
   workoutSession.start();
 }
 
-// « Rouler » : une sortie déjà en cours se reprend ; sinon on choisit le parcours, puis « Partir » lance la sortie.
-homeRideBtn.addEventListener('click', () => {
-  if (rideSession.active) {
-    router.go('sortie');
-    return;
-  }
-  courseDialog.showModal();
-  $<HTMLButtonElement>('course-go').focus();
-});
 /** La FTP a changé (ici ou sur un autre appareil) : séance en cours, profil et éditeur suivent. */
 function ftpChanged() {
   workoutSession.setFtp(readFtp());
