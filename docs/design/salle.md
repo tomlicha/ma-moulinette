@@ -1,6 +1,6 @@
 # Salle temps réel : charge et aspiration
 
-Référence permanente de la salle (`src/server/room.ts`) et de l'aspiration (`src/sim/draft.ts`). Toute évolution part de ce fichier et le met à jour. Le protocole est décrit en tête de [`src/net/protocol.ts`](../../src/net/protocol.ts).
+Référence permanente de la salle (`src/server/room.ts`) et de l'aspiration (`src/domain/sim/draft.ts`). Toute évolution part de ce fichier et le met à jour. Le protocole est décrit en tête de [`src/infra/net/protocol.ts`](../../src/infra/net/protocol.ts).
 
 ## Gestion d'intérêt (17 novembre 2026)
 
@@ -8,7 +8,7 @@ Avant : la salle renvoyait l'instantané de **tous** les coureurs à **tous**, 4
 
 Maintenant, au-delà de `INTEREST_K + 1` = 33 coureurs actifs, chacun reçoit seulement ses **32 plus proches voisins**, dans un rayon de **1,5 km** (`INTEREST_K`, `INTEREST_RANGE_M` dans `protocol.ts`), lui exclu. En dessous, rien ne change : le même instantané pour tous, le leur compris.
 
-- **Pourquoi 32 et 1,5 km.** La vue 3D dessine 16 coureurs à moins de 220 m ; l'encart des proches montre 7 devant et 3 derrière, jusqu'à 1,5 km ([`others-model.ts`](../../src/render/others-model.ts), `NEARBY_RANGE_M`). 32 laisse de la marge au-delà des 10 de l'encart et des 16 de la vue.
+- **Pourquoi 32 et 1,5 km.** La vue 3D dessine 16 coureurs à moins de 220 m ; l'encart des proches montre 7 devant et 3 derrière, jusqu'à 1,5 km ([`others-model.ts`](../../src/render/riders/others-model.ts), `NEARBY_RANGE_M`). 32 laisse de la marge au-delà des 10 de l'encart et des 16 de la vue.
 - **Index spatial.** Cases de 150 m ; pour chaque destinataire on élargit les anneaux de cases jusqu'à avoir 32 voisins sûrs, dans la limite du rayon. La position du monde se calcule une fois par état reçu (`Edge.pointAt`).
 - **Un coureur sans position** (pas encore d'état reçu) ne reçoit rien jusqu'à son premier état ; **sans voisin à portée**, il ne reçoit rien non plus : le client oublie les coureurs absents au bout de 5 s.
 - **Ce qui reste en O(N²)** : les messages `join` et `leave` (JSON, rares) et la liste des noms envoyée à la connexion. Sans importance jusqu'à quelques milliers de coureurs ; à restreindre si la salle grossit.
@@ -52,7 +52,7 @@ Derrière un autre coureur, on économise une part de la **traînée de l'air** 
 
 Les ordres de grandeur viennent de la littérature (soufflerie et simulation de peloton : environ 30 à 40 % de traînée en moins pour le deuxième coureur à une roue, de l'ordre de 10 % vers 10 m). **Ce ne sont pas des mesures de notre part : à régler à l'usage.**
 
-Qui compte comme meneur ([`draft.ts`](../../src/sim/draft.ts)) : un coureur dont la sortie est en cours, plus rapide que 2 m/s, **devant** à moins de 25 m, dans la même file (écart latéral d'au plus 2,5 m), allant dans le même sens (écart de cap d'au plus 30°). Seule la meilleure aspiration compte : pas de bonus de file, pas de vent.
+Qui compte comme meneur ([`draft.ts`](../../src/domain/sim/draft.ts)) : un coureur dont la sortie est en cours, plus rapide que 2 m/s, **devant** à moins de 25 m, dans la même file (écart latéral d'au plus 2,5 m), allant dans le même sens (écart de cap d'au plus 30°). Seule la meilleure aspiration compte : pas de bonus de file, pas de vent.
 
 Effets :
 

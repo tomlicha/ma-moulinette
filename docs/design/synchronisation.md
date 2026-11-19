@@ -3,7 +3,7 @@
 Référence permanente de la **synchronisation des séances et du profil** d'un même utilisateur entre ses appareils (ordinateur, téléphone, tablette). Statut : **spécification, rien n'est codé**. Toute évolution part de ce fichier et le met à jour.
 
 - Situation de départ (16 novembre 2026) : tout vit dans le `localStorage` de chaque navigateur (voir « Inventaire des données »). Aucun compte ; le Worker Cloudflare et sa base D1 ne servent qu'à la passerelle Strava, avec un seul propriétaire (`OWNER_KEY`, table `strava_tokens` à une ligne).
-- Code à toucher : [`src/workout/library.ts`](../../src/workout/library.ts), [`src/workout/block-library.ts`](../../src/workout/block-library.ts), [`src/main.ts`](../../src/main.ts) (FTP, masse), [`src/ui/gears.ts`](../../src/ui/gears.ts), [`worker/app.ts`](../../worker/app.ts), une migration D1 (`worker/migrations/0003_sync.sql`).
+- Code à toucher : [`src/domain/workout/library.ts`](../../src/domain/workout/library.ts), [`src/domain/workout/block-library.ts`](../../src/domain/workout/block-library.ts), [`src/main.ts`](../../src/main.ts) (FTP, masse), [`src/ui/ride/gears.ts`](../../src/ui/ride/gears.ts), [`worker/app.ts`](../../worker/app.ts), une migration D1 (`worker/migrations/0003_sync.sql`).
 - Voir aussi : [analyse-technique.md](../analyse-technique.md) (cible : comptes OIDC, PostgreSQL), [seances.md](seances.md), [recap.md](recap.md).
 
 ## Ce que « garantir » veut dire
@@ -131,7 +131,7 @@ Un conflit apparaît quand une ligne est écrite avec un `baseRev` plus ancien q
 
 ## Moteur de synchronisation (client)
 
-Module neuf `src/sync/`, en **logique pure** testable (comme `src/workout/`), avec une fine couche réseau et DOM.
+Module neuf `src/infra/sync/`, en **logique pure** testable (comme `src/domain/workout/`), avec une fine couche réseau et DOM.
 
 - **État local**, clé `zwift2.sync` : `{ deviceToken, accountId, cursor, rows: { "kind/id": { rev, dirty } } }`. Le format des données existantes ne change pas : la `rev` d'une séance vit dans cet état, pas dans `SavedWorkout`.
 - **Marquage** : `WorkoutLibrary.save/remove`, `BlockLibrary.save/remove` et l'enregistrement du FTP, de la masse et des vitesses appellent `sync.markDirty(kind, id)`. Pas de synchronisation lancée depuis les bibliothèques elles-mêmes (elles restent pures).
@@ -176,7 +176,7 @@ L'indicateur d'état est le seul élément de synchronisation visible hors de ce
 |---|---|---|
 | S1 | Migration 0003, routes compte, appairage, jetons, limites de débit. | Tests serveur. |
 | S2 | Routes `changes` et `records`, révisions, pierres tombales, conflits. | Tests serveur, test de propriété. |
-| S3 | Moteur client (`src/sync/`), branchement des bibliothèques et du profil, règle « pas de réseau en sortie ». | Tests des deux appareils simulés. |
+| S3 | Moteur client (`src/infra/sync/`), branchement des bibliothèques et du profil, règle « pas de réseau en sortie ». | Tests des deux appareils simulés. |
 | S4 | Panneau Synchronisation, clé de récupération, liste des appareils, états et messages. | Aperçu navigateur et captures, comme pour le HUD. |
 | S5 | Export, effacement, purge programmée (déclencheur `scheduled` du Worker, comme la purge des journaux). | Tests serveur. |
 | S6 | Essai sur matériel réel. | Porteur du projet. |

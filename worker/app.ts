@@ -5,13 +5,13 @@
  * Seules les adresses /api/* passent par ce code (`run_worker_first` de wrangler.app.toml) ; le reste est servi par les ressources.
  * Secrets à créer avec `npx wrangler secret put -c wrangler.app.toml` : STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET.
  */
-import { networkSignature, PROTOCOL_VERSION } from '../src/net/protocol.ts';
+import { networkSignature, PROTOCOL_VERSION } from '../src/infra/net/protocol.ts';
 import { createAccounts } from '../src/server/accounts.ts';
 import { createSync } from '../src/server/sync.ts';
 import { createUserStrava } from '../src/server/user-strava.ts';
 import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_SIGNED_OUT } from '../src/server/room.ts';
-import { COL_DES_ERABLES } from '../src/sim/courses/col-des-erables.ts';
-import { WORLD_PATH } from '../src/net/world-client.ts';
+import { COL_DES_ERABLES } from '../src/domain/course/courses/col-des-erables.ts';
+import { WORLD_PATH } from '../src/infra/net/world-client.ts';
 import { createD1AccountStore } from './account-store.ts';
 import { createD1SyncStore } from './sync-store.ts';
 import type { D1Database } from './d1-store.ts';

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createAccounts, CSRF_HEADER, SESSION_COOKIE } from './accounts';
 import { createMemoryAccountStore, createMemorySyncStore } from './memory-store';
 import { createSync } from './sync';
-import { SYNC_LIMITS, type SyncItem, type SyncResponse } from '../sync/protocol';
+import { SYNC_LIMITS, type SyncItem, type SyncResponse } from '../infra/sync/protocol';
 
 const ORIGIN = 'https://moulinette.example';
 

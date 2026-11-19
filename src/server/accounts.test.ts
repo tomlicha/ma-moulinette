@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanName, createAccounts, CSRF_HEADER, readCookie, SESSION_COOKIE, suggestedName, type AccountOptions } from './accounts';
 import { createMemoryAccountStore } from './memory-store';
 import { createUserStrava } from './user-strava';
-import { APP_RETRY_MS, prefersStravaApp } from '../net/account';
+import { APP_RETRY_MS, prefersStravaApp } from '../infra/net/account';
 
 const ORIGIN = 'https://moulinette.example';
 const NOW = 1_800_000_000;

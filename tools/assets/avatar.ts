@@ -9,8 +9,8 @@
  * chaussures plus grandes), la tête par `HEAD_SCALE` ; la silhouette se lit ainsi de dos, à cinq mètres.
  */
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import { REGION } from '../../src/render/asset-contract.ts';
-import { BIND_CRANK, DEFAULT_BODY, footPitch, SKELETON, solvePose, solveTorsoAngle, type Pose, type V3 } from '../../src/render/rider-pose.ts';
+import { REGION } from '../../src/render/core/asset-contract.ts';
+import { BIND_CRANK, DEFAULT_BODY, footPitch, SKELETON, solvePose, solveTorsoAngle, type Pose, type V3 } from '../../src/render/riders/rider-pose.ts';
 import { bakeAo } from './ao.ts';
 import { BIKE_FIT } from './bike.ts';
 import { GlbWriter } from './gltf.ts';

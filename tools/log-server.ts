@@ -13,8 +13,8 @@ import { dirname } from 'node:path';
 import { createFileDeviceStore } from './logs/device-store.ts';
 import { createFileStore } from './logs/file-store.ts';
 import { serveWith } from './logs/node-http.ts';
-import { createLogReceiver } from '../src/telemetry/receiver.ts';
-import { LIMITS } from '../src/telemetry/report.ts';
+import { createLogReceiver } from '../src/infra/telemetry/receiver.ts';
+import { LIMITS } from '../src/infra/telemetry/report.ts';
 
 const env = process.env;
 if (!env.LOG_READ_TOKEN) {

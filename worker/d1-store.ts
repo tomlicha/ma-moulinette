@@ -1,6 +1,6 @@
-import { fingerprint, type StoredDevice } from '../src/telemetry/device.ts';
-import type { DeviceStore, LogStore } from '../src/telemetry/receiver.ts';
-import type { StoredReport } from '../src/telemetry/report.ts';
+import { fingerprint, type StoredDevice } from '../src/infra/telemetry/device.ts';
+import type { DeviceStore, LogStore } from '../src/infra/telemetry/receiver.ts';
+import type { StoredReport } from '../src/infra/telemetry/report.ts';
 
 /** Ce que ce module utilise de D1 : de quoi le simuler dans les tests sans dépendre des types de Cloudflare. */
 export interface D1Database {

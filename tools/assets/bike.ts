@@ -4,8 +4,8 @@
  * de 40 mm, jantes hautes à liseré de la couleur du cadre, douze rayons plats par roue, transmission simplifiée.
  */
 import { Vector3 } from 'three';
-import { BIKE_NODE, REGION } from '../../src/render/asset-contract.ts';
-import type { BikeFit } from '../../src/render/rider-pose.ts';
+import { BIKE_NODE, REGION } from '../../src/render/core/asset-contract.ts';
+import type { BikeFit } from '../../src/render/riders/rider-pose.ts';
 import { bakeAo } from './ao.ts';
 import { GlbWriter } from './gltf.ts';
 import { circle, curve, keys, loop, MeshBuilder, oval, polyline, roundEnds, smooth, type SectionPoint } from './mesh.ts';

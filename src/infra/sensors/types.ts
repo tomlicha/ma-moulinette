@@ -1,0 +1,60 @@
+import type { LogLevel } from '../../shared/util/log';
+
+/** Mesure normalisée, quel que soit le transport ou le profil BLE d'origine. */
+export interface Measurement {
+  /** Horodatage local en ms (performance.now ou Date.now selon l'appelant). */
+  t: number;
+  powerW?: number;
+  /** Tours de pédale par minute. */
+  cadenceRpm?: number;
+  speedKmh?: number;
+  distanceM?: number;
+  heartRateBpm?: number;
+}
+
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export interface TrainerCapabilities {
+  /** Mode ERG : puissance cible. */
+  targetPower: boolean;
+  /** Mode SIM : pente simulée. */
+  simulation: boolean;
+  powerRange?: { min: number; max: number; step: number };
+  /** Le trainer applique lui-même un braquet virtuel (protocole Zwift) : on lui envoie la pente réelle et le braquet. */
+  virtualGears?: boolean;
+}
+
+export interface SimulationParams {
+  /** Pente en pourcent (ex. 4.5 pour 4,5 %). */
+  gradePct: number;
+  windSpeedMs?: number;
+  /** Coefficient de roulement. */
+  crr?: number;
+  /** Coefficient de traînée (kg/m). */
+  cw?: number;
+  /** Masse cycliste + vélo en kg, pour les protocoles qui la portent (Wahoo). */
+  massKg?: number;
+  /** Braquet virtuel (plateau / pignon), pour les trainers qui l'appliquent eux-mêmes ; ignoré par les autres. */
+  gearRatio?: number;
+}
+
+export interface SensorEvents {
+  measurement: (m: Measurement) => void;
+  state: (s: ConnectionState, detail?: string) => void;
+  /** Trames brutes, utiles pour la matrice de compatibilité matérielle. */
+  raw: (source: string, data: Uint8Array) => void;
+  /** `error` : une panne qui mérite un rapport (voir src/infra/telemetry/). */
+  log: (msg: string, level?: LogLevel) => void;
+}
+
+/** Interface commune des transports : Web Bluetooth, simulateur, plus tard natif et relais. */
+export interface TrainerAdapter {
+  readonly name: string;
+  readonly capabilities: TrainerCapabilities;
+  on<K extends keyof SensorEvents>(ev: K, fn: SensorEvents[K]): void;
+  /** `nameHint` limite le sélecteur Bluetooth aux appareils portant ce nom (reconnexion à un appareil connu). */
+  connect(nameHint?: string): Promise<void>;
+  disconnect(): Promise<void>;
+  setTargetPower(watts: number): Promise<void>;
+  setSimulation(p: SimulationParams): Promise<void>;
+}
