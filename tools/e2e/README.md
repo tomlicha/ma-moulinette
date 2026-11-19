@@ -1,0 +1,59 @@
+# Scénarios de bout en bout
+
+Trois parcours pilotés dans un vrai navigateur (Chromium, via Playwright) contre le serveur de dev. Ils servent à deux choses :
+
+1. **Vérifier** que l'application fait ce qu'elle doit : chaque étape contrôle ce que le geste doit avoir produit (boutons, textes, journal, erreurs de la page).
+2. **Comparer avant et après** une refonte : chaque scénario écrit une trace (états, journal, DOM) que `compare.mjs` met en regard d'une autre. C'est ainsi qu'ont été validés les découpages de `main.ts` et de l'éditeur (docs/architecture.md).
+
+| Scénario | Ce qu'il couvre | Durée |
+|---|---|---|
+| `app` | Trainer simulé : connexion, sortie libre, ERG manuel, séance (intensité, pause, palier suivant, ERG relâché puis repris), arrêt, récapitulatif, perte du trainer en pleine sortie et reprise | ~2 min |
+| `gpu` | Perte du contexte WebGL de la vue 3D : trois reprises sur un canevas neuf, puis renoncement | ~15 s |
+| `editor` | Écran Séances, sur ordinateur et sur iPhone en paysage (844 × 390, plein écran) : étagère, glisser-déposer, clavier, annuler/rétablir, enregistrement, bibliothèque, saisie exacte | ~60 s |
+
+Aucune connexion Bluetooth ni compte n'est nécessaire : le trainer est le simulateur de l'application, et le serveur de comptes est simulé (visiteur déconnecté).
+
+## Installation
+
+Playwright n'est pas une dépendance du projet (comme pour [tools/audit](../audit/README.md)) :
+
+```
+npm i --no-save playwright
+npx playwright install chromium     # si aucun Chromium n'est déjà installé
+```
+
+## Lancer
+
+```
+npm run e2e                          # les trois scénarios
+npm run e2e -- editor                # un seul (app, gpu, editor)
+npm run e2e -- --out .e2e/avant      # choisir le dossier des traces (défaut : .e2e/last)
+npm run e2e -- --url http://localhost:5173/   # contre un serveur déjà lancé
+```
+
+Sans `--url`, le serveur de dev est lancé sur le port 5199 puis arrêté. Le code de sortie est non nul s'il y a un échec ; les échecs sont listés avec l'étape et la valeur trouvée. Les traces vont dans `.e2e/` (ignoré par git).
+
+## Comparer avant et après une refonte
+
+```
+git stash                            # ou : git checkout <commit-d-avant>
+npm run e2e -- --out .e2e/avant
+git stash pop                        # ou : git checkout -
+npm run e2e -- --out .e2e/apres
+npm run e2e:compare -- .e2e/avant .e2e/apres
+```
+
+La comparaison ignore ce qui varie d'une exécution à l'autre : les chiffres du journal, l'ordre des lignes (la ligne « rendu 3D » surtout), le HUD en direct, les UUID, et le fond animé de l'écran Séances. Pour `editor`, le **DOM complet** de l'écran est comparé à chaque étape : une refonte qui ne doit rien changer à l'affichage doit sortir « identique ».
+
+Sous Windows, `git stash pop` remet les fichiers en fins de ligne CRLF ; sans conséquence pour les scénarios.
+
+## Écrire ou modifier un scénario
+
+- Un scénario est un module `scenarios/<nom>.cjs` qui rend `{ trace, failures }` (voir `lib.cjs` : `openPage`, `Steps`). `Steps.mark(étiquette, attente)` prend un instantané et vérifie l'attente : un objet `{ champ: valeur | RegExp | fonction }`, ou une fonction `(instantané, précédent, relevé) => message d'erreur`.
+- Rendre les attentes sur ce que le geste **fait**, pas sur des chiffres qui dépendent de la FTP ou des modèles livrés (sauf si c'est le but).
+- Pour une attente qui dépend d'un délai (reconnexion du trainer simulé), attendre la condition (`waitText`) plutôt qu'une durée fixe.
+- Les récapitulatifs ne s'ouvrent qu'au-delà de 60 s de sortie enregistrée : le scénario `app` attend (`waitRecording`) que le bouton d'export affiche 62 s.
+- Le HUD ne se met à jour que sur l'écran Sortie (`#sortie`).
+- iPhone : toujours en plein écran (844 × 390 en paysage), jamais dans la fenêtre Safari (voir CLAUDE.md).
+
+Ces scénarios ne tournent pas dans la CI : ils demandent un Chromium et durent plus de deux minutes.
