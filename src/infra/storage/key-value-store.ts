@@ -1,5 +1,4 @@
-/** Ce que l'application demande à un stockage de clés : le `Storage` du navigateur le remplit, une mémoire aussi (tests). */
-export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 
 /** Stockage du navigateur s'il est utilisable ; sinon une mémoire de session (navigation privée, stockage bloqué). */
 export function browserStore(): KeyValueStore {

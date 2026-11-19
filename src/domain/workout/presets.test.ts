@@ -3,7 +3,7 @@ import { BlockLibrary } from './block-library';
 import { validateBlocks, type EditorBlock } from './blocks';
 import { zoneOf } from './profile';
 import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, mainPower, PRESET_CATEGORIES, summarizeBlocks } from './presets';
-import type { KeyValueStore } from '../../infra/storage/key-value-store';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 
 function memoryStore(): KeyValueStore {
   const m = new Map<string, string>();

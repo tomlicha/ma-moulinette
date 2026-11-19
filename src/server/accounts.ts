@@ -6,14 +6,15 @@
  * le coureur le valide ou le change. Les conditions de l'API Strava interdisent de montrer à un autre utilisateur les
  * données d'un athlète ; on ne montre donc ni photo ni activité Strava.
  */
+import type { User } from '../shared/protocol/user';
 import { authorizeUrl, exchangeCode, StravaError, type ClientConfig, type Fetch, type Tokens } from '../infra/export/strava/api';
-import { hasCsrfHeader } from '../infra/net/csrf';
+import { hasCsrfHeader } from '../shared/protocol/csrf';
 
 export const AUTH_PREFIX = '/api/auth/';
 export const SESSION_COOKIE = 'mm_session';
 const OAUTH_COOKIE = 'mm_oauth';
-/** Même en-tête anti-CSRF que la passerelle Strava et la synchronisation (src/infra/net/csrf.ts). */
-export { CSRF_HEADER } from '../infra/net/csrf';
+/** Même en-tête anti-CSRF que la passerelle Strava et la synchronisation (src/shared/protocol/csrf.ts). */
+export { CSRF_HEADER } from '../shared/protocol/csrf';
 export const SESSION_TTL_S = 30 * 24 * 3600;
 const OAUTH_TTL_S = 600;
 /**
@@ -25,12 +26,7 @@ export const NATIVE_RETURN = 'moulinette://auth';
 const TICKET_TTL_S = 120;
 export const NAME_MAX = 32;
 
-export interface User {
-  id: string;
-  displayName: string;
-  /** Faux tant que le coureur n'a pas validé son nom : il n'apparaît pas aux autres avant. */
-  nameConfirmed: boolean;
-}
+export type { User };
 
 export type Provider = 'strava' | 'dev';
 

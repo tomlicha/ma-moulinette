@@ -1,5 +1,5 @@
-import { browserStore, type KeyValueStore } from '../../infra/storage/key-value-store';
-import type { SyncJournal } from '../../infra/sync/journal';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
+import type { ChangeJournal } from './change-journal';
 import type { EditorBlock } from './blocks';
 
 export interface SavedBlock {
@@ -20,9 +20,9 @@ export const blockBody = (b: SavedBlock) => ({ name: b.name, blocks: b.blocks })
  */
 export class BlockLibrary {
   constructor(
-    private readonly store: KeyValueStore = browserStore(),
+    private readonly store: KeyValueStore,
     private readonly newId: () => string = () => crypto.randomUUID(),
-    private readonly journal?: Pick<SyncJournal, 'record'>,
+    private readonly journal?: ChangeJournal,
   ) {}
 
   list(): SavedBlock[] {

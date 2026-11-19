@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { KeyValueStore } from '../infra/storage/key-value-store';
+import type { KeyValueStore } from '../shared/util/key-value-store';
 import { SettingsStore } from './settings-store';
 
 function memory(initial: Record<string, string> = {}): KeyValueStore & { data: Map<string, string> } {

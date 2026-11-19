@@ -15,7 +15,7 @@ import {
 import { WorkoutLibrary } from './library';
 import { parseErgMrc } from './parse-erg';
 import { parseZwo } from './parse-zwo';
-import type { KeyValueStore } from '../../infra/storage/key-value-store';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 
 const ALL: BlockType[] = ['warmup', 'steady', 'intervals', 'ramp', 'cooldown', 'free'];
 

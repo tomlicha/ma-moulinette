@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canRecallDevices, DeviceRegistry, recallDevices } from './device-registry';
-import type { KeyValueStore } from '../storage/key-value-store';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 import { HeartRateMonitor } from './heart-rate-monitor';
 import { WebBluetoothTrainer } from './ble/web-bluetooth';
 import { FakeChar, FakeDevice, FakeService, install, uuid } from './testing/fake-gatt';

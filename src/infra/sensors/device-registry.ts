@@ -1,5 +1,6 @@
 import { webBluetoothAvailable } from './ble/gatt-device';
-import { browserStore, type KeyValueStore } from '../storage/key-value-store';
+import { browserStore } from '../storage/key-value-store';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 
 export type DeviceRole = 'trainer' | 'hr';
 
