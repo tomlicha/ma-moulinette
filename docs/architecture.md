@@ -39,7 +39,7 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 ```
 src/
 ├─ main.ts            racine de composition (encore volumineuse : voir « Reste à faire »)
-├─ app/               SensorReadings, SettingsStore, GradeController
+├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession
 ├─ domain/
 │  ├─ sim/            physique, Ride, Journey, aspiration, vitesses virtuelles, lissage de la pente
 │  ├─ course/         réseau routier, parcours, vélodrome, données des parcours (courses/)
@@ -66,6 +66,11 @@ Les classes de `app/` ont chacune une seule raison de changer :
 | `SensorReadings` | retenir les dernières mesures des capteurs et leur fraîcheur | d'où elles viennent, à quoi elles servent |
 | `SettingsStore` | lire et écrire FTP, masse, protocole de pilotage, avec clés et bornes | le DOM, la synchronisation |
 | `GradeController` | décider quelle pente envoyer au trainer et quand (lissage, braquet virtuel, cadence d'envoi, état ERG) | envoyer quoi que ce soit : il rend la consigne |
+| `TrainerController` | le trainer branché : connexion, état, commandes (ERG, pente), reprise après un envoi raté | la sortie, la séance, l'écran |
+| `RideSession` | une sortie virtuelle : départ, pause faute de trainer, reprise, arrêt, pas de 100 ms, aspiration | l'écran, la vue 3D, le réseau, l'export : ils s'abonnent à `tick` |
+| `WorkoutSession` | la séance choisie et son déroulement ; la consigne ERG qu'elle impose | la sortie (l'appelant démarre l'une avec l'autre), l'export, le récapitulatif |
+
+Ces classes se parlent par **événements typés** (`shared/util/typed-emitter.ts`) : `RideSession` publie `started`, `tick`, `paused`, `resumed`, `stopped` ; `TrainerController` publie `state` et `erg` ; `WorkoutSession` publie `state`, `changed`, `started`, `stepped`, `completing`, `ended`. Les écouteurs sont appelés dans l'ordre d'abonnement, de façon synchrone : l'ordre des effets reste lisible. `main.ts` y branche la vue 3D, la salle, l'export, le récapitulatif et les boutons.
 
 ## Règles
 
@@ -87,9 +92,8 @@ Les classes de `app/` ont chacune une seule raison de changer :
 
 ## Reste à faire
 
-`main.ts` fait encore ~1400 lignes : il garde le cycle de vie de la sortie, la séance, les appareils et le chargement de la vue 3D. Découpage prévu :
+`main.ts` fait encore ~1200 lignes : il garde surtout le DOM (boutons, champs, écrans), les appareils (cardio, reconnexion au lancement) et le chargement de la vue 3D. Découpage prévu :
 
-1. `TrainerController` (connexion, états, envoi ERG/pente), `RideSession` (début, pause, reprise, arrêt, pas de 100 ms), `WorkoutSession` (runner, suivi ERG), avec un bus d'événements pour le cycle de vie (`ride:tick`, `ride:stopped`, `workout:finished`).
-2. `DeviceManager`, `RideViewLoader`, et les `setupX()` de `ui/` transformés en classes `View` qui possèdent leur DOM (plus de `$('…')` dans `main.ts`).
-3. `ui/editor/workout-editor.ts` (1600 lignes) en `EditorState`, `TimelineView`, `BlockPalette`, `Inspector`, `DragController`.
-4. Règle d'imports en `error` une fois la dette à zéro.
+1. `DeviceManager`, `RideViewLoader`, et les `setupX()` de `ui/` transformés en classes `View` qui possèdent leur DOM (plus de `$('…')` dans `main.ts`).
+2. `ui/editor/workout-editor.ts` (1600 lignes) en `EditorState`, `TimelineView`, `BlockPalette`, `Inspector`, `DragController`.
+3. Règle d'imports en `error` une fois la dette à zéro.

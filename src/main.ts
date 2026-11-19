@@ -19,10 +19,9 @@ import { setupTelemetry } from './infra/telemetry/wiring';
 import { COL_DES_ERABLES } from './domain/course/courses/col-des-erables';
 import { Journey } from './domain/sim/journey';
 import type { ConnectionState } from './infra/sensors/types';
-import { ErgFollower } from './domain/workout/erg-follower';
-import { STEP_LABEL, type Workout } from './domain/workout/model';
+import type { Workout } from './domain/workout/model';
 import { profileShapes } from './domain/workout/profile';
-import { parseWorkout, WorkoutRunner, type WorkoutState } from './domain/workout/runner';
+import { parseWorkout } from './domain/workout/runner';
 import { nextIntervalGate } from './domain/workout/gate';
 import { canRecallDevices, DeviceRegistry, recallDevices, type DeviceRole } from './infra/sensors/device-registry';
 import { browserStore } from './infra/storage/key-value-store';
@@ -33,6 +32,7 @@ import { setupRouter } from './ui/shared/router';
 import { normalizeFtp, normalizeMass } from './domain/sim/rider-limits';
 import { GradeController } from './app/grade-controller';
 import { RideSession } from './app/ride-session';
+import { WorkoutSession } from './app/workout-session';
 import { SensorReadings } from './app/sensor-readings';
 import { SettingsStore } from './app/settings-store';
 import { TrainerController } from './app/trainer-controller';
@@ -145,7 +145,6 @@ const rideSession = new RideSession({
   gearing: () => gears.state(),
   riders: () => world.riders(),
 });
-let lastWoState: WorkoutState | undefined;
 let view: RideView | undefined;
 /** Construction du monde 3D, en tâche de fond dès l'ouverture : elle ne presse que si l'on ouvre la sortie avant la fin. */
 let viewBuild = new Background();
@@ -269,11 +268,11 @@ hub.on('raw', (src, data) => {
  */
 let autoStart = false;
 /** Ne s'arme que si rien ne tourne : revenir sur l'écran en pleine sortie ne doit pas lancer une séance. */
-const armAutoStart = () => (autoStart = !rideSession.active && !runner);
+const armAutoStart = () => (autoStart = !rideSession.active && !workoutSession.running);
 function maybeAutoStart(m: { powerW?: number; cadenceRpm?: number }) {
-  if (!autoStart || runner || router.current() !== 'sortie') return;
+  if (!autoStart || workoutSession.running || router.current() !== 'sortie') return;
   if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
-  if (workout && !workoutStartBlock()) {
+  if (workoutSession.workout && !workoutStartBlock()) {
     log('premier coup de pédale : démarrage de la séance');
     startWorkout();
   } else if (!rideSession.active && trainerCtl.connected) {
@@ -343,7 +342,7 @@ rideBtn.addEventListener('click', () => {
   if (!rideSession.active) return startRide();
   stopRide();
   // Arrêt volontaire, hors séance : la sortie est figée et son récapitulatif s'affiche (docs/design/recap.md).
-  if (runner) return;
+  if (workoutSession.running) return;
   exporter.onRideStopped();
   offerRecap();
 });
@@ -391,10 +390,7 @@ disconnectBtn.addEventListener('click', () => trainerCtl.disconnect());
 ergBtn.addEventListener('click', async () => {
   if (trainerCtl.ergActive) {
     trainerCtl.setErgActive(false);
-    if (runner) {
-      woErgOptOut = true;
-      log('ERG désengagé : la séance continue sans imposer de consigne');
-    }
+    if (workoutSession.running) workoutSession.optOutErg();
     if (rideSession.active) {
       log("ERG désengagé : pente du parcours reprise");
     } else {
@@ -405,18 +401,13 @@ ergBtn.addEventListener('click', async () => {
     return;
   }
   // Pendant une séance, réengager rend la main à la séance, qui renvoie aussitôt sa consigne du moment.
-  if (runner) {
-    woErgOptOut = false;
-    follower.reset();
-    log('ERG réengagé : la séance reprend sa consigne');
-    return tickWorkout();
-  }
+  if (workoutSession.running) return workoutSession.reengageErg();
   const w = Number(ergInput.value);
   await trainerCtl.engageErg(w);
 });
 // Changer la cible pendant que l'ERG est engagé l'applique aussitôt.
 ergInput.addEventListener('change', () => {
-  if (!trainerCtl.ergActive || runner) return; // en séance, c'est la séance qui fixe la consigne
+  if (!trainerCtl.ergActive || workoutSession.running) return; // en séance, c'est la séance qui fixe la consigne
   const w = Number(ergInput.value);
   void trainerCtl.retargetErg(w);
 });
@@ -496,17 +487,14 @@ const NO_WORKOUT = "Aucune séance choisie : choisis-en une sur l'accueil.";
 const PROFILE_W = 1000;
 const PROFILE_H = 120;
 
-const follower = new ErgFollower();
-let workout: Workout | undefined;
-let runner: WorkoutRunner | undefined;
-let woTimer: ReturnType<typeof setInterval> | undefined;
-let woPaused = false;
-let woLastTick = 0;
-/** L'ERG a été désengagé à la main pendant la séance : elle continue sans imposer de consigne jusqu'au réengagement. */
-let woErgOptOut = false;
-let woSending = false;
-/** Après un envoi raté, on attend avant de réessayer pour ne pas marteler le trainer. */
-let woHoldUntil = 0;
+/** La séance structurée : la séance choisie, son déroulement et la consigne ERG qu'elle impose au trainer. */
+const workoutSession = new WorkoutSession({
+  trainer: trainerCtl,
+  ftpW: () => readFtp(),
+  rideActive: () => rideSession.active,
+  manualGradePct: () => Number(gradeInput.value),
+  log,
+});
 
 const savedFtp = settings.ftpW();
 if (savedFtp !== undefined) woFtp.value = String(savedFtp);
@@ -523,7 +511,7 @@ let refreshEditorRide: (() => void) | undefined;
 /** Ce qui empêche de démarrer une séance, hors le choix de la séance : séance déjà en cours, trainer absent ou sans ERG. */
 function workoutStartBlock(): string | BlockReason | undefined {
   const canErg = trainerCtl.canErg;
-  return runner
+  return workoutSession.running
     ? 'La séance est déjà en cours.'
     : !trainerCtl.connected
       ? needTrainer('La séance pilote la résistance de ton home trainer : connecte-le d’abord.')
@@ -540,6 +528,8 @@ function showIntensity(fraction: number) {
 }
 
 function refreshWorkoutButtons() {
+  const { runner, workout } = workoutSession;
+  const woPaused = workoutSession.paused;
   const startReason = !workout && !runner ? 'Choisis d’abord une séance dans la liste.' : workoutStartBlock();
   setBlocked(woStart, startReason);
   setBlocked(homeWoStart, startReason);
@@ -557,6 +547,7 @@ function refreshWorkoutButtons() {
 }
 
 function renderProfile() {
+  const workout = workoutSession.workout;
   homeShapes.replaceChildren();
   $('home-wo-meta').textContent = workout ? `${workout.name} · ${fmtTime(workout.steps.reduce((t, s) => t + s.durationS, 0))}` : 'Aucune séance choisie.';
   if (!workout) return;
@@ -599,116 +590,50 @@ function refreshWorkoutChoices() {
 }
 
 function chooseWorkout(value: string) {
-  if (runner) {
+  if (workoutSession.running) {
     log("séance en cours : l'arrêter avant d'en choisir une autre");
     return;
   }
   homeSelect.value = value;
   const w = value ? workoutFromChoice(value) : undefined;
+  workoutSession.select(w);
   if (!w) {
-    workout = undefined;
     $('wo-name').textContent = NO_WORKOUT;
     renderProfile();
-    renderWorkout(undefined);
     refreshWorkoutButtons();
     return;
   }
-  workout = w;
   armAutoStart();
-  for (const x of workout.warnings) log(`séance : ${x}`);
-  const total = workout.steps.reduce((t, s) => t + s.durationS, 0);
-  $('wo-name').textContent = `${workout.name} · ${fmtTime(total)}${workout.description ? ` · ${workout.description}` : ''}`;
+  for (const x of w.warnings) log(`séance : ${x}`);
+  const total = w.steps.reduce((t, s) => t + s.durationS, 0);
+  $('wo-name').textContent = `${w.name} · ${fmtTime(total)}${w.description ? ` · ${w.description}` : ''}`;
   renderProfile();
-  renderWorkout(undefined);
   refreshWorkoutButtons();
-  log(`séance choisie : ${workout.name} (${workout.steps.length} paliers, ${fmtTime(total)})`);
+  log(`séance choisie : ${w.name} (${w.steps.length} paliers, ${fmtTime(total)})`);
 }
 
-/** L'état de la séance est affiché par le HUD (palier, profil, curseur, message) : on ne fait que le garder pour lui. */
-function renderWorkout(s: WorkoutState | undefined) {
-  lastWoState = s;
+// L'état de la séance est affiché par le HUD (palier, profil, curseur, message) ; ici, seule la porte 3D du palier suivant.
+workoutSession.on('state', (s) => {
   // Porte du palier suivant, dans la scène 3D (docs/design/hud.md) : seulement en séance, sortie en cours.
   const live = rideSession.snapshot;
-  view?.setGate(runner && s && live ? nextIntervalGate(s, runner.ftpW, live.speedKmh, woPaused) : undefined);
-}
-
-/** Relâche l'ERG pris par la séance : hors sortie virtuelle, le trainer ne le quitte qu'avec une consigne de pente. */
-function releaseErg(reason: string) {
-  trainerCtl.releaseErg(reason, { rideActive: rideSession.active, gradePct: Number(gradeInput.value) });
-}
-
-function tickWorkout() {
-  if (!runner) return;
-  const now = performance.now();
-  const dt = (now - woLastTick) / 1000;
-  woLastTick = now;
-  // Sans trainer connecté, le temps de séance s'arrête : on ne compte pas un palier que personne ne pédale.
-  const running = !woPaused && trainerCtl.connected;
-  const s = running ? runner.advance(dt) : runner.state();
-  renderWorkout(s);
-  if (s.done) {
-    const done = { workout: runner.workout, ftpW: runner.ftpW };
-    exporter.onWorkoutFinished(); // l'export s'arrêtera à la fin du dernier palier (infra/export/wiring.ts)
-    finishWorkout('séance terminée');
-    return offerRecap(done);
-  }
-  // Consigne et palier notés dans l'enregistrement : le récapitulatif en tire la courbe et les blocs tenus.
-  if (running) exporter.onWorkoutState(s.targetW, s.stepIndex);
-  if (!running || woErgOptOut || woSending || now < woHoldUntil) return;
-
-  if (s.targetW === undefined) {
-    follower.reset();
-    return releaseErg(`palier ${STEP_LABEL[s.step.kind].toLowerCase()} : ERG relâché`);
-  }
-  if (!trainerCtl.ergActive) follower.reset(); // ERG relâché ailleurs (fin de sortie, reconnexion) : on le reprend aussitôt
-  const w = follower.next(s, now);
-  if (w === undefined) return;
-  woSending = true;
-  trainerCtl
-    .setTargetPower(w)
-    .then(() => {
-      if (!trainerCtl.ergActive) {
-        trainerCtl.setErgActive(true);
-        log(`séance : ERG engagé à ${w} W`);
-      }
-    })
-    .catch((e) => {
-      log(`séance : consigne ${w} W non envoyée (${e instanceof Error ? e.message : e})`);
-      follower.reset();
-      woHoldUntil = performance.now() + 2000;
-    })
-    .finally(() => (woSending = false));
-}
+  const runner = workoutSession.runner;
+  view?.setGate(runner && s && live ? nextIntervalGate(s, runner.ftpW, live.speedKmh, workoutSession.paused) : undefined);
+});
+workoutSession.on('changed', refreshWorkoutButtons);
+workoutSession.on('intensity', showIntensity);
+workoutSession.on('started', (name) => exporter.onWorkoutStarted(name));
+workoutSession.on('stepped', (targetW, stepIndex) => exporter.onWorkoutState(targetW, stepIndex));
+workoutSession.on('completing', () => exporter.onWorkoutFinished()); // l'export s'arrêtera à la fin du dernier palier (infra/export/wiring.ts)
+workoutSession.on('ended', ({ completed }) => {
+  if (completed) offerRecap(completed);
+});
 
 function startWorkout() {
-  if (!workout) return;
+  if (!workoutSession.workout) return;
   autoStart = false;
   // La séance se roule sur le parcours : sans sortie en cours, le cycliste resterait immobile dans la vue.
   if (!rideSession.active && trainerCtl.connected) startRide();
-  runner = new WorkoutRunner(workout, readFtp());
-  woPaused = false;
-  woErgOptOut = false;
-  woHoldUntil = 0;
-  follower.reset();
-  woLastTick = performance.now();
-  woTimer = setInterval(tickWorkout, 250);
-  showIntensity(1);
-  refreshWorkoutButtons();
-  log(`séance démarrée : ${workout.name}, FTP ${runner.ftpW} W`);
-  exporter.onWorkoutStarted(workout.name);
-  tickWorkout();
-}
-
-function finishWorkout(reason: string) {
-  if (!runner) return;
-  clearInterval(woTimer);
-  runner = undefined;
-  woPaused = false;
-  woErgOptOut = false;
-  if (trainerCtl.ergActive) releaseErg(reason);
-  else log(reason);
-  renderWorkout(undefined);
-  refreshWorkoutButtons();
+  workoutSession.start();
 }
 
 homeSelect.addEventListener('change', () => chooseWorkout(homeSelect.value));
@@ -727,7 +652,7 @@ homeRideBtn.addEventListener('click', () => {
 });
 /** La FTP a changé (ici ou sur un autre appareil) : séance en cours, profil et éditeur suivent. */
 function ftpChanged() {
-  if (runner) runner.ftpW = readFtp();
+  workoutSession.setFtp(readFtp());
   renderProfile();
   editor.refresh();
 }
@@ -750,30 +675,14 @@ for (const [quick, target] of [
 ] as const) {
   quick.addEventListener('click', () => target.click());
 }
-woPause.addEventListener('click', () => {
-  woPaused = !woPaused;
-  follower.reset();
-  log(woPaused ? 'séance en pause' : 'séance reprise');
-  refreshWorkoutButtons();
-});
-woSkip.addEventListener('click', () => {
-  if (!runner) return;
-  const s = runner.skip();
-  follower.reset();
-  log(`séance : palier suivant (${STEP_LABEL[s.step.kind]})`);
-  tickWorkout();
-});
-woStop.addEventListener('click', () => finishWorkout('séance arrêtée'));
+woPause.addEventListener('click', () => workoutSession.togglePause());
+woSkip.addEventListener('click', () => workoutSession.skip());
+woStop.addEventListener('click', () => workoutSession.stop());
 for (const [btn, delta] of [
   [woEasier, -0.05],
   [woHarder, 0.05],
 ] as const) {
-  btn.addEventListener('click', () => {
-    if (!runner) return;
-    runner.intensity = Math.min(1.5, Math.max(0.5, Math.round((runner.intensity + delta) * 100) / 100));
-    showIntensity(runner.intensity);
-    follower.reset();
-  });
+  btn.addEventListener('click', () => workoutSession.adjustIntensity(delta));
 }
 
 // --- Écrans, appareils connus et reconnexion au lancement ---
@@ -789,7 +698,7 @@ const editor = setupWorkoutEditor({
   currentChoice: () => homeSelect.value,
   // Pendant une séance, le choix reste celui de la séance en cours : on ne le change pas en parcourant la bibliothèque.
   onFocus: (key) => {
-    if (!runner) chooseWorkout(key);
+    if (!workoutSession.running) chooseWorkout(key);
   },
   onRide: (key) => {
     router.go('sortie');
@@ -1051,6 +960,8 @@ const hud = new RideHud($('hud'), journey, { flat: quality === 'low' });
 function renderHud() {
   if (router.current() !== 'sortie') return;
   const live = rideSession.snapshot; // la sortie en cours ; `undefined` hors sortie
+  const runner = workoutSession.runner;
+  const woState = workoutSession.state;
   hud.update({
     powerW: readings.averagePowerW(),
     heartRateBpm: readings.heartRateBpm(),
@@ -1059,8 +970,8 @@ function renderHud() {
     speedKmh: live ? live.speedKmh : readings.speedKmh(),
     ftpW: runner?.ftpW ?? readFtp(),
     ride: live ? { snapshot: live, climbM: rideSession.climbM } : undefined,
-    workout: runner && lastWoState ? { workout: runner.workout, state: lastWoState, ftpW: runner.ftpW, intensity: runner.intensity } : undefined,
-    message: runner ? lastWoState?.message : undefined,
+    workout: runner && woState ? { workout: runner.workout, state: woState, ftpW: runner.ftpW, intensity: runner.intensity } : undefined,
+    message: runner ? woState?.message : undefined,
     control: trainerCtl.ergActive ? 'erg' : live && trainerCtl.capabilities?.simulation ? 'sim' : undefined,
     trainerConnected: roleState.trainer === 'connected',
     heartRateConnected: roleState.hr === 'connected',
@@ -1242,7 +1153,7 @@ function workoutsChanged(ids: Set<string>) {
   const before = homeSelect.value;
   refreshWorkoutChoices();
   const changed = homeSelect.value !== before || (before.startsWith('lib:') && (ids.size === 0 || ids.has(before.slice(4))));
-  if (changed && !runner) chooseWorkout(homeSelect.value);
+  if (changed && !workoutSession.running) chooseWorkout(homeSelect.value);
 }
 const sync = createSyncClient({
   journal: syncJournal,
