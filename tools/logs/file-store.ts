@@ -1,6 +1,6 @@
 import { appendFile, readFile, rename, stat } from 'node:fs/promises';
-import type { LogStore } from '../../src/telemetry/receiver.ts';
-import type { StoredReport } from '../../src/telemetry/report.ts';
+import type { LogStore } from '../../src/infra/telemetry/receiver.ts';
+import type { StoredReport } from '../../src/infra/telemetry/report.ts';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 

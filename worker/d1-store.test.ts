@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import type { StoredReport } from '../src/telemetry/report.ts';
+import type { StoredReport } from '../src/infra/telemetry/report.ts';
 import { createD1DeviceStore, createD1Store, type D1Database } from './d1-store.ts';
 
 /** D1 simulé avec le SQLite intégré à Node : exécute la vraie migration et le vrai SQL du magasin. */

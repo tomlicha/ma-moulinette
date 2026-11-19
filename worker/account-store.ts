@@ -1,4 +1,4 @@
-import type { Tokens } from '../src/export/strava/api.ts';
+import type { Tokens } from '../src/infra/export/strava/api.ts';
 import type { AccountStore, Provider, User } from '../src/server/accounts.ts';
 import type { D1Database } from './d1-store.ts';
 

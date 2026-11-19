@@ -8,17 +8,17 @@ La boucle de 6 km (une montée à 5 %, sa descente, sur un cercle) ne donnait ni
 
 ## Le modèle : un réseau statique, un trajet qui avance
 
-- **`RoadNetwork`** ([`src/sim/network.ts`](../../src/sim/network.ts)) : des nœuds (carrefours) et des routes. Une route est une courbe en plan (x vers l'est, z vers le sud, en m) et un profil d'altitude lisse (interpolation monotone) ; les altitudes d'extrémité sont celles des nœuds, donc le réseau est continu par construction. Les 20 derniers mètres de chaque extrémité sont plats : la pente envoyée au trainer ne saute pas à un carrefour.
-- **`Journey`** ([`src/sim/journey.ts`](../../src/sim/journey.ts)) : les routes réellement empruntées, mises bout à bout. Pour la simulation c'est un parcours à distance monotone (`altitudeAt`, `gradeAt`), exactement ce que `Ride`, l'export FIT et le récapitulatif consomment : rien d'autre n'a changé côté simulation. L'interface commune est `Course` ([`src/sim/course.ts`](../../src/sim/course.ts)), que remplit aussi l'ancienne `Route`.
+- **`RoadNetwork`** ([`src/domain/course/network.ts`](../../src/domain/course/network.ts)) : des nœuds (carrefours) et des routes. Une route est une courbe en plan (x vers l'est, z vers le sud, en m) et un profil d'altitude lisse (interpolation monotone) ; les altitudes d'extrémité sont celles des nœuds, donc le réseau est continu par construction. Les 20 derniers mètres de chaque extrémité sont plats : la pente envoyée au trainer ne saute pas à un carrefour.
+- **`Journey`** ([`src/domain/sim/journey.ts`](../../src/domain/sim/journey.ts)) : les routes réellement empruntées, mises bout à bout. Pour la simulation c'est un parcours à distance monotone (`altitudeAt`, `gradeAt`), exactement ce que `Ride`, l'export FIT et le récapitulatif consomment : rien d'autre n'a changé côté simulation. L'interface commune est `Course` ([`src/domain/course/course.ts`](../../src/domain/course/course.ts)), que remplit aussi l'ancienne `Route`.
 - **`validateNetwork`** : le contrôle de cohérence exigé par les tests. Pente maximale 10 % (plafond du KICKR ROLLR), aucun cul-de-sac, routes non voisines éloignées d'au moins 60 m, au moins 35° entre deux routes d'un carrefour, route d'au moins 150 m.
 
 ### Le monde des Érables et ses deux parcours
 
-Un seul réseau de 48,0 km (13 nœuds, 19 routes, vélodrome et Route arc-en-ciel compris), des parcours qui s'y superposent. Données : [`src/sim/courses/col-des-erables.ts`](../../src/sim/courses/col-des-erables.ts), avec les repères de décor (arches, clôtures, Marie, Richard).
+Un seul réseau de 48,0 km (13 nœuds, 19 routes, vélodrome et Route arc-en-ciel compris), des parcours qui s'y superposent. Données : [`src/domain/course/courses/col-des-erables.ts`](../../src/domain/course/courses/col-des-erables.ts), avec les repères de décor (arches, clôtures, Marie, Richard).
 
 ![Carte des parcours](parcours-carte.svg)
 
-La carte est générée d'après les données du jeu : `npm run map` la réécrit quand les routes changent ([`network-map.ts`](../../src/sim/network-map.ts)).
+La carte est générée d'après les données du jeu : `npm run map` la réécrit quand les routes changent ([`network-map.ts`](../../src/domain/course/network-map.ts)).
 
 Un **parcours** (`CourseDef`) est une boucle recommandée : une suite de routes bout à bout, qui se referme au départ. Le cycliste peut la quitter à chaque carrefour, mais c'est sa route qui est proposée d'office (et que le profil du HUD annonce) ; sans parcours, on irait tout droit. Les routes d'un parcours se parcourent dans leur sens de définition.
 
@@ -33,9 +33,9 @@ Les deux parcours **se croisent** : ils partagent La Vallée et passent par les 
 
 Ajouter un parcours : écrire ses routes dans les données (elles doivent passer `validateNetwork`), puis une entrée `courses` dont la suite de routes s'enchaîne ; le constructeur de `RoadNetwork` refuse une boucle qui ne se referme pas. Le monde 3D ne change pas.
 
-**Choix.** C'est **« Rouler » qui ouvre le menu de choix du parcours** : la carte « Monde » de l'accueil n'a pas la place d'un sélecteur (sur un iPhone en paysage elle ne fait que 300 px de large), alors que le menu prend celle dont il a besoin. Une boîte de dialogue avec une grande touche par parcours (nom, longueur et montée, description, profil d'altitude à l'échelle commune du réseau), la carte du réseau à droite, et « Partir » qui lance la sortie. Le parcours retenu est gardé d'une visite à l'autre ; l'accueil en affiche le nom, la description et la scène qui lui ressemble. Si une sortie est déjà en cours, « Rouler » la reprend sans menu : on ne change pas de parcours en route (ce serait repartir du village). Une sortie repart du début du parcours choisi, et « Démarrer la séance » prend le parcours retenu. Code : [`course-picker.ts`](../../src/ui/course-picker.ts), logique dans [`course-selection.ts`](../../src/ui/course-selection.ts).
+**Choix.** C'est **« Rouler » qui ouvre le menu de choix du parcours** : la carte « Monde » de l'accueil n'a pas la place d'un sélecteur (sur un iPhone en paysage elle ne fait que 300 px de large), alors que le menu prend celle dont il a besoin. Une boîte de dialogue avec une grande touche par parcours (nom, longueur et montée, description, profil d'altitude à l'échelle commune du réseau), la carte du réseau à droite, et « Partir » qui lance la sortie. Le parcours retenu est gardé d'une visite à l'autre ; l'accueil en affiche le nom, la description et la scène qui lui ressemble. Si une sortie est déjà en cours, « Rouler » la reprend sans menu : on ne change pas de parcours en route (ce serait repartir du village). Une sortie repart du début du parcours choisi, et « Démarrer la séance » prend le parcours retenu. Code : [`course-picker.ts`](../../src/ui/home/course-picker.ts), logique dans [`course-selection.ts`](../../src/ui/home/course-selection.ts).
 
-**Carte.** Dans le menu, une miniature du réseau : le parcours retenu en couleur, l'autre en retrait, les routes hors parcours en gris. Un clic l'ouvre en grand ([`course-map.ts`](../../src/ui/course-map.ts)) : noms et altitudes des carrefours, kilomètres de la boucle, sens de marche, Marie, Richard, et le profil d'altitude du parcours. Fermer : bouton, Échap ou clic sur le fond. La hauteur du dessin suit celle de la fenêtre (520 à 760 px) et la boîte défile en dessous. Les cartes viennent de [`network-map.ts`](../../src/sim/network-map.ts), les mêmes fonctions que la planche ci-dessus.
+**Carte.** Dans le menu, une miniature du réseau : le parcours retenu en couleur, l'autre en retrait, les routes hors parcours en gris. Un clic l'ouvre en grand ([`course-map.ts`](../../src/ui/home/course-map.ts)) : noms et altitudes des carrefours, kilomètres de la boucle, sens de marche, Marie, Richard, et le profil d'altitude du parcours. Fermer : bouton, Échap ou clic sur le fond. La hauteur du dessin suit celle de la fenêtre (520 à 760 px) et la boîte défile en dessous. Les cartes viennent de [`network-map.ts`](../../src/domain/course/network-map.ts), les mêmes fonctions que la planche ci-dessus.
 
 ### La Route arc-en-ciel
 
@@ -47,19 +47,19 @@ Ajouté le 17 novembre 2026. Le vélodrome de Roubaix (modèle et fête : [velod
 
 - **Venir** : au Moulin, prendre l'Allée du Vélodrome. Arrivé à la porte, on tourne à droite sur la piste sans rien choisir : c'est la seule route dans le bon sens.
 - **Tourner sans cesse** : la piste est faite de deux routes à sens unique, de la porte à la ligne d'arrivée et de la ligne à la porte (503 m le tour sur la ligne suivie). À la porte, tout droit (un tour de plus) est le choix par défaut : sans rien toucher, on tourne indéfiniment.
-- **Sortir** : pas de panneau « Carrefour » sur la piste (il revenait à chaque tour, 40 % du temps). Au pied de l'encart de droite, une touche **« Sortir du vélodrome → »** programme la sortie à la prochaine porte ; elle devient alors turquoise, « Sortie à 230 m ✕ », et un nouvel appui l'annule. Au clavier : flèche droite pour sortir, gauche pour rester. Une fois sorti, la consigne s'efface. Si la porte est à moins de 40 m (choix verrouillé), la sortie se fait au tour suivant. Code : `Journey.setTrackExit`, `trackExitInM`, [`ride-panel.ts`](../../src/ui/ride-panel.ts).
+- **Sortir** : pas de panneau « Carrefour » sur la piste (il revenait à chaque tour, 40 % du temps). Au pied de l'encart de droite, une touche **« Sortir du vélodrome → »** programme la sortie à la prochaine porte ; elle devient alors turquoise, « Sortie à 230 m ✕ », et un nouvel appui l'annule. Au clavier : flèche droite pour sortir, gauche pour rester. Une fois sorti, la consigne s'efface. Si la porte est à moins de 40 m (choix verrouillé), la sortie se fait au tour suivant. Code : `Journey.setTrackExit`, `trackExitInM`, [`ride-panel.ts`](../../src/ui/ride/ride-panel.ts).
 - **Tours** : chaque passage sur la ligne compte (`Journey.lapsAt`). Le tableau au bord de la piste, avant la ligne, affiche « TOURS » et le nombre bouclé ; l'écran géant aussi ; la cloche sonne (visuellement) trois secondes à chaque tour.
 - La ligne d'arrivée et la porte, vues de la piste, ne sont jamais annoncées.
 - **Depuis l'accueil** : le parcours « Vélodrome », troisième touche du menu « Rouler », part directement de la ligne d'arrivée.
 
-**Sur la carte** ([`network-map.ts`](../../src/sim/network-map.ts)), le vélodrome est un lieu, pas des routes :
+**Sur la carte** ([`network-map.ts`](../../src/domain/course/network-map.ts)), le vélodrome est un lieu, pas des routes :
 - **l'icône** (`velodromeIcon`) : piste à la couleur de son parcours, bord haut assombri pour le dévers, ligne peinte, bande bleue, pelouse rayée et terrain, damier d'arrivée, porte entre deux piliers où arrive l'allée, et tribune de brique au toit sombre avec son pavillon d'entrée ;
 - **un seul nom**, « Vélodrome », et dessous « piste de 500 m » avec l'altitude ;
 - la piste ni ses nœuds de porte et d'arrivée ne sont tracés, ni nommés, ni comptés comme carrefours ;
 - l'icône est plus grande que le vrai vélodrome (180 m font 33 px à cette échelle), et grossit encore sur la miniature ;
 - quand un autre parcours est mis en avant, elle passe en retrait comme les routes.
 
-**Données.** `NetworkDef.velodromes` place le site (centre de la pelouse, orientation, altitude). `VelodromeSite.roads()` ([`velodrome-track.ts`](../../src/sim/velodrome-track.ts)) en déduit les deux nœuds et les deux moitiés de piste, au tracé exact (`EdgeDef.path`, pas de lissage), à sens unique (`oneWay`) et marquées `surface: 'track'`. L'allée finit sur l'axe de la rampe (`accessPoint`), pour que la route du réseau et la rampe dessinée coïncident.
+**Données.** `NetworkDef.velodromes` place le site (centre de la pelouse, orientation, altitude). `VelodromeSite.roads()` ([`velodrome-track.ts`](../../src/domain/course/velodrome-track.ts)) en déduit les deux nœuds et les deux moitiés de piste, au tracé exact (`EdgeDef.path`, pas de lissage), à sens unique (`oneWay`) et marquées `surface: 'track'`. L'allée finit sur l'axe de la rampe (`accessPoint`), pour que la route du réseau et la rampe dessinée coïncident.
 
 **Rendu.**
 - Le sol est aplani sur l'emprise du vélodrome (350 × 275 m), puis rejoint le relief en 90 m (`flatWeight`). Il passe 30 cm sous le modèle, pour qu'ils ne se battent pas à l'image.
@@ -86,14 +86,14 @@ Vue de référence `13-velodrome` (`shot=ride&route=allee-velodrome&d=3430`).
 
 ## Le monde 3D
 
-Le monde se déduit du réseau ([`src/render/world-layout.ts`](../../src/render/world-layout.ts)) : où est la route la plus proche, quelle est la hauteur du sol.
+Le monde se déduit du réseau ([`src/render/world/world-layout.ts`](../../src/render/world/world-layout.ts)) : où est la route la plus proche, quelle est la hauteur du sol.
 
 - **Sol** : sous la route et ses abords, l'altitude de la route (avec un creux de 25 cm sous la chaussée pour qu'elle reste au-dessus du maillage). Au loin, un relief fait de « versants » : chaque point de route soutient un versant de pente bornée (12 % près, 35 % au pied). Les collines montent vers le sommet et la vallée reste en contrebas. S'y ajoute un **relief propre** au pays, indépendant des routes : des croupes qui montent quand on s'éloigne de la chaussée (nul à 70 m d'une route, entier à 650 m), hautes de 100 m en plaine et de 200 m autour du col. Sans lui, le sol redescendait de chaque côté de toute route et le pays se lisait comme un plateau. Règle tenue par les tests : à moins de 250 m d'une route, jamais plus de 50 % de pente (pas de mur au bord de la chaussée ; 45 % mesurés) ; plus loin, jamais de paroi verticale (52 % mesurés).
-- **Morceaux** ([`src/render/terrain.ts`](../../src/render/terrain.ts)) : 128 m de côté, maille de 4 m près d'une route et du cycliste, 16 m ailleurs, jupe de 6 m contre les fissures, construits et libérés autour du cycliste (au plus 2 par image). Un relief lointain grossier couvre tout le réseau ; c'est un **minorant** du vrai sol (minimum sur le voisinage de chaque sommet), sinon son interpolation recouvre l'entaille de la route dans un versant.
-- **Décor** ([`src/render/decor.ts`](../../src/render/decor.ts)) : arbres et rochers semés par morceau, avec un générateur propre à chaque morceau (le même monde à chaque chargement), rejetés sur la chaussée et sur les pentes raides, plus rares avec l'altitude (limite des arbres vers 230 à 340 m).
-- **Forêts et prés** ([`src/render/vegetation.ts`](../../src/render/vegetation.ts)) : une carte du couvert forestier, en grandes masses de 300 à 800 m (40 % du pays). La forêt est dense, le pré presque nu, avec quelques arbres isolés au bord des routes. Les essences vont par bois entiers (sapins ou feuillus), les sapins dominent en altitude. Le sol lit la même carte : il s'assombrit sous la forêt, ce qui la montre de loin avant que ses arbres ne soient dessinés ; les pentes raides sont en roche.
+- **Morceaux** ([`src/render/world/terrain.ts`](../../src/render/world/terrain.ts)) : 128 m de côté, maille de 4 m près d'une route et du cycliste, 16 m ailleurs, jupe de 6 m contre les fissures, construits et libérés autour du cycliste (au plus 2 par image). Un relief lointain grossier couvre tout le réseau ; c'est un **minorant** du vrai sol (minimum sur le voisinage de chaque sommet), sinon son interpolation recouvre l'entaille de la route dans un versant.
+- **Décor** ([`src/render/world/decor.ts`](../../src/render/world/decor.ts)) : arbres et rochers semés par morceau, avec un générateur propre à chaque morceau (le même monde à chaque chargement), rejetés sur la chaussée et sur les pentes raides, plus rares avec l'altitude (limite des arbres vers 230 à 340 m).
+- **Forêts et prés** ([`src/render/world/vegetation.ts`](../../src/render/world/vegetation.ts)) : une carte du couvert forestier, en grandes masses de 300 à 800 m (40 % du pays). La forêt est dense, le pré presque nu, avec quelques arbres isolés au bord des routes. Les essences vont par bois entiers (sapins ou feuillus), les sapins dominent en altitude. Le sol lit la même carte : il s'assombrit sous la forêt, ce qui la montre de loin avant que ses arbres ne soient dessinés ; les pentes raides sont en roche.
 - **Trois niveaux de détail par essence**, triés à chaque fois que le cycliste avance de 16 m : les arbres à moins de 105 m portent une ombre ; jusqu'à 260 m ils gardent leur forme complète sans ombre ; au-delà c'est une silhouette de quelques triangles. Avant, chaque arbre était redessiné dans les deux passes d'ombre où qu'il soit (970 000 triangles sur 2,1 millions au départ). Résultat : quatre fois plus d'arbres (7 700 au départ contre 1 800) pour moins de triangles (1,67 million contre 2,13).
-- **Horizon** ([`src/render/world.ts`](../../src/render/world.ts)) : la chaîne de montagnes suit la boîte du réseau en rectangle arrondi (un cercle la laissait deux fois plus loin sur les petits côtés), en deux plans : contreforts boisés, puis sommets découpés jusqu'à 1 800 m, enneigés au-dessus de 880 m. De gros cumulus sont posés derrière la ligne de crête. La caméra porte à 20 km.
+- **Horizon** ([`src/render/world/world.ts`](../../src/render/world/world.ts)) : la chaîne de montagnes suit la boîte du réseau en rectangle arrondi (un cercle la laissait deux fois plus loin sur les petits côtés), en deux plans : contreforts boisés, puis sommets découpés jusqu'à 1 800 m, enneigés au-dessus de 880 m. De gros cumulus sont posés derrière la ligne de crête. La caméra porte à 20 km.
 - **Routes** : un ruban par route, une plaque d'asphalte de 12 m à chaque carrefour, tirets et lignes arrêtés 12 m avant, bas-côté sableux en bande.
 
 ### Lacs
@@ -107,11 +107,11 @@ Le terrain se creuse dedans (fond à 4 m), sort de l'eau par une grève de sable
 
 **Le canal** prolonge le lac de la Rive le long de la seconde moitié de la route du Canal, jusqu'au Village : trois biefs de 12 m de large, à 20 m de l'axe de la route, chacun plus bas que le précédent (0,9 m, −0,45 m, −1,1 m) comme entre deux écluses. Ce sont des plans d'eau comme les lacs, marqués `kind: 'canal'` : leur tracé reste net (pas d'ondulation de rive) et leur berge est raide (3 m au lieu des 14 m de grève). Les écluses elles-mêmes ne sont pas construites.
 
-Les lacs et le canal sont dessinés sur la carte des parcours (`npm run map`, [`network-map.ts`](../../src/sim/network-map.ts)), sous les routes.
+Les lacs et le canal sont dessinés sur la carte des parcours (`npm run map`, [`network-map.ts`](../../src/domain/course/network-map.ts)), sous les routes.
 
 ### Lieux
 
-Chaque carrefour nommé porte un lieu (`place` dans les données), construit par [`src/render/places.ts`](../../src/render/places.ts) en formes simples à facettes, fondues en un maillage par lieu :
+Chaque carrefour nommé porte un lieu (`place` dans les données), construit par [`src/render/world/places.ts`](../../src/render/world/places.ts) en formes simples à facettes, fondues en un maillage par lieu :
 
 | Carrefour | Ce qu'on y trouve |
 |---|---|
@@ -130,9 +130,9 @@ Un repère `grove` borde Le Col d'érables roux, orangés et dorés, du pied de 
 
 ### Bord de route
 
-[`src/render/roadside.ts`](../../src/render/roadside.ts) : un piquet blanc à bande sombre tous les 50 m des deux côtés, une borne à tête jaune à chaque kilomètre, et à chaque carrefour un poteau dont les flèches nomment les routes qui en partent, avec leur longueur. Le décor sème en plus des touffes d'herbe et des fleurs dans les 40 m autour des routes, dessinées à moins de 90 m du cycliste : c'est ce qui défile au plus près et donne la vitesse. La chaussée a un grain (plaques larges et grain fin).
+[`src/render/world/roadside.ts`](../../src/render/world/roadside.ts) : un piquet blanc à bande sombre tous les 50 m des deux côtés, une borne à tête jaune à chaque kilomètre, et à chaque carrefour un poteau dont les flèches nomment les routes qui en partent, avec leur longueur. Le décor sème en plus des touffes d'herbe et des fleurs dans les 40 m autour des routes, dessinées à moins de 90 m du cycliste : c'est ce qui défile au plus près et donne la vitesse. La chaussée a un grain (plaques larges et grain fin).
 
-Deux éléments se déduisent du tracé, par [`src/sim/road-features.ts`](../../src/sim/road-features.ts) :
+Deux éléments se déduisent du tracé, par [`src/domain/course/road-features.ts`](../../src/domain/course/road-features.ts) :
 
 - **Panneaux de pente** : un panneau brique au pied de chaque rampe, à droite de celui qui monte, avec la pente moyenne réelle (celle du HUD et du home-trainer, pas la pente exagérée à l'image) et la longueur : « 7 % sur 4,9 km » au pied du Col. Une rampe est un tronçon d'au moins 250 m dont la pente lissée sur 100 m dépasse 4 % ; deux rampes de même sens séparées par moins de 300 m de replat n'en font qu'une. Le réseau en compte sept.
 - **Parapets** : des blocs de pierre à couronnement clair, bout à bout, à l'extérieur de chaque virage de moins de 60 m de rayon, 20 m avant et après. Ce sont les six virages serrés du Col ; le parapet y remplace les piquets de son côté. Pas encore de mur de soutènement côté amont.
@@ -145,14 +145,14 @@ Les couronnes des arbres complets se balancent au vent, par vagues qui traversen
 
 Réglées le 14 novembre 2026 d'après la maquette « Col des Érables » (première étape de la remise à niveau du décor).
 
-- **Rendu neutre** (`NeutralToneMapping`, [`renderer.ts`](../../src/render/renderer.ts)) : les couleurs de [`palette.ts`](../../src/render/palette.ts) arrivent à l'écran telles quelles. ACES les assombrissait et les ternissait.
+- **Rendu neutre** (`NeutralToneMapping`, [`renderer.ts`](../../src/render/core/renderer.ts)) : les couleurs de [`palette.ts`](../../src/render/core/palette.ts) arrivent à l'écran telles quelles. ACES les assombrissait et les ternissait.
 - **Ciel** calculé par pixel : dégradé de l'horizon au zénith, lueur vers le soleil, disque du soleil (47° de hauteur). La **brume** a la couleur de l'horizon et croît avec le carré de la distance (7 % à 2 km, les deux tiers à 8 km) : les plans se détachent, les montagnes restent lisibles.
 - **Éclairage** : soleil et lumière du ciel à parts presque égales, pour que les faces à l'ombre restent colorées.
 - **Ombres portées** sur 80 m autour de la caméra, en deux cascades, filtre PCF simple. La portée courte garde l'ombre du cycliste nette (elle est au centre de l'écran). Le filtre doux de Three.js tire ses échantillons au hasard : sans anticrénelage temporel, il donne une ombre granuleuse.
 - **Arbres** : formes à facettes nettes (Tom les préfère aux formes lisses de la planche de style), avec un **ombrage peint** dans la couleur des sommets (bas et dessous plus sombres), et une **ombre de contact** au pied (disque sombre et flou, couché sur la pente). C'est ce qui ancre les arbres au sol au-delà des 80 m d'ombres portées. Aucun coût par image : pas d'occlusion ambiante calculée.
 - **Nuages** : ils ne reçoivent ni la lumière de la scène (le vert du sol les teintait) ni la brume (elle effacerait ceux de l'horizon) ; blancs dessus, gris-bleu dessous.
 
-**Une ambiance par parcours** ([`ambiance.ts`](../../src/render/ambiance.ts)) : un parcours peut porter `ambiance: 'sunset'` dans ses données. Le monde reste le même ; changent la direction, la couleur et la force du soleil, la lumière du ciel, les couleurs du ciel, de la brume et des nuages, et le reflet de l'eau. Le Col des Érables se roule en plein jour ; la **Rive du lac** au coucher du soleil, d'après sa maquette : soleil bas à l’ouest (17° de hauteur), ciel pêche à l'horizon et lilas au zénith, nuages roses, ombres longues, reflet doré sur le lac. L'ambiance suit le parcours choisi sur l'accueil sans rien reconstruire (`World.setAmbiance`). Dans l'aperçu, `mood=day|sunset` force l'une ou l'autre.
+**Une ambiance par parcours** ([`ambiance.ts`](../../src/render/core/ambiance.ts)) : un parcours peut porter `ambiance: 'sunset'` dans ses données. Le monde reste le même ; changent la direction, la couleur et la force du soleil, la lumière du ciel, les couleurs du ciel, de la brume et des nuages, et le reflet de l'eau. Le Col des Érables se roule en plein jour ; la **Rive du lac** au coucher du soleil, d'après sa maquette : soleil bas à l’ouest (17° de hauteur), ciel pêche à l'horizon et lilas au zénith, nuages roses, ombres longues, reflet doré sur le lac. L'ambiance suit le parcours choisi sur l'accueil sans rien reconstruire (`World.setAmbiance`). Dans l'aperçu, `mood=day|sunset` force l'une ou l'autre.
 
 ### Vues de référence
 
@@ -161,7 +161,7 @@ Réglées le 14 novembre 2026 d'après la maquette « Col des Érables » (premi
 ## Le ressenti de la montée
 
 - **Relief exagéré** : toute altitude est multipliée par 1,6 à l'image (route, sol, décor, cycliste), pas dans la physique ni le HUD : un 6 % se voit comme un 10 %. Réglable dans l'application par `?relief=1` à `?relief=3`.
-- **Caméra** ([`src/render/ride-feel.ts`](../../src/render/ride-feel.ts)) : le regard se pose sur la route 14 m devant et en suit 70 % de la montée : en côte la vue se redresse et la route se dresse ; en descente elle plonge.
+- **Caméra** ([`src/render/core/ride-feel.ts`](../../src/render/core/ride-feel.ts)) : le regard se pose sur la route 14 m devant et en suit 70 % de la montée : en côte la vue se redresse et la route se dresse ; en descente elle plonge.
 - **Champ de vision** : 58° de base ; 53° à 10 % de montée, 63° à 10 % de descente, jusqu'à 3° de plus vers 60 km/h.
 - **Balancement** : le cycliste (et un peu la caméra) bascule au rythme du pédalage, au plus 3,3°, d'autant plus que la côte est raide et la cadence basse.
 

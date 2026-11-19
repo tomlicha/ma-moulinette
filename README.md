@@ -19,9 +19,9 @@ npm run dev      # http://localhost:5173 dans Chrome ou Edge
 npm test         # décodeurs et encodeurs de trames
 ```
 
-- `src/sensors/decoders.ts`, `control-point.ts` : décodage et encodage des trames FTMS, Cycling Power et Heart Rate, en TypeScript pur.
-- `src/sensors/web-bluetooth.ts` : adaptateur Web Bluetooth ; repli en lecture seule sur Cycling Power si FTMS est absent.
-- `src/sensors/simulator.ts` : trainer simulé, pour développer sans matériel.
+- `src/infra/sensors/protocols/decoders.ts`, `control-point.ts` : décodage et encodage des trames FTMS, Cycling Power et Heart Rate, en TypeScript pur.
+- `src/infra/sensors/ble/web-bluetooth.ts` : adaptateur Web Bluetooth ; repli en lecture seule sur Cycling Power si FTMS est absent.
+- `src/infra/sensors/simulator.ts` : trainer simulé, pour développer sans matériel.
 - Le journal de la page affiche les trames du Control Point et du Machine Status : à copier dans la matrice de compatibilité par modèle de trainer.
 
 Web Bluetooth exige Chrome ou Edge et un contexte sécurisé (localhost ou HTTPS). Pour tester depuis un téléphone Android, exposer le serveur en HTTPS (tunnel ou certificat local).
@@ -38,13 +38,13 @@ Le protocole Wahoo est repris du code de GoldenCheetah, sans documentation offic
 
 ### Sortie virtuelle et physique
 
-`src/sim/` : modèle physique vélo (puissance, pente, air, roulement, inertie), parcours bouclé et sortie à pas fixe de 50 ms, déterministe et sans dépendance au DOM, donc réutilisable côté serveur. Sur la page, « Démarrer la sortie » fait avancer ce modèle avec la puissance mesurée et renvoie la pente du parcours au trainer en mode SIM. L'aspiration derrière les autres coureurs est modélisée ([docs/design/salle.md](docs/design/salle.md)) ; l'inertie des roues et la limite d'adhérence ne le sont pas encore.
+`src/domain/sim/` : modèle physique vélo (puissance, pente, air, roulement, inertie), parcours bouclé et sortie à pas fixe de 50 ms, déterministe et sans dépendance au DOM, donc réutilisable côté serveur. Sur la page, « Démarrer la sortie » fait avancer ce modèle avec la puissance mesurée et renvoie la pente du parcours au trainer en mode SIM. L'aspiration derrière les autres coureurs est modélisée ([docs/design/salle.md](docs/design/salle.md)) ; l'inertie des roues et la limite d'adhérence ne le sont pas encore.
 
-`src/sensors/hub.ts` fusionne le trainer et la ceinture cardio ; les deux se reconnectent seuls après une coupure (60 s maximum).
+`src/infra/sensors/hub.ts` fusionne le trainer et la ceinture cardio ; les deux se reconnectent seuls après une coupure (60 s maximum).
 
 ### Export FIT et Strava
 
-`src/export/` : la sortie est enregistrée à 1 Hz (puissance, cadence, cardio, et vitesse, distance, altitude quand la sortie virtuelle tourne), en pause quand le trainer est déconnecté. « Exporter FIT » télécharge un fichier FIT Activity encodé avec le SDK officiel de Garmin (`@garmin/fitsdk`), chargé seulement à l'export.
+`src/infra/export/` : la sortie est enregistrée à 1 Hz (puissance, cadence, cardio, et vitesse, distance, altitude quand la sortie virtuelle tourne), en pause quand le trainer est déconnecté. « Exporter FIT » télécharge un fichier FIT Activity encodé avec le SDK officiel de Garmin (`@garmin/fitsdk`), chargé seulement à l'export.
 
 Envoi à Strava, pour un coureur connecté avec Strava (voir « Multijoueur ») : sa sortie part sur son propre compte, avec les jetons obtenus à la connexion. **Sans compte**, l'application marche entièrement, seule et sans serveur : on roule seul, et « Exporter FIT » télécharge le fichier, à déposer soi-même où l'on veut.
 
@@ -52,7 +52,7 @@ Envoi à Strava, pour un coureur connecté avec Strava (voir « Multijoueur ») 
 2. Copier `.dev.vars.example` en `.dev.vars` et renseigner `STRAVA_CLIENT_ID` et `STRAVA_CLIENT_SECRET`.
 3. `npm run dev:api` et `npm run dev`, « Connect with Strava » en haut à droite, puis « Envoyer à Strava » à la fin de la sortie.
 
-Strava exige le `client_secret` pour l'échange et le rafraîchissement des jetons, et sa documentation ne prévoit pas PKCE : le secret ne peut pas vivre dans le navigateur. Le Worker (`worker/app.ts`, en local par `wrangler dev`) garde donc le secret, et les jetons de chaque coureur dans D1 ; la passerelle (`src/export/strava/relay.ts`) travaille sur ceux du coureur connecté (`src/server/user-strava.ts`). Le relais du serveur Vite, avec sa clé du propriétaire et son fichier `.strava-tokens.json`, a disparu le 16 novembre 2026 : en local comme en ligne, c'est le même Worker.
+Strava exige le `client_secret` pour l'échange et le rafraîchissement des jetons, et sa documentation ne prévoit pas PKCE : le secret ne peut pas vivre dans le navigateur. Le Worker (`worker/app.ts`, en local par `wrangler dev`) garde donc le secret, et les jetons de chaque coureur dans D1 ; la passerelle (`src/infra/export/strava/relay.ts`) travaille sur ceux du coureur connecté (`src/server/user-strava.ts`). Le relais du serveur Vite, avec sa clé du propriétaire et son fichier `.strava-tokens.json`, a disparu le 16 novembre 2026 : en local comme en ligne, c'est le même Worker.
 
 Depuis le 1er juin 2026, un compte Strava avec abonnement payant est exigé pour créer une nouvelle application (niveau Standard ; les anciennes applications dès le 30 juin). Plusieurs médias le rapportent, avec un prix de 11,99 $ par mois aux États-Unis ; nous ne l'avons pas relu dans la documentation officielle. Une application Standard sert un athlète par défaut, et jusqu'à dix selon les sources : le palier réel de l'application s'affiche sur https://www.strava.com/settings/api.
 
@@ -60,7 +60,7 @@ Validé : l'export FIT dans la vraie page (fichier relu avec le décodeur de Gar
 
 ### Séances structurées
 
-`src/workout/` : lecture des fichiers `.zwo` (Zwift), `.erg` (watts) et `.mrc` (% de FTP), en TypeScript pur et sans DOM ; déroulement minuté de la séance ; consigne envoyée au trainer en ERG (immédiatement à chaque palier, au plus une fois par seconde pendant une rampe). Fichiers de référence dans `samples/workouts/`, également proposés dans la page (« Séance d'exemple »).
+`src/domain/workout/` : lecture des fichiers `.zwo` (Zwift), `.erg` (watts) et `.mrc` (% de FTP), en TypeScript pur et sans DOM ; déroulement minuté de la séance ; consigne envoyée au trainer en ERG (immédiatement à chaque palier, au plus une fois par seconde pendant une rampe). Fichiers de référence dans `samples/workouts/`, également proposés dans la page (« Séance d'exemple »).
 
 Sur la page : charger un fichier ou l'exemple, régler la FTP (mémorisée dans le navigateur, et synchronisée avec le compte s'il y en a un), puis « Démarrer la séance ». Pause, palier suivant, arrêt et intensité ±5 % sont disponibles en cours de route. Un palier libre (`FreeRide`, `MaxEffort`) relâche l'ERG, qui est repris au palier suivant. Désengager l'ERG à la main laisse la séance continuer sans consigne ; le réengager lui rend la main. Le temps de séance s'arrête quand le trainer est déconnecté.
 
@@ -86,7 +86,7 @@ Chaque coureur se connecte avec Strava ; il voit les autres rouler dans le monde
 
 - `src/server/accounts.ts` : connexion Strava (un compte par athlète), cookie de session, nom affiché proposé (« Tom L. ») et validé par le coureur avant d'être montré aux autres. Les conditions de l'API Strava interdisent de montrer à un autre utilisateur les données d'un athlète : ni photo ni activité Strava n'est affichée.
 - `src/server/room.ts` : la salle (arrivées, départs, états vérifiés, instantanés à 4 Hz) ; `worker/world-room.ts` la branche sur un Durable Object Cloudflare, avec mise en veille quand personne ne roule.
-- `src/net/` : protocole binaire (19 octets par état, pas de fréquence cardiaque), lissage des autres coureurs, client avec reconnexion. `src/sim/remote-track.ts` reconstruit la trajectoire d'un autre coureur.
+- `src/infra/net/` : protocole binaire (19 octets par état, pas de fréquence cardiaque), lissage des autres coureurs, client avec reconnexion. `src/domain/course/remote-track.ts` reconstruit la trajectoire d'un autre coureur.
 
 Le compte est **facultatif** : sans lui, on roule seul et l'export FIT reste là. Il se montre en haut à droite des écrans Accueil, Appareils et Séances, en face de la marque : le bouton officiel « Connect with Strava », puis, une fois connecté, une pastille (initiale, nom, « En ligne · 3 autres coureurs ») qui ouvre « Changer de nom » et « Se déconnecter ». Spécification : [docs/design/compte.md](docs/design/compte.md).
 
@@ -119,7 +119,7 @@ Au garage, le réseau est souvent faible : l'application se lance depuis le navi
 
 ### Journaux d'erreurs à distance
 
-`src/telemetry/` : tout ce que la page écrit dans son journal (connexion au trainer, reconnexions, échecs de commande, erreurs non gérées du navigateur) est gardé en mémoire (300 dernières lignes). Dès qu'une ligne ressemble à une erreur, la page envoie le tampon au récepteur, 5 s plus tard pour y embarquer les essais de reconnexion qui suivent, avec le contexte (navigateur, trainer, état de connexion, capacités). Chaque ligne n'est envoyée qu'une fois ; au plus un envoi toutes les 30 s et vingt par session. Hors ligne, l'envoi repart au retour du réseau ou à la fermeture de la page. Les envois ne font jamais d'erreur visible et ne sont jamais journalisés eux-mêmes.
+`src/infra/telemetry/` : tout ce que la page écrit dans son journal (connexion au trainer, reconnexions, échecs de commande, erreurs non gérées du navigateur) est gardé en mémoire (300 dernières lignes). Dès qu'une ligne ressemble à une erreur, la page envoie le tampon au récepteur, 5 s plus tard pour y embarquer les essais de reconnexion qui suivent, avec le contexte (navigateur, trainer, état de connexion, capacités). Chaque ligne n'est envoyée qu'une fois ; au plus un envoi toutes les 30 s et vingt par session. Hors ligne, l'envoi repart au retour du réseau ou à la fermeture de la page. Les envois ne font jamais d'erreur visible et ne sont jamais journalisés eux-mêmes.
 
 - **En développement** : rien à configurer. `npm run dev` reçoit les rapports dans `.logs/reports.jsonl` (ignoré par git).
 - **À distance** : héberger `tools/log-server.ts` sur une machine joignable (VPS, Raspberry Pi derrière un tunnel…) :
@@ -142,7 +142,7 @@ Les rapports ci-dessus ne partent qu'en cas d'erreur : un essai réussi ne laiss
 
 #### Récepteur gratuit sur Cloudflare (Workers + D1)
 
-`worker/` rejoue le même récepteur (`src/telemetry/receiver.ts`) dans un Worker, avec D1 pour stockage : pas de serveur à maintenir, HTTPS inclus, offre gratuite largement suffisante pour quelques rapports par session. D1 plutôt que KV : KV ne liste pas du plus récent au plus ancien, et un Worker gratuit ne fait qu'environ 50 appels par requête, ce qui limiterait la relecture. Les rapports de plus de 30 jours sont purgés chaque nuit.
+`worker/` rejoue le même récepteur (`src/infra/telemetry/receiver.ts`) dans un Worker, avec D1 pour stockage : pas de serveur à maintenir, HTTPS inclus, offre gratuite largement suffisante pour quelques rapports par session. D1 plutôt que KV : KV ne liste pas du plus récent au plus ancien, et un Worker gratuit ne fait qu'environ 50 appels par requête, ce qui limiterait la relecture. Les rapports de plus de 30 jours sont purgés chaque nuit.
 
 ```
 npx wrangler login
@@ -159,13 +159,13 @@ Le récepteur (`receiver.ts`) reste un gestionnaire `Request` vers `Response` in
 
 ## Coquille iOS (iPad, iPhone)
 
-Safari n'a pas Web Bluetooth : `ios/` est une coquille Capacitor dont le Bluetooth passe par le plugin natif (`src/sensors/native-bluetooth.ts`). La coquille charge l'application depuis le serveur (`server.url` de `capacitor.config.ts`), pour que `/api/...`, le cookie de session et le WebSocket gardent l'origine du Worker. Autre serveur : `CAP_SERVER_URL=https://… npm run ios:sync`.
+Safari n'a pas Web Bluetooth : `ios/` est une coquille Capacitor dont le Bluetooth passe par le plugin natif (`src/infra/sensors/ble/native-bluetooth.ts`). La coquille charge l'application depuis le serveur (`server.url` de `capacitor.config.ts`), pour que `/api/...`, le cookie de session et le WebSocket gardent l'origine du Worker. Autre serveur : `CAP_SERVER_URL=https://… npm run ios:sync`.
 
 ```
 npm run ios:sync   # build, cap sync, puis tools/ios/sync.mjs ; sur un Mac : npm run ios:open, signer, lancer sur l'appareil
 ```
 
-- **Bluetooth** : un seul balayage, partagé entre les appareils qui attendent leur signal et le sélecteur (le plugin n'en a qu'un). Le sélecteur est celui de l'application (`src/ui/device-chooser.ts`), trié avec les règles de Chrome : un trainer annoncé par son seul nom y apparaît, KICKR CLIMB et HEADWIND n'y apparaissent pas.
+- **Bluetooth** : un seul balayage, partagé entre les appareils qui attendent leur signal et le sélecteur (le plugin n'en a qu'un). Le sélecteur est celui de l'application (`src/ui/devices/device-chooser.ts`), trié avec les règles de Chrome : un trainer annoncé par son seul nom y apparaît, KICKR CLIMB et HEADWIND n'y apparaissent pas.
 - **Plugin de l'application** (`ios/App/App/MoulinettePlugin.swift`, enregistré par `MainViewController.swift`) : écran gardé allumé pendant la sortie, et connexion Strava dans une session d'authentification système (Google refuse les WebView intégrées). Le retour `moulinette://auth?ticket=…` porte un ticket à usage unique, valable 2 minutes, que la page échange contre sa session (`POST /api/auth/redeem`).
 - **Hors ligne** : `WKAppBoundDomains` (Info.plist) donne le service worker à la WKWebView ; au tout premier lancement sans réseau, la page embarquée `offline.html` attend le retour du réseau. `tools/ios/sync.mjs` accorde ces deux réglages à l'adresse du serveur.
 - **iPad** : paysage seulement, sans écran partagé (`UIRequiresFullScreen`). Dans Safari sur iPad, une fenêtre partagée demande d'élargir la fenêtre plutôt que de tourner l'appareil.

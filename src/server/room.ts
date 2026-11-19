@@ -9,8 +9,9 @@
  *   { type: 'join', slot, name }                            un coureur arrive
  *   { type: 'leave', slot }                                  un coureur part
  */
-import type { RoadNetwork } from '../sim/network';
-import { INTEREST_K, INTEREST_RANGE_M, MSG_SNAPSHOT, SNAPSHOT_MAX, StateCodec, STATE_BYTES } from '../net/protocol';
+import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_REPLACED, CLOSE_SIGNED_OUT } from '../shared/protocol/close-codes';
+import type { RoadNetwork } from '../domain/course/network';
+import { INTEREST_K, INTEREST_RANGE_M, MSG_SNAPSHOT, SNAPSHOT_MAX, StateCodec, STATE_BYTES } from '../infra/net/protocol';
 
 /** Cadence des instantanés, en ms. */
 export const TICK_MS = 250;
@@ -20,14 +21,8 @@ export const STATE_TTL_MS = 10_000;
 const MIN_INTERVAL_MS = 90;
 /** Vitesse au-delà de laquelle un état est rejeté, en m/s (126 km/h : une descente de col, pas plus). */
 export const MAX_SPEED_MS = 35;
-/** Code de fermeture quand le même compte se connecte ailleurs. */
-export const CLOSE_REPLACED = 4000;
-/** Code de fermeture quand le client n'a pas la même version du protocole ou du réseau. */
-export const CLOSE_OUTDATED = 4001;
-/** Code de fermeture quand le coureur n'a pas encore validé le nom montré aux autres. */
-export const CLOSE_NAME_PENDING = 4002;
-/** Code de fermeture sans session valide : il faut se connecter. */
-export const CLOSE_SIGNED_OUT = 4003;
+
+export { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_REPLACED, CLOSE_SIGNED_OUT };
 
 const ENTRY_BYTES = 2 + STATE_BYTES - 1;
 /** Côté d'une case de l'index spatial, en m : de quoi trouver les voisins sans parcourir toute la salle. */

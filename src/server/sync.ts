@@ -1,12 +1,12 @@
 /**
  * Données du coureur gardées avec son compte (`POST /api/sync`) : réglages, séances, « Mes blocs ».
  * Un seul aller-retour fait tout : la page envoie ses modifications et la dernière révision reçue, le serveur garde
- * chaque modification plus récente que la sienne et rend ce qui a changé depuis. Protocole : src/sync/protocol.ts.
+ * chaque modification plus récente que la sienne et rend ce qui a changé depuis. Protocole : src/infra/sync/protocol.ts.
  *
  * Révisions : chaque écriture reçoit la révision suivante du compte (1, 2, 3…). Une page qui a reçu jusqu'à la
  * révision N n'a donc qu'à demander « depuis N » pour apprendre ce que ses autres appareils ont fait.
  */
-import { checkItem, keyOf, SYNC_LIMITS, SYNC_PATH, type SyncItem, type SyncResponse } from '../sync/protocol';
+import { checkItem, keyOf, SYNC_LIMITS, SYNC_PATH, type SyncItem, type SyncResponse } from '../infra/sync/protocol';
 import type { User } from './accounts';
 
 export interface SyncRow extends SyncItem {

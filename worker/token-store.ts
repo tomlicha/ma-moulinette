@@ -1,5 +1,5 @@
-import type { Tokens } from '../src/export/strava/api.ts';
-import type { TokenStore } from '../src/export/strava/relay.ts';
+import type { Tokens } from '../src/infra/export/strava/api.ts';
+import type { TokenStore } from '../src/infra/export/strava/relay.ts';
 import type { D1Database } from './d1-store.ts';
 
 /** Jetons Strava dans D1 : une ligne, écrasée à chaque rafraîchissement (un jeton de rafraîchissement perdu obligerait à se reconnecter). */

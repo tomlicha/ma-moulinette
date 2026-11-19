@@ -23,7 +23,7 @@ Sources : la fiche Wikipédia du vélodrome et ses reprises (longueur, largeur, 
 
 ## Ce qu'on y trouve
 
-- **Piste** ([`src/sim/velodrome-track.ts`](../../src/sim/velodrome-track.ts), sans Three.js) : bande bleue, béton clair, ligne de mesure noire à 20 cm du bord, ligne des sprinteurs rouge à 85 cm, ligne des stayers bleue à 2,45 m de la ligne de mesure. On tourne à gauche. `VelodromeTrack.point(s, u)` donne tout point de la piste (`s` le long de la ligne de mesure depuis le milieu de la ligne droite d'arrivée, `u` en travers depuis le pied de la bande bleue).
+- **Piste** ([`src/domain/course/velodrome-track.ts`](../../src/domain/course/velodrome-track.ts), sans Three.js) : bande bleue, béton clair, ligne de mesure noire à 20 cm du bord, ligne des sprinteurs rouge à 85 cm, ligne des stayers bleue à 2,45 m de la ligne de mesure. On tourne à gauche. `VelodromeTrack.point(s, u)` donne tout point de la piste (`s` le long de la ligne de mesure depuis le milieu de la ligne droite d'arrivée, `u` en travers depuis le pied de la bande bleue).
 - **Ligne d'arrivée** devant la tribune (bande blanche, trait noir), cabine des juges sur pilotis côté pelouse.
 - **Bord extérieur** : mur blanc de 1,1 m à couvertine bleu nuit, coursive en béton, puis talus d'herbe à 25 %.
 - **Tribune couverte**, ligne droite d'arrivée : gradins béton et bancs bleus, toit en pente sur poteaux, bandeau « Vélodrome André-Pétrieux » face à la piste. Côté ville, façade Art déco en brique : bandeaux et pilastres clairs, pavillon d'entrée à gradins avec son enseigne.
@@ -32,13 +32,13 @@ Sources : la fiche Wikipédia du vélodrome et ses reprises (longueur, largeur, 
 - **Les douches** derrière la tribune, bâtiment bas en brique ; parvis bordé de platanes.
 - Quatre **mâts d'éclairage**, des **peupliers d'Italie** et des feuillus autour du parc.
 
-Code : [`src/render/velodrome.ts`](../../src/render/velodrome.ts), un seul maillage à facettes (le `Kit` des lieux) plus trois enseignes.
+Code : [`src/render/world/velodrome.ts`](../../src/render/world/velodrome.ts), un seul maillage à facettes (le `Kit` des lieux) plus trois enseignes.
 
 **Finesse du maillage** (18 novembre 2026) : à grande vitesse, les traits peints au sol laissaient voir le tracé en lignes droites (bandes de 2 m, soit 2,7° de cap d'une bande à l'autre dans les virages de 43 m de rayon). Le tour est maillé tous les 0,5 m (`LAP_STEP_M`, 0,7°), les bâches du mur par 1 m, et les normales du sol sont adoucies (`softenNormals`, arêtes de plus de 5° conservées) pour qu'aucune bande d'ombrage ne marque le pas du maillage. Coût : environ 28 000 triangles de plus.
 
 ## Un jour d'arrivée
 
-Ajouté le 17 novembre 2026 (seconde passe). Code : [`src/render/velodrome-fete.ts`](../../src/render/velodrome-fete.ts).
+Ajouté le 17 novembre 2026 (seconde passe). Code : [`src/render/world/velodrome-fete.ts`](../../src/render/world/velodrome-fete.ts).
 
 - **Le public**, environ 3 400 spectateurs : la tribune comble, les gradins, deux rangs contre le mur des virages, derrière les barrières de la route d'accès, sur le parvis, autour des bus. Corps et têtes en instances ; un tiers lève les bras.
 - **Drapeaux** brandis dans le public et hissés devant la façade et sur la tribune : Lion de Flandre (le plus nombreux), France, Belgique, damier.
