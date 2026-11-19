@@ -42,7 +42,13 @@ function compareApp(a, b) {
       if (k === 'route') continue; // le HUD change à chaque instant
       const vx = typeof x[k] === 'string' ? neutral(x[k]) : x[k];
       const vy = typeof y[k] === 'string' ? neutral(y[k]) : y[k];
-      if (vx !== vy) say(`étape « ${x.label} » : ${k} : ${JSON.stringify(x[k])} → ${JSON.stringify(y[k])}`);
+      if (vx === vy) continue;
+      if (typeof x[k] === 'string' && x[k].length > 300) {
+        // Un DOM entier : on montre où il diffère plutôt que tout le texte.
+        let p = 0;
+        while (p < x[k].length && x[k][p] === y[k][p]) p++;
+        say(`étape « ${x.label} » : ${k} diffère à la position ${p}\n      avant : …${x[k].slice(Math.max(0, p - 60), p + 140)}\n      après : …${String(y[k]).slice(Math.max(0, p - 60), p + 140)}`);
+      } else say(`étape « ${x.label} » : ${k} : ${JSON.stringify(x[k])} → ${JSON.stringify(y[k])}`);
     }
   });
   compareLogs(a.log, b.log, (l) => l.startsWith('rendu '));

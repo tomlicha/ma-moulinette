@@ -62,6 +62,12 @@ module.exports = async function app({ browser, url }) {
         exportFitBlocked: blocked('export-fit'),
         exportStravaHidden: h('export-strava'),
         route: document.getElementById('hud')?.innerText?.replace(/\s+/g, ' ').slice(0, 200) ?? null,
+        // L'écran Appareils en entier (cartes, boutons, radars), sans son fond animé.
+        devices: (() => {
+          const copy = document.querySelector('[data-view="appareils"]')?.cloneNode(true);
+          copy?.querySelector('#dev-scenes')?.remove();
+          return (copy?.innerHTML ?? '').replace(/\s+/g, ' ');
+        })(),
       };
     }, label),
   );
