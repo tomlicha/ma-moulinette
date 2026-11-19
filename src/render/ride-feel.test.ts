@@ -107,6 +107,11 @@ describe('standingStep', () => {
     expect(run(up, { powerW: 200, cadenceRpm: 95 }, 5).on).toBe(false);
   });
 
+  it('se rassoit dès que la puissance passe sous 140 % de la FTP', () => {
+    const up = run(SEATED_STATE, { powerW: 700, cadenceRpm: 105 }, 3);
+    expect(run(up, { powerW: 1.2 * FTP, cadenceRpm: 95 }, 8).on).toBe(false);
+  });
+
   it('un bref écart ne change rien', () => {
     const up = run(SEATED_STATE, { gradePct: 9, cadenceRpm: 55 }, 3);
     expect(run(run(up, { gradePct: 2, cadenceRpm: 55 }, 1), { gradePct: 9, cadenceRpm: 55 }, 5).on).toBe(true);
