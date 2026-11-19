@@ -247,6 +247,34 @@ describe('EditorSession', () => {
       expect([session.draft!.blocks[0], session.draft!.blocks[2]]).toEqual(others);
     });
 
+    it('règle une valeur sur une copie, en une entrée d\'historique, et termine la frappe', () => {
+      const { session, events } = setup();
+      session.open(draft());
+      const before = session.draft!.blocks;
+      session.typing = true;
+      events.length = 0;
+      session.commitSet((v) => {
+        (session.draft!.blocks[0] as { durationS: number }).durationS = v;
+      }, 123);
+      expect((session.draft!.blocks[0] as { durationS: number }).durationS).toBe(123);
+      expect(session.draft!.blocks).not.toBe(before); // copie : l'historique garde l'ancien état intact
+      expect((before[0] as { durationS: number }).durationS).toBe(600);
+      expect(session.typing).toBe(false);
+      expect(events).toEqual(['changed']);
+      session.undo();
+      expect((session.draft!.blocks[0] as { durationS: number }).durationS).toBe(600);
+    });
+
+    it('règler une valeur sur un modèle ne fait rien', () => {
+      const { session, events } = setup();
+      session.openKey(`sample:${sample.id}`);
+      events.length = 0;
+      session.commitSet(() => {
+        throw new Error('ne doit pas être appelé');
+      }, 1);
+      expect(events).toEqual([]);
+    });
+
     it('ajoute des copies de blocs à la position donnée et sélectionne le premier', () => {
       const { session } = setup();
       session.open(draft());
