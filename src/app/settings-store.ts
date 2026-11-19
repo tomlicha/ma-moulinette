@@ -1,6 +1,6 @@
 import { FTP_LIMITS, MASS_LIMITS } from '../domain/sim/rider-limits';
 import { ALL_PROTOCOLS, type ControlProtocol } from '../infra/sensors/protocols/trainer-profiles';
-import type { KeyValueStore } from '../infra/storage/key-value-store';
+import type { KeyValueStore } from '../shared/util/key-value-store';
 
 /** Réglages numériques du coureur, ceux que la synchronisation avec le compte porte aussi. */
 export type RiderSetting = 'ftp' | 'mass';

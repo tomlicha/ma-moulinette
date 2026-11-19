@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DeviceRegistry, type DeviceRole } from '../infra/sensors/device-registry';
 import type { SensorHub } from '../infra/sensors/hub';
 import type { ConnectionState, TrainerAdapter } from '../infra/sensors/types';
-import type { KeyValueStore } from '../infra/storage/key-value-store';
+import type { KeyValueStore } from '../shared/util/key-value-store';
 import { DeviceManager, type BleDevice, type BluetoothAccess, type DeviceTrainer, type RecallStatus } from './device-manager';
 
 type StateFn = (s: ConnectionState, d?: string) => void;

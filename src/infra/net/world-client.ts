@@ -7,7 +7,7 @@ import { RemoteTrack } from '../../domain/course/remote-track';
 import type { JourneyPoint, NetPosition } from '../../domain/course/track';
 import { Interpolator } from './interpolation';
 import { networkSignature, PROTOCOL_VERSION, StateCodec } from './protocol';
-import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_REPLACED, CLOSE_SIGNED_OUT } from '../../server/room';
+import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_REPLACED, CLOSE_SIGNED_OUT } from '../../shared/protocol/close-codes';
 
 export const WORLD_PATH = '/api/world/ws';
 /** Cadence d'envoi pendant la sortie, en ms. */

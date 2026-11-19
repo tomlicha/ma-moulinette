@@ -1,4 +1,4 @@
-import type { KeyValueStore } from './key-value-store';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 
 /** Préfixe des clés du navigateur avant le 17 novembre 2026 (ancien nom de code du projet). */
 const LEGACY_PREFIX = 'zwift2.';

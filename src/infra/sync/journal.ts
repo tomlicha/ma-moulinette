@@ -1,4 +1,5 @@
-import { browserStore, type KeyValueStore } from '../storage/key-value-store';
+import { browserStore } from '../storage/key-value-store';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
 import { checkItem, keyOf, type SyncItem, type SyncKind, type SyncResponse } from './protocol';
 
 interface JournalState {

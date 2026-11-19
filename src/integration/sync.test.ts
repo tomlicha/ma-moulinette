@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { createAccounts, CSRF_HEADER } from '../../server/accounts';
-import { createMemoryAccountStore, createMemorySyncStore } from '../../server/memory-store';
-import { createSync } from '../../server/sync';
-import type { KeyValueStore } from '../storage/key-value-store';
-import { BlockLibrary } from '../../domain/workout/block-library';
-import type { EditorBlock } from '../../domain/workout/blocks';
-import { WorkoutLibrary } from '../../domain/workout/library';
-import { migrateLegacyKeys } from '../storage/legacy-storage';
-import { createSyncClient, type SyncSource } from './client';
-import { SyncJournal } from './journal';
-import { blockSource, workoutSource } from './sources';
+import { createAccounts, CSRF_HEADER } from '../server/accounts';
+import { createMemoryAccountStore, createMemorySyncStore } from '../server/memory-store';
+import { createSync } from '../server/sync';
+import type { KeyValueStore } from '../shared/util/key-value-store';
+import { BlockLibrary } from '../domain/workout/block-library';
+import type { EditorBlock } from '../domain/workout/blocks';
+import { WorkoutLibrary } from '../domain/workout/library';
+import { migrateLegacyKeys } from '../infra/storage/legacy-storage';
+import { createSyncClient, type SyncSource } from '../infra/sync/client';
+import { SyncJournal } from '../infra/sync/journal';
+import { blockSource, workoutSource } from '../infra/sync/sources';
 
 const ORIGIN = 'https://moulinette.example';
 const steady: EditorBlock[] = [{ type: 'steady', durationS: 300, power: 0.8 }];

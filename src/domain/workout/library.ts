@@ -1,5 +1,5 @@
-import { browserStore, type KeyValueStore } from '../../infra/storage/key-value-store';
-import type { SyncJournal } from '../../infra/sync/journal';
+import type { KeyValueStore } from '../../shared/util/key-value-store';
+import type { ChangeJournal } from './change-journal';
 import type { EditorBlock } from './blocks';
 
 export interface SavedWorkout {
@@ -21,9 +21,9 @@ export const workoutBody = (w: SavedWorkout) => ({ name: w.name, description: w.
  */
 export class WorkoutLibrary {
   constructor(
-    private readonly store: KeyValueStore = browserStore(),
+    private readonly store: KeyValueStore,
     private readonly newId: () => string = () => crypto.randomUUID(),
-    private readonly journal?: Pick<SyncJournal, 'record'>,
+    private readonly journal?: ChangeJournal,
   ) {}
 
   list(): SavedWorkout[] {

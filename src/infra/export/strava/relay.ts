@@ -10,7 +10,7 @@ import {
   type Tokens,
   type UploadStatus,
 } from './api';
-import { hasCsrfHeader } from '../../net/csrf';
+import { hasCsrfHeader } from '../../../shared/protocol/csrf';
 
 export interface TokenStore {
   load(): Promise<Tokens | undefined>;
@@ -38,8 +38,8 @@ export const PREFIX = '/api/strava/';
 const MAX_FIT_BYTES = 10 * 1024 * 1024;
 const REFRESH_MARGIN_S = 300;
 const STATE_TTL_S = 600;
-/** En-tête exigé sur les requêtes qui modifient quoi que ce soit : voir src/infra/net/csrf.ts. */
-export { CSRF_HEADER } from '../../net/csrf';
+/** En-tête exigé sur les requêtes qui modifient quoi que ce soit : voir src/shared/protocol/csrf.ts. */
+export { CSRF_HEADER } from '../../../shared/protocol/csrf';
 export const OWNER_HEADER = 'x-owner-key';
 
 const json = (body: unknown, status = 200) =>

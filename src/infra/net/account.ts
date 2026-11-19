@@ -3,10 +3,10 @@
  * Parle aux adresses /api/auth/* du Worker (src/server/accounts.ts). Sans Worker (build statique, serveur de dev seul),
  * tout répond « indisponible » : l'application reste en mode sans compte.
  */
-import type { User } from '../../server/accounts';
-import { CSRF_HEADER } from './csrf';
+import type { User } from '../../shared/protocol/user';
+import { CSRF_HEADER } from '../../shared/protocol/csrf';
 
-export type { User } from '../../server/accounts';
+export type { User } from '../../shared/protocol/user';
 
 export const AUTH = '/api/auth/';
 const CSRF = { [CSRF_HEADER]: '1' };

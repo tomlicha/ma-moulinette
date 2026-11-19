@@ -1,6 +1,6 @@
 # Architecture du code
 
-Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couches inférieures ; la règle est vérifiée par ESLint (`eslint.config.js`, `no-restricted-imports`), en avertissement tant que la migration n'est pas finie.
+Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couches inférieures ; la règle est vérifiée par ESLint (`eslint.config.js`, `no-restricted-imports`) et fait échouer la CI.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -54,7 +54,10 @@ src/
 │  └─ native/         coquille iOS (Capacitor)
 ├─ render/            three.js : core/ (moteur, ambiance, matériaux), world/ (décor, terrain, route), riders/ (coureurs, avatar)
 ├─ ui/                un dossier par écran : home/, ride/, devices/, editor/, recap/, account/ ; shared/ (routeur, aide au blocage…)
-├─ shared/util/       journal, erreurs, travail en tâche de fond
+├─ shared/
+│  ├─ protocol/       ce que le serveur et la page se disent : codes de fermeture, utilisateur, en-tête anti-CSRF
+│  └─ util/           journal, erreurs, travail en tâche de fond, émetteur d'événements, type du stockage de clés
+├─ integration/       tests qui traversent les couches (client de synchronisation contre le vrai serveur)
 ├─ server/            logique du Worker Cloudflare (salle, comptes, synchronisation)
 └─ assets/            modèles 3D et images
 ```
@@ -84,13 +87,9 @@ Ces classes se parlent par **événements typés** (`shared/util/typed-emitter.t
 
 ## Dette connue
 
-`npm run lint` liste les imports qui remontent (13 au 19 novembre 2026) :
+Aucune : `npm run lint` ne remonte plus d'import qui monte d'une couche (13 au 19 novembre 2026, tous corrigés le jour même).
 
-| Violation | Où | Correction prévue |
-|---|---|---|
-| `domain → infra` | `domain/workout/library.ts` et `block-library.ts` écrivent dans le journal de synchronisation et ont `browserStore()` pour défaut | déplacer les bibliothèques dans `app/` (ou passer journal et stockage par le constructeur) |
-| `infra → server` | `infra/net` et les tests de `infra/sync` importent des types de `server/` | types du protocole dans un module partagé, importé par les deux côtés |
-| `infra → ui` | `infra/export/wiring.ts` | ce câblage est de l'orchestration : à passer dans `app/` |
+Quelques liens restent à surveiller, permis par la règle mais discutables : `server/accounts.ts` importe les types de Strava de `infra/export/strava/api.ts`, et `render` est importé par `app/ride-view-loader.ts` (types seulement).
 
 ## Reste à faire
 
@@ -98,4 +97,3 @@ Ces classes se parlent par **événements typés** (`shared/util/typed-emitter.t
 
 1. Les `setupX()` de `ui/` et les morceaux de DOM de `main.ts` (écran Appareils, boutons de la séance, bouton de sortie, écran de chargement) transformés en classes `View` qui possèdent leur DOM (plus de `$('…')` dans `main.ts`).
 2. `ui/editor/workout-editor.ts` (1600 lignes) en `EditorState`, `TimelineView`, `BlockPalette`, `Inspector`, `DragController`.
-3. Règle d'imports en `error` une fois la dette à zéro.

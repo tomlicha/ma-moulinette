@@ -8,13 +8,13 @@ import tseslint from 'typescript-eslint';
  *   shared  <  domain  <  infra  <  app  <  ui, render        (main.ts, la racine de composition, importe tout)
  *
  * `src/server` (le Worker) est à part : il n'a rien à faire de l'interface, du rendu ni de l'application.
- * Chaque règle interdit les couches « au-dessus » du dossier concerné. Niveau `warn` pendant la migration : la liste
- * des avertissements est la dette restante ; elle passera en `error` une fois à zéro.
+ * Chaque règle interdit les couches « au-dessus » du dossier concerné. Niveau `error` : la CI refuse un import qui
+ * remonte. `src/integration` (tests qui traversent les couches) n'est soumis à aucune règle.
  */
 const layer = (name) => `(^|/)${name}/`;
 const forbid = (...names) => ({
   'no-restricted-imports': [
-    'warn',
+    'error',
     {
       patterns: names.map((n) => ({
         regex: layer(n),

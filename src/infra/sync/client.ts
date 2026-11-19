@@ -6,7 +6,7 @@
  * l'appelant), et régulièrement tant que la page est visible. Sans compte, rien ne part : le journal garde tout pour
  * la connexion suivante.
  */
-import { CSRF_HEADER } from '../net/csrf';
+import { CSRF_HEADER } from '../../shared/protocol/csrf';
 import type { SyncJournal } from './journal';
 import { SYNC_LIMITS, SYNC_PATH, type SyncItem, type SyncKind, type SyncRequest, type SyncResponse } from './protocol';
 
