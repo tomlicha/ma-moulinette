@@ -30,6 +30,7 @@ import { RideSession } from './app/ride-session';
 import { RideViewLoader } from './app/ride-view-loader';
 import { WorkoutSession } from './app/workout-session';
 import { DeviceManager } from './app/device-manager';
+import { AutoStart } from './app/auto-start';
 import { ManualControl } from './app/manual-control';
 import { RiderSettingsSync } from './app/rider-settings-sync';
 import { WorkoutCatalog } from './app/workout-catalog';
@@ -206,29 +207,8 @@ hub.on('raw', (src, data) => {
   // Les trames brutes servent à documenter chaque modèle de trainer ; on ne journalise pas tout le flux.
   if (src !== 'Indoor Bike Data' && src !== 'Heart Rate' && src !== 'Cycling Power' && src !== 'FE-C' && src !== 'Zwift Data') log(`${src} : ${hex(data)}`);
 });
-/**
- * Démarrage au premier coup de pédale : sur l'écran Sortie, tant que rien n'a été lancé à la main, la première puissance
- * ou cadence reçue démarre la séance chargée (et la sortie qui la porte), ou la sortie libre s'il n'y en a pas.
- * Armé en arrivant sur l'écran ou en choisissant une séance ; désarmé dès qu'une sortie ou une séance démarre,
- * donc un arrêt volontaire n'est pas défait par le pédalage qui continue.
- */
-let autoStart = false;
-/** Ne s'arme que si rien ne tourne : revenir sur l'écran en pleine sortie ne doit pas lancer une séance. */
-const armAutoStart = () => (autoStart = !rideSession.active && !workoutSession.running);
-function maybeAutoStart(m: { powerW?: number; cadenceRpm?: number }) {
-  if (!autoStart || workoutSession.running || router.current() !== 'sortie') return;
-  if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
-  if (workoutSession.workout && !workoutStartBlock()) {
-    log('premier coup de pédale : démarrage de la séance');
-    startWorkout();
-  } else if (!rideSession.active && trainerCtl.connected) {
-    log('premier coup de pédale : démarrage de la sortie');
-    startRide();
-  }
-}
-
 hub.on('measurement', (m) => {
-  maybeAutoStart(m);
+  autoStart.onMeasurement(m);
   readings.record(m);
 });
 
@@ -244,7 +224,7 @@ const keepAwake = createKeepAwake({
 void keepAwake.set(true);
 
 function startRide() {
-  autoStart = false;
+  autoStart.disarm();
   rideSession.start(riderInputs.rideMassKg, home.selectedCourseId());
 }
 
@@ -320,6 +300,18 @@ const workoutSession = new WorkoutSession({
   ftpW: () => readFtp(),
   rideActive: () => rideSession.active,
   manualGradePct: () => rideControls.manualGradePct,
+  log,
+});
+
+/** Démarrage au premier coup de pédale, sur l'écran Sortie (app/auto-start.ts). */
+const autoStart = new AutoStart({
+  rideSession,
+  workoutSession,
+  trainer: trainerCtl,
+  rideScreenOpen: () => router.current() === 'sortie',
+  workoutBlocked: () => workoutStartBlock() !== undefined,
+  startWorkout: () => startWorkout(),
+  startRide: () => startRide(),
   log,
 });
 
@@ -401,7 +393,7 @@ function chooseWorkout(value: string) {
     refreshWorkoutButtons();
     return;
   }
-  armAutoStart();
+  autoStart.arm();
   for (const x of w.warnings) log(`séance : ${x}`);
   const total = w.steps.reduce((t, s) => t + s.durationS, 0);
   renderProfile();
@@ -427,7 +419,7 @@ workoutSession.on('ended', ({ completed }) => {
 
 function startWorkout() {
   if (!workoutSession.workout) return;
-  autoStart = false;
+  autoStart.disarm();
   // La séance se roule sur le parcours : sans sortie en cours, le cycliste resterait immobile dans la vue.
   if (!rideSession.active && trainerCtl.connected) startRide();
   workoutSession.start();
@@ -502,7 +494,7 @@ const router = setupRouter((v) => {
     rideMenu.close();
     recap.close();
   }
-  else armAutoStart();
+  else autoStart.arm();
   if (v === 'seances') editor.sync();
 });
 

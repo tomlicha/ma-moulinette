@@ -79,7 +79,7 @@ function compareEditor(a, b) {
   });
 }
 
-const KINDS = { app: compareApp, gpu: compareGpu, editor: compareEditor };
+const KINDS = { app: compareApp, autostart: compareApp, gpu: compareGpu, editor: compareEditor };
 let compared = 0;
 for (const [name, fn] of Object.entries(KINDS)) {
   const a = read(dirA, name);
