@@ -1,11 +1,9 @@
 import {
   BLOCK_LABEL,
-  blocksToWorkout,
   defaultBlock,
   toZwo,
   validateBlocks,
   workoutStats,
-  workoutToBlocks,
   type EditorBlock,
   type WorkoutStats,
 } from '../../domain/workout/blocks';
@@ -15,16 +13,16 @@ import type { BlockLibrary } from '../../domain/workout/block-library';
 import type { SavedWorkout, WorkoutLibrary } from '../../domain/workout/library';
 import { targetWatts, type Workout } from '../../domain/workout/model';
 import { profilePeakW, profileShapes, zoneOf, type Zone } from '../../domain/workout/profile';
-import { SAMPLE_WORKOUTS } from '../../domain/workout/samples';
 import { effortSeconds, intensityWord, timeInZones, ZONES, zoneName, zoneReading, type ZoneTimes } from '../../domain/workout/zones';
 import { setBlocked, type BlockReason } from '../shared/blocked';
 import './seances.css';
 import { formatDuration, parseDuration } from '../shared/duration';
 import { BlockMover } from './block-mover';
 import { BlockShelf } from './block-shelf';
+import { LibraryView } from './library-view';
 import { DURATION_STEP_S, POWER_STEP } from './constants';
 import { PhoneBlockControls } from './phone-controls';
-import { download, el, fmtLong, fold, isElsewhere, isTyping, miniProfile as miniProfileSvg, pct, slug, svg } from './dom';
+import { download, el, fmtLong, isElsewhere, isTyping, pct, slug, svg } from './dom';
 
 const W = 1000;
 const H = 120;
@@ -90,78 +88,16 @@ export function setupWorkoutEditor(o: EditorOptions) {
   /** Clé d'une séance ouverte : `lib:<id>` (enregistrée) ou `sample:<id>` (modèle) ; rien pour un brouillon. */
   const keyOf = (d: Draft | undefined = session.draft) => session.keyOf(d);
 
-  /** Message dans la bibliothèque (le journal est masqué sur cet écran) : import refusé, enregistrement impossible. */
-  function say(msg?: string) {
-    const p = $('lib-msg');
-    p.textContent = msg ?? '';
-    p.hidden = !msg;
-    if (msg) o.log(msg);
-  }
-
-  function summary(blocks: EditorBlock[]) {
-    const s = workoutStats(blocksToWorkout('x', undefined, blocks), ftp());
-    return `${fmtLong(s.durationS)} · ${s.avgW} W · charge ${s.load}`;
-  }
+  // La bibliothèque (mes séances, modèles, recherche, message) : library-view.ts.
+  // `pick` et `remove` sont plus bas : la vue les pose, la bibliothèque les appelle.
+  const library = new LibraryView({ session, library: o.library, ftp, log: o.log, onPick: (key) => pick(key), onRemove: (w) => remove(w) });
+  const say = (msg?: string) => library.say(msg);
+  const renderLibrary = () => library.render();
 
   function button(label: string, onClick: () => void, cls = '') {
     const b = el('button', { textContent: label, type: 'button', className: cls });
     b.addEventListener('click', onClick);
     return b;
-  }
-
-  const sampleWorkout = (id: string) => session.sampleWorkout(id);
-
-  /** Aperçu du profil d'une séance (mêmes couleurs de zones que l'éditeur), pour sa ligne dans la bibliothèque. */
-  const miniProfile = (w: Workout, cls = 'lib-mini') => miniProfileSvg(w, ftp(), cls);
-
-  function libRow(key: string, w: Workout, meta: string, pressed: boolean, onPick?: () => void, onRemove?: () => void) {
-    const main = el(
-      'button',
-      { type: 'button', className: 'lib-item' },
-      miniProfile(w),
-      el('span', { className: 'lib-text' }, el('strong', { textContent: w.name || 'Séance sans nom' }), el('small', { textContent: meta })),
-    );
-    main.dataset.key = key;
-    main.setAttribute('aria-pressed', String(pressed));
-    if (onPick) main.addEventListener('click', onPick);
-    const row = el('li', { className: 'lib-row' }, main);
-    if (onRemove) {
-      const del = el('button', { type: 'button', className: 'lib-del', textContent: '✕', title: 'Supprimer' });
-      del.setAttribute('aria-label', `Supprimer la séance « ${w.name} »`);
-      del.addEventListener('click', onRemove);
-      row.append(del);
-    }
-    return row;
-  }
-
-  function renderLibrary() {
-    // Les lignes sont reconstruites à chaque ouverture : le focus clavier revient sur la même ligne.
-    const active = document.activeElement;
-    const focusKey = active instanceof HTMLElement && active.closest('.sea-lib') ? active.dataset.key : undefined;
-    const q = fold($<HTMLInputElement>('lib-search').value.trim());
-    const match = (name: string) => !q || fold(name).includes(q);
-    const current = keyOf(session.draft);
-
-    const saved = o.library.list();
-    const mine: HTMLElement[] = [];
-    // Une séance nouvelle, importée ou copiée n'est pas encore dans la bibliothèque : on la montre en tête, ouverte.
-    if (session.draft && !session.draft.id && !session.draft.readOnly) mine.push(libRow('draft', workout(), 'Non enregistrée', true));
-    for (const w of saved.filter((x) => match(x.name))) {
-      const key = `lib:${w.id}`;
-      mine.push(libRow(key, blocksToWorkout(w.name, w.description, w.blocks), summary(w.blocks), current === key, () => pick(key), () => remove(w)));
-    }
-    if (!mine.length) mine.push(el('li', { className: 'note', textContent: saved.length ? 'Aucune séance ne correspond.' : 'Aucune séance enregistrée : crée-en une ou duplique un modèle.' }));
-    $('lib-list').replaceChildren(...mine);
-    $('lib-count').textContent = String(saved.length);
-
-    const samples = SAMPLE_WORKOUTS.flatMap((s) => {
-      const w = sampleWorkout(s.id);
-      return w && match(w.name) ? [libRow(`sample:${s.id}`, w, summary(workoutToBlocks(w, ftp()).blocks), current === `sample:${s.id}`, () => pick(`sample:${s.id}`))] : [];
-    });
-    $('lib-samples').replaceChildren(...(samples.length ? samples : [el('li', { className: 'note', textContent: 'Aucun modèle ne correspond.' })]));
-    $('lib-sample-count').textContent = String(SAMPLE_WORKOUTS.length);
-
-    if (focusKey) document.querySelector<HTMLElement>(`.sea-lib [data-key="${CSS.escape(focusKey)}"]`)?.focus();
   }
 
   // --- Ouverture, enregistrement, modifications : l'état est dans la session (app/editor-session.ts) ---
