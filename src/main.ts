@@ -18,7 +18,6 @@ import { COL_DES_ERABLES } from './domain/course/courses/col-des-erables';
 import { Journey } from './domain/sim/journey';
 import type { ConnectionState } from './infra/sensors/types';
 import type { Workout } from './domain/workout/model';
-import { profileShapes } from './domain/workout/profile';
 import { parseWorkout } from './domain/workout/runner';
 import { nextIntervalGate } from './domain/workout/gate';
 import { DeviceRegistry } from './infra/sensors/device-registry';
@@ -34,6 +33,7 @@ import { RideViewLoader } from './app/ride-view-loader';
 import { WorkoutSession } from './app/workout-session';
 import { DeviceManager } from './app/device-manager';
 import { ManualControl } from './app/manual-control';
+import { WorkoutCatalog } from './app/workout-catalog';
 import { SensorReadings } from './app/sensor-readings';
 import { SettingsStore } from './app/settings-store';
 import { TrainerController } from './app/trainer-controller';
@@ -43,6 +43,7 @@ import { setupAppShell } from './ui/shared/app-shell';
 import { setupWorkoutEditor } from './ui/editor/workout-editor';
 import { RideHud } from './ui/ride/hud';
 import { RideControlsView } from './ui/ride/ride-controls-view';
+import { WorkoutControlsView } from './ui/ride/workout-controls-view';
 import { needTrainer as needTrainerReason, noControl as noControlReason } from './ui/ride/trainer-reasons';
 import { DevicesView } from './ui/devices/devices-view';
 import { LogView } from './ui/devices/log-view';
@@ -62,7 +63,6 @@ import { setupAccount } from './ui/account/account-chip';
 import { WorldClient } from './infra/net/world-client';
 import { RiderTags } from './ui/ride/rider-tags';
 import { RidePanel } from './ui/ride/ride-panel';
-import { blocksToWorkout } from './domain/workout/blocks';
 import { BlockLibrary } from './domain/workout/block-library';
 import { WorkoutLibrary } from './domain/workout/library';
 import { SAMPLE_WORKOUTS } from './domain/workout/samples';
@@ -298,18 +298,6 @@ function toggleRide() {
 // --- Séance structurée ---
 
 const woFtp = $<HTMLInputElement>('wo-ftp');
-const woStart = $<HTMLButtonElement>('wo-start');
-const woPause = $<HTMLButtonElement>('wo-pause');
-const woSkip = $<HTMLButtonElement>('wo-skip');
-const woStop = $<HTMLButtonElement>('wo-stop');
-const woEasier = $<HTMLButtonElement>('wo-easier');
-const woHarder = $<HTMLButtonElement>('wo-harder');
-const rideQuick = $('ride-quick');
-const rqPause = $<HTMLButtonElement>('rq-pause');
-// La séance se choisit sur l'accueil (ou dans l'écran Séances) ; la sortie, elle, ne fait que la dérouler.
-const homeShapes = $('home-wo-shapes');
-const homeSelect = $<HTMLSelectElement>('home-wo-select');
-const homeWoStart = $<HTMLButtonElement>('home-wo-start');
 const homeRideBtn = $<HTMLButtonElement>('home-ride');
 // Fond de l'accueil : trois scènes qui se relaient toutes les minutes.
 // L'accueil montre le parcours retenu (nom, description, scène qui lui ressemble, sans rotation). On le choisit dans le menu
@@ -360,9 +348,6 @@ $('course-go').addEventListener('click', () => {
 setupHomeBackground($('sea-scenes'));
 // Et l'écran Appareils.
 setupHomeBackground($('dev-scenes'));
-const NO_WORKOUT = "Aucune séance choisie : choisis-en une sur l'accueil.";
-const PROFILE_W = 1000;
-const PROFILE_H = 120;
 
 /** La séance structurée : la séance choisie, son déroulement et la consigne ERG qu'elle impose au trainer. */
 const workoutSession = new WorkoutSession({
@@ -371,6 +356,20 @@ const workoutSession = new WorkoutSession({
   rideActive: () => rideSession.active,
   manualGradePct: () => rideControls.manualGradePct,
   log,
+});
+
+/** Les commandes de la séance : liste de l'accueil, démarrage, pause, palier, intensité (workout-controls-view.ts). */
+const workoutControls = new WorkoutControlsView({
+  choose: (value) => chooseWorkout(value),
+  start: () => startWorkout(),
+  startFromHome: () => {
+    router.go('sortie');
+    startWorkout();
+  },
+  togglePause: () => workoutSession.togglePause(),
+  skip: () => workoutSession.skip(),
+  stop: () => workoutSession.stop(),
+  adjustIntensity: (delta) => workoutSession.adjustIntensity(delta),
 });
 
 /** ERG et pente demandés à la main, selon ce qui tourne (app/manual-control.ts). */
@@ -410,73 +409,20 @@ function workoutStartBlock(): string | BlockReason | undefined {
         : undefined;
 }
 
-/** Intensité de la séance, affichée dans le menu et dans les commandes posées sur la vue. */
-function showIntensity(fraction: number) {
-  const text = `${Math.round(fraction * 100)} %`;
-  $('wo-intensity').textContent = text;
-  $('rq-intensity').textContent = text;
-}
-
 function refreshWorkoutButtons() {
   const { runner, workout } = workoutSession;
-  const woPaused = workoutSession.paused;
   const startReason = !workout && !runner ? 'Choisis d’abord une séance dans la liste.' : workoutStartBlock();
-  setBlocked(woStart, startReason);
-  setBlocked(homeWoStart, startReason);
+  workoutControls.render({ running: !!runner, paused: workoutSession.paused, startReason });
   refreshEditorRide?.();
-  for (const b of [woPause, woSkip, woStop, woEasier, woHarder]) setBlocked(b, runner ? undefined : 'Démarre d’abord la séance.');
-  woPause.textContent = woPaused ? 'Reprendre' : 'Pause';
-  // Téléphone couché : les mêmes commandes, posées sur la vue (voir ui/ride/sortie.css).
-  rideQuick.hidden = !runner;
-  rqPause.setAttribute('aria-pressed', String(woPaused));
-  rqPause.setAttribute('aria-label', woPaused ? 'Reprendre' : 'Pause');
-  // Dans le menu de la sortie : « Démarrer » avant la séance, les commandes de déroulement pendant.
-  woStart.hidden = !!runner;
-  for (const b of [woPause, woSkip, woStop]) b.hidden = !runner;
-  $('wo-intensity-row').hidden = !runner;
 }
 
-function renderProfile() {
-  const workout = workoutSession.workout;
-  homeShapes.replaceChildren();
-  $('home-wo-meta').textContent = workout ? `${workout.name} · ${fmtTime(workout.steps.reduce((t, s) => t + s.durationS, 0))}` : 'Aucune séance choisie.';
-  if (!workout) return;
-  for (const s of profileShapes(workout, readFtp(), PROFILE_W, PROFILE_H)) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', s.d);
-    path.setAttribute('class', s.zone);
-    homeShapes.append(path);
-  }
-}
+/** Le profil de la séance choisie, sur l'accueil. */
+const renderProfile = () => workoutControls.showProfile(workoutSession.workout, readFtp());
 
-/** Valeur du sélecteur : `lib:<id>` pour une séance de l'utilisateur, `sample:<id>` pour un modèle. */
-function workoutFromChoice(value: string): Workout | undefined {
-  const [kind, id] = value.split(':');
-  if (kind === 'lib') {
-    const saved = library.get(id ?? '');
-    return saved && blocksToWorkout(saved.name, saved.description, saved.blocks);
-  }
-  const sample = SAMPLE_WORKOUTS.find((s) => s.id === id);
-  if (!sample) return undefined;
-  try {
-    return parseWorkout(sample.fileName, sample.text);
-  } catch (e) {
-    log(`séance illisible (${sample.fileName}) : ${e instanceof Error ? e.message : e}`);
-    return undefined;
-  }
-}
-
+/** Les séances que l'on peut choisir : les nôtres et les modèles livrés. La liste de l'accueil les montre. */
 function refreshWorkoutChoices() {
-  const keep = homeSelect.value;
-  const opt = (value: string, label: string) => Object.assign(document.createElement('option'), { value, textContent: label });
-  const mine = document.createElement('optgroup');
-  mine.label = 'Mes séances';
-  mine.append(...library.list().map((w) => opt(`lib:${w.id}`, w.name)));
-  const samples = document.createElement('optgroup');
-  samples.label = 'Modèles';
-  samples.append(...SAMPLE_WORKOUTS.map((s) => opt(`sample:${s.id}`, parseWorkout(s.fileName, s.text).name)));
-  homeSelect.replaceChildren(opt('', '— choisir une séance —'), ...(mine.children.length ? [mine] : []), samples);
-  homeSelect.value = [...homeSelect.options].some((o) => o.value === keep) ? keep : '';
+  const { mine, samples } = catalog.choices();
+  workoutControls.showChoices(mine, samples);
 }
 
 function chooseWorkout(value: string) {
@@ -484,11 +430,11 @@ function chooseWorkout(value: string) {
     log("séance en cours : l'arrêter avant d'en choisir une autre");
     return;
   }
-  homeSelect.value = value;
-  const w = value ? workoutFromChoice(value) : undefined;
+  workoutControls.setChoice(value);
+  const w = value ? catalog.resolve(value) : undefined;
   workoutSession.select(w);
+  workoutControls.showWorkoutName(w);
   if (!w) {
-    $('wo-name').textContent = NO_WORKOUT;
     renderProfile();
     refreshWorkoutButtons();
     return;
@@ -496,7 +442,6 @@ function chooseWorkout(value: string) {
   armAutoStart();
   for (const x of w.warnings) log(`séance : ${x}`);
   const total = w.steps.reduce((t, s) => t + s.durationS, 0);
-  $('wo-name').textContent = `${w.name} · ${fmtTime(total)}${w.description ? ` · ${w.description}` : ''}`;
   renderProfile();
   refreshWorkoutButtons();
   log(`séance choisie : ${w.name} (${w.steps.length} paliers, ${fmtTime(total)})`);
@@ -510,7 +455,7 @@ workoutSession.on('state', (s) => {
   rideViews.view?.setGate(runner && s && live ? nextIntervalGate(s, runner.ftpW, live.speedKmh, workoutSession.paused) : undefined);
 });
 workoutSession.on('changed', refreshWorkoutButtons);
-workoutSession.on('intensity', showIntensity);
+workoutSession.on('intensity', (fraction) => workoutControls.showIntensity(fraction));
 workoutSession.on('started', (name) => exporter.onWorkoutStarted(name));
 workoutSession.on('stepped', (targetW, stepIndex) => exporter.onWorkoutState(targetW, stepIndex));
 workoutSession.on('completing', () => exporter.onWorkoutFinished()); // l'export s'arrêtera à la fin du dernier palier (app/ride-export.ts)
@@ -526,11 +471,6 @@ function startWorkout() {
   workoutSession.start();
 }
 
-homeSelect.addEventListener('change', () => chooseWorkout(homeSelect.value));
-homeWoStart.addEventListener('click', () => {
-  router.go('sortie');
-  startWorkout();
-});
 // « Rouler » : une sortie déjà en cours se reprend ; sinon on choisit le parcours, puis « Partir » lance la sortie.
 homeRideBtn.addEventListener('click', () => {
   if (rideSession.active) {
@@ -555,37 +495,20 @@ woFtp.addEventListener('change', () => {
   syncJournal.record('setting', 'ftp', readFtp());
   ftpChanged();
 });
-woStart.addEventListener('click', startWorkout);
-// Commandes posées sur la vue : elles relaient celles du menu, qui portent les règles.
-for (const [quick, target] of [
-  [rqPause, woPause],
-  [$<HTMLButtonElement>('rq-skip'), woSkip],
-  [$<HTMLButtonElement>('rq-easier'), woEasier],
-  [$<HTMLButtonElement>('rq-harder'), woHarder],
-] as const) {
-  quick.addEventListener('click', () => target.click());
-}
-woPause.addEventListener('click', () => workoutSession.togglePause());
-woSkip.addEventListener('click', () => workoutSession.skip());
-woStop.addEventListener('click', () => workoutSession.stop());
-for (const [btn, delta] of [
-  [woEasier, -0.05],
-  [woHarder, 0.05],
-] as const) {
-  btn.addEventListener('click', () => workoutSession.adjustIntensity(delta));
-}
 
 // --- Écrans, appareils connus et reconnexion au lancement ---
 
 const library = new WorkoutLibrary(prefs, undefined, syncJournal);
 const blockLibrary = new BlockLibrary(prefs, undefined, syncJournal);
+/** Les séances que l'on peut choisir pour rouler : les nôtres et les modèles (app/workout-catalog.ts). */
+const catalog = new WorkoutCatalog({ library, log });
 const editor = setupWorkoutEditor({
   library,
   blocks: blockLibrary,
   readFtp,
   log,
   onLibraryChange: refreshWorkoutChoices,
-  currentChoice: () => homeSelect.value,
+  currentChoice: () => workoutControls.choice,
   // Pendant une séance, le choix reste celui de la séance en cours : on ne le change pas en parcourant la bibliothèque.
   onFocus: (key) => {
     if (!workoutSession.running) chooseWorkout(key);
@@ -850,10 +773,10 @@ const settingsSource: SyncSource = {
 /** Séances changées depuis un autre appareil : l'éditeur et la liste de la sortie suivent, la séance choisie aussi. */
 function workoutsChanged(ids: Set<string>) {
   editor.libraryChanged();
-  const before = homeSelect.value;
+  const before = workoutControls.choice;
   refreshWorkoutChoices();
-  const changed = homeSelect.value !== before || (before.startsWith('lib:') && (ids.size === 0 || ids.has(before.slice(4))));
-  if (changed && !workoutSession.running) chooseWorkout(homeSelect.value);
+  const changed = workoutControls.choice !== before || (before.startsWith('lib:') && (ids.size === 0 || ids.has(before.slice(4))));
+  if (changed && !workoutSession.running) chooseWorkout(workoutControls.choice);
 }
 const sync = createSyncClient({
   journal: syncJournal,
