@@ -1,7 +1,7 @@
 /**
  * Image de repli du portrait du coureur (src/assets/rider-portrait.jpg), refaite d'après l'avatar 3D actuel.
  *
- * L'application rend le portrait au premier lancement d'une version (src/render/rider-portrait.ts) ; d'ici là, ou si le
+ * L'application rend le portrait au premier lancement d'une version (src/render/riders/rider-portrait.ts) ; d'ici là, ou si le
  * rendu échoue (pas de WebGL), c'est cette image qui s'affiche dans le médaillon du radar. Elle doit donc montrer le même
  * coureur, avec le même cadrage : on la produit avec le code de rendu de l'application lui-même. À relancer après tout
  * changement de l'avatar, du vélo ou du cadrage (`npm run assets` ne le fait pas : il faut un navigateur).
@@ -24,7 +24,7 @@ const OUT = 'src/assets/rider-portrait.jpg';
   // N'importe quelle page du serveur de dev : on n'a besoin que de son origine pour importer le module de rendu.
   await page.goto(`http://localhost:${PORT}/robots.txt`);
   const dataUrl = await page.evaluate(async (size) => {
-    const { renderRiderPortrait } = await import('/src/render/rider-portrait-render.ts');
+    const { renderRiderPortrait } = await import('/src/render/riders/rider-portrait-render.ts');
     const blob = await renderRiderPortrait(size);
     const img = await createImageBitmap(blob);
     const c = document.createElement('canvas');

@@ -1,68 +1,71 @@
-import { installNativeBluetooth } from './sensors/native-bluetooth';
-import { isNativeShell, Moulinette } from './native/shell';
-import { createKeepAwake } from './ui/keep-awake';
-import { openDeviceChooser } from './ui/device-chooser';
-import { HeartRateMonitor } from './sensors/heart-rate-monitor';
-import { SensorHub } from './sensors/hub';
-import { SimulatedTrainer } from './sensors/simulator';
-import { WebBluetoothTrainer } from './sensors/web-bluetooth';
-import { webBluetoothAvailable } from './sensors/gatt-device';
-import { browserUa, noBluetoothHint, noBluetoothStatus } from './sensors/bluetooth-support';
+import { installNativeBluetooth } from './infra/sensors/ble/native-bluetooth';
+import { isNativeShell, Moulinette } from './infra/native/shell';
+import { createKeepAwake } from './ui/shared/keep-awake';
+import { openDeviceChooser } from './ui/devices/device-chooser';
+import { HeartRateMonitor } from './infra/sensors/heart-rate-monitor';
+import { SensorHub } from './infra/sensors/hub';
+import { SimulatedTrainer } from './infra/sensors/simulator';
+import { WebBluetoothTrainer } from './infra/sensors/ble/web-bluetooth';
+import { webBluetoothAvailable } from './infra/sensors/ble/gatt-device';
+import { browserUa, noBluetoothHint, noBluetoothStatus } from './infra/sensors/ble/bluetooth-support';
 // Vue 3D chargée à la demande (`buildView`) : three.js n'est pas dans le JS du lancement.
 import type { GpuLoss, RideView } from './render/ride-view';
-import { Background } from './render/background';
-import { chooseQuality } from './render/quality';
-import { GradeSlew, GradeThrottle } from './sim/grade-throttle';
-import { gearedGradePct, trainerModelFor } from './sim/virtual-gears';
-import { setupGears } from './ui/gears';
-import { DEFAULT_RIDER } from './sim/physics';
-import { Ride } from './sim/ride';
-import { setupExport } from './export/wiring';
-import { setupTelemetry } from './telemetry/wiring';
-import { COL_DES_ERABLES } from './sim/courses/col-des-erables';
-import { Journey } from './sim/journey';
-import type { ConnectionState, TrainerAdapter } from './sensors/types';
-import { ErgFollower } from './workout/erg-follower';
-import { STEP_LABEL, type Workout } from './workout/model';
-import { profileShapes } from './workout/profile';
-import { parseWorkout, WorkoutRunner, type WorkoutState } from './workout/runner';
-import { nextIntervalGate } from './workout/gate';
-import { browserStore, canRecallDevices, DeviceRegistry, recallDevices, type DeviceRole } from './sensors/device-registry';
-import { ALL_PROTOCOLS, PROTOCOL_LABEL, type ControlProtocol } from './sensors/trainer-profiles';
-import { formatDuration } from './ui/duration';
-import { setBlocked, setupBlockedHints, type BlockReason } from './ui/blocked';
-import { setupRouter } from './ui/router';
-import { FTP_LIMITS, MASS_LIMITS, setupRiderProfile } from './ui/rider-profile';
-import { setupWheel } from './ui/wheel-picker';
-import { setupAppShell } from './ui/app-shell';
-import { setupWorkoutEditor } from './ui/workout-editor';
-import { RideHud } from './ui/hud';
-import { setupRideMenu } from './ui/ride-menu';
-import { setupRecap } from './ui/recap';
-import { summarize } from './ui/recap-model';
-import { createRadar } from './ui/radar';
+import { Background } from './shared/util/background';
+import { chooseQuality } from './render/core/quality';
+import { setupGears } from './ui/ride/gears';
+import { DEFAULT_RIDER } from './domain/sim/physics';
+import { Ride } from './domain/sim/ride';
+import { setupExport } from './infra/export/wiring';
+import { setupTelemetry } from './infra/telemetry/wiring';
+import { COL_DES_ERABLES } from './domain/course/courses/col-des-erables';
+import { Journey } from './domain/sim/journey';
+import type { ConnectionState, TrainerAdapter } from './infra/sensors/types';
+import { ErgFollower } from './domain/workout/erg-follower';
+import { STEP_LABEL, type Workout } from './domain/workout/model';
+import { profileShapes } from './domain/workout/profile';
+import { parseWorkout, WorkoutRunner, type WorkoutState } from './domain/workout/runner';
+import { nextIntervalGate } from './domain/workout/gate';
+import { canRecallDevices, DeviceRegistry, recallDevices, type DeviceRole } from './infra/sensors/device-registry';
+import { browserStore } from './infra/storage/key-value-store';
+import { PROTOCOL_LABEL, type ControlProtocol } from './infra/sensors/protocols/trainer-profiles';
+import { formatDuration } from './ui/shared/duration';
+import { setBlocked, setupBlockedHints, type BlockReason } from './ui/shared/blocked';
+import { setupRouter } from './ui/shared/router';
+import { normalizeFtp, normalizeMass } from './domain/sim/rider-limits';
+import { GradeController } from './app/grade-controller';
+import { SensorReadings } from './app/sensor-readings';
+import { SettingsStore } from './app/settings-store';
+import { setupRiderProfile } from './ui/devices/rider-profile';
+import { setupWheel } from './ui/shared/wheel-picker';
+import { setupAppShell } from './ui/shared/app-shell';
+import { setupWorkoutEditor } from './ui/editor/workout-editor';
+import { RideHud } from './ui/ride/hud';
+import { setupRideMenu } from './ui/ride/ride-menu';
+import { setupRecap } from './ui/recap/recap';
+import { summarize } from './ui/recap/recap-model';
+import { createRadar } from './ui/ride/radar';
 import portraitFallback from './assets/rider-portrait.jpg';
-import { setupHomeBackground } from './ui/home-background';
-import { HOME_SCENES } from './ui/home-scenes';
-import { setupCoursePicker } from './ui/course-picker';
-import { setupCourseMap } from './ui/course-map';
-import { setupAccount } from './ui/account-chip';
-import { WorldClient } from './net/world-client';
-import { crowdLine, RiderTags } from './ui/rider-tags';
-import { RidePanel } from './ui/ride-panel';
-import { draftFrom } from './sim/draft';
-import { controlModes } from './ui/radar-model';
-import { ClimbCounter, PowerAverage } from './ui/hud-model';
-import type { RideSnapshot } from './sim/ride';
-import { blocksToWorkout } from './workout/blocks';
-import { BlockLibrary } from './workout/block-library';
-import { WorkoutLibrary } from './workout/library';
-import { SAMPLE_WORKOUTS } from './workout/samples';
-import { createSyncClient, type SyncSource } from './sync/client';
-import { SyncJournal } from './sync/journal';
-import type { SyncItem, SyncSetting } from './sync/protocol';
-import { blockSource, workoutSource } from './sync/sources';
-import { migrateLegacyKeys } from './util/legacy-storage';
+import { setupHomeBackground } from './ui/home/home-background';
+import { HOME_SCENES } from './ui/home/home-scenes';
+import { setupCoursePicker } from './ui/home/course-picker';
+import { setupCourseMap } from './ui/home/course-map';
+import { setupAccount } from './ui/account/account-chip';
+import { WorldClient } from './infra/net/world-client';
+import { crowdLine, RiderTags } from './ui/ride/rider-tags';
+import { RidePanel } from './ui/ride/ride-panel';
+import { draftFrom } from './domain/sim/draft';
+import { controlModes } from './ui/ride/radar-model';
+import { ClimbCounter } from './ui/ride/hud-model';
+import type { RideSnapshot } from './domain/sim/ride';
+import { blocksToWorkout } from './domain/workout/blocks';
+import { BlockLibrary } from './domain/workout/block-library';
+import { WorkoutLibrary } from './domain/workout/library';
+import { SAMPLE_WORKOUTS } from './domain/workout/samples';
+import { createSyncClient, type SyncSource } from './infra/sync/client';
+import { SyncJournal } from './infra/sync/journal';
+import type { SyncItem, SyncSetting } from './infra/sync/protocol';
+import { blockSource, workoutSource } from './infra/sync/sources';
+import { migrateLegacyKeys } from './infra/storage/legacy-storage';
 
 // Données gardées sous l'ancien préfixe `zwift2.` : reprises sous `mamoulinette.` avant toute lecture.
 try {
@@ -106,21 +109,16 @@ const gradeInput = $<HTMLInputElement>('grade');
 const hub = new SensorHub();
 let trainer: TrainerAdapter | undefined;
 
-/** Protocole de pilotage imposé depuis l'aide de l'écran Appareils ; vide = choix automatique selon le modèle. */
-const PROTOCOL_KEY = 'mamoulinette.trainerProtocol';
 const prefs = browserStore();
-/** Journal de synchronisation avec le compte : FTP, masse, séances et blocs y notent chaque modification (src/sync/). */
+/** FTP, masse et protocole de pilotage gardés sur l'appareil. */
+const settings = new SettingsStore(prefs);
+/** Journal de synchronisation avec le compte : FTP, masse, séances et blocs y notent chaque modification (src/infra/sync/). */
 const syncJournal = new SyncJournal(prefs);
 const protocolSelect = $<HTMLSelectElement>('trainer-protocol');
-const savedProtocol = prefs.getItem(PROTOCOL_KEY) as ControlProtocol | null;
-protocolSelect.value = savedProtocol && ALL_PROTOCOLS.includes(savedProtocol) ? savedProtocol : '';
+/** Protocole de pilotage imposé depuis l'aide de l'écran Appareils ; vide = choix automatique selon le modèle. */
+protocolSelect.value = settings.trainerProtocol() ?? '';
 protocolSelect.addEventListener('change', () => {
-  try {
-    if (protocolSelect.value) prefs.setItem(PROTOCOL_KEY, protocolSelect.value);
-    else prefs.removeItem(PROTOCOL_KEY);
-  } catch {
-    // stockage bloqué : le choix vaut pour cette session
-  }
+  settings.saveTrainerProtocol((protocolSelect.value || undefined) as ControlProtocol | undefined);
   log(`protocole de pilotage : ${protocolSelect.value ? PROTOCOL_LABEL[protocolSelect.value as ControlProtocol] : 'automatique'}, appliqué à la prochaine connexion`);
 });
 
@@ -131,26 +129,18 @@ function newBleTrainer(): WebBluetoothTrainer {
 }
 let hrMonitor: HeartRateMonitor | undefined;
 
-/** Au-delà de ce délai sans mesure de puissance, le cycliste est considéré à l'arrêt dans la simulation. */
-const POWER_STALE_MS = 3000;
+/** Dernières mesures des capteurs, tant qu'elles sont fraîches (au-delà de 3 s de silence, le cycliste est à l'arrêt). */
+const readings = new SensorReadings();
 const rideBtn = $<HTMLButtonElement>('ride-toggle');
 const massInput = $<HTMLInputElement>('mass');
-/** Sans Cog : la pente du parcours, par pas de 0,5 %. Avec : la pente corrigée suit aussi la vitesse, d'où un pas plus fin. */
-let throttle = new GradeThrottle();
-const slew = new GradeSlew();
-/** ERG engagé : la consigne de puissance prime, et l'envoi de la pente du parcours est suspendu pour ne pas la remplacer. */
-let ergActive = false;
+/** Pente envoyée au trainer (lissage, braquet virtuel, fréquence d'envoi) et état « ERG engagé » : la consigne de puissance prime sur la pente. */
+const grade = new GradeController();
 /** Le trajet de la page : la simulation, la vue 3D et le HUD le partagent ; il repart du village à chaque sortie. */
 const journey = new Journey(COL_DES_ERABLES);
 let ride: Ride | undefined;
 let rideTimer: ReturnType<typeof setInterval> | undefined;
 let lastTick = 0;
-let lastPower = { w: 0, at: 0 };
-let lastCadence = { rpm: 0, at: 0 };
-let lastHr = { bpm: 0, at: 0 };
-let lastSpeed = { kmh: 0, at: 0 };
-/** Puissance moyenne sur 3 s et dénivelé positif, pour le HUD. */
-const power3s = new PowerAverage();
+/** Dénivelé positif de la sortie, pour le HUD. */
 const climb = new ClimbCounter();
 let lastRide: RideSnapshot | undefined;
 let lastWoState: WorkoutState | undefined;
@@ -168,7 +158,7 @@ function log(msg: string) {
   telemetry.record(msg);
 }
 
-// Envoie le journal au serveur de logs dès qu'une erreur survient (voir src/telemetry/). `roleState` n'est lu qu'à l'envoi,
+// Envoie le journal au serveur de logs dès qu'une erreur survient (voir src/infra/telemetry/). `roleState` n'est lu qu'à l'envoi,
 // bien après l'évaluation du module.
 const telemetry = setupTelemetry({
   log,
@@ -291,17 +281,10 @@ function maybeAutoStart(m: { powerW?: number; cadenceRpm?: number }) {
 
 hub.on('measurement', (m) => {
   maybeAutoStart(m);
-  if (m.powerW !== undefined) lastPower = { w: m.powerW, at: performance.now() };
-  if (m.cadenceRpm !== undefined) lastCadence = { rpm: m.cadenceRpm, at: performance.now() };
-  if (m.powerW !== undefined) power3s.push(m.powerW, performance.now());
-  if (m.heartRateBpm !== undefined) lastHr = { bpm: m.heartRateBpm, at: performance.now() };
-  if (m.speedKmh !== undefined) lastSpeed = { kmh: m.speedKmh, at: performance.now() };
+  readings.record(m);
 });
 
 const fmtTime = (s: number) => formatDuration(Math.floor(s));
-
-/** Les protocoles portent la pente au centième de pourcent. */
-const round2 = (x: number) => Math.round(x * 100) / 100;
 
 /** Part de la traînée de l'air épargnée en ce moment par l'aspiration derrière un autre coureur (0 : seul). */
 let currentDraft = 0;
@@ -323,7 +306,7 @@ function updateDraft(distanceM: number) {
 function tickRide() {
   if (!ride) return;
   const now = performance.now();
-  const power = now - lastPower.at > POWER_STALE_MS ? 0 : lastPower.w;
+  const power = readings.powerW();
   updateDraft(lastRide?.distanceM ?? 0);
   const s = ride.advance((now - lastTick) / 1000, power);
   exporter.onRide(s);
@@ -333,7 +316,7 @@ function tickRide() {
   view?.setState({
     distanceM: s.distanceM,
     speedKmh: s.speedKmh,
-    cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
+    cadenceRpm: readings.cadenceRpm(),
     powerW: power,
     ftpW: readFtp(),
   });
@@ -341,41 +324,32 @@ function tickRide() {
     pos: journey.locate(s.distanceM),
     speedMs: s.speedKmh / 3.6,
     powerW: power,
-    cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? 0 : lastCadence.rpm,
+    cadenceRpm: readings.cadenceRpm(),
     riding: true,
   });
 
-  // Zwift Cog. Protocole Zwift : le trainer reçoit la pente réelle et le braquet, et fait le calcul. Autres protocoles :
-  // la pente envoyée est celle qui rend, avec le braquet réel, l'effort du braquet virtuel choisi.
-  const g = gears.state();
-  const native = g.enabled && !!trainer?.capabilities.virtualGears;
-  const model = g.enabled && !native ? trainerModelFor(ride.rider) : undefined;
-  const targetGrade = model
-    ? round2(gearedGradePct({
-        gradePct: s.gradePct,
-        speedMs: s.speedKmh / 3.6,
-        virtualRatio: g.virtualRatio,
-        realRatio: g.realRatio,
-        cadenceRpm: now - lastCadence.at > POWER_STALE_MS ? undefined : lastCadence.rpm,
-        rider: ride.rider,
-        trainer: model,
-      }))
-    : s.gradePct;
-  const sentGrade = round2(slew.next(targetGrade, now));
-  if (currentState === 'connected' && trainer?.capabilities.simulation && !ergActive && throttle.shouldSend(sentGrade, now)) {
-    throttle.markSent(sentGrade, now);
-    hub.setSimulation({ gradePct: sentGrade, massKg: ride.rider.massKg, ...model, ...(native ? { gearRatio: g.virtualRatio } : {}) }).catch((e) => {
+  const command = grade.update({
+    nowMs: now,
+    courseGradePct: s.gradePct,
+    speedMs: s.speedKmh / 3.6,
+    cadenceRpm: readings.liveCadenceRpm(),
+    rider: ride.rider,
+    gearing: gears.state(),
+    trainerAppliesGears: !!trainer?.capabilities.virtualGears,
+    canSimulate: currentState === 'connected' && !!trainer?.capabilities.simulation,
+  });
+  if (command) {
+    hub.setSimulation(command).catch((e) => {
       log(`pente non envoyée : ${e instanceof Error ? e.message : e}`);
-      setTimeout(() => throttle.reset(), 2000); // nouvel essai, sans marteler le trainer
+      setTimeout(() => grade.retry(), 2000); // nouvel essai, sans marteler le trainer
     });
   }
 }
 
 function setErgActive(on: boolean) {
-  ergActive = on;
+  grade.setErgActive(on);
   ergBtn.textContent = on ? "Désengager l'ERG" : "Engager l'ERG";
   ergBtn.classList.toggle('secondary', on);
-  if (!on) throttle.reset(); // en sortie, la prochaine mise à jour renvoie la pente du parcours
 }
 
 // Écran allumé tant qu'on est sur l'application, quel que soit l'écran : pendant une séance ERG, on ne touche pas l'écran.
@@ -394,8 +368,7 @@ function startRide() {
   ride = new Ride(journey, { ...DEFAULT_RIDER, massKg });
   lastRide = ride.snapshot();
   climb.reset();
-  throttle.reset();
-  slew.reset();
+  grade.reset();
   lastTick = performance.now();
   rideTimer = setInterval(tickRide, 100);
   rideBtn.textContent = 'Arrêter la sortie';
@@ -420,8 +393,7 @@ function pauseRide() {
 function resumeRide() {
   if (!ride || !ridePaused) return;
   ridePaused = false;
-  slew.reset();
-  throttle.reset(); // le trainer reconnecté repart de zéro : on lui renvoie la pente
+  grade.reset(); // le trainer reconnecté repart de zéro : on lui renvoie la pente
   lastTick = performance.now();
   rideTimer = setInterval(tickRide, 100);
   log('trainer reconnecté : sortie reprise');
@@ -513,7 +485,7 @@ for (const role of ['trainer', 'hr'] as const) {
 }
 disconnectBtn.addEventListener('click', () => void trainer?.disconnect());
 ergBtn.addEventListener('click', async () => {
-  if (ergActive) {
+  if (grade.ergActive) {
     setErgActive(false);
     if (runner) {
       woErgOptOut = true;
@@ -540,7 +512,7 @@ ergBtn.addEventListener('click', async () => {
 });
 // Changer la cible pendant que l'ERG est engagé l'applique aussitôt.
 ergInput.addEventListener('change', () => {
-  if (!ergActive || runner) return; // en séance, c'est la séance qui fixe la consigne
+  if (!grade.ergActive || runner) return; // en séance, c'est la séance qui fixe la consigne
   const w = Number(ergInput.value);
   void send(`ERG ${w} W`, () => hub.setTargetPower(w));
 });
@@ -619,8 +591,6 @@ setupHomeBackground($('dev-scenes'));
 const NO_WORKOUT = "Aucune séance choisie : choisis-en une sur l'accueil.";
 const PROFILE_W = 1000;
 const PROFILE_H = 120;
-const FTP_KEY = 'mamoulinette.ftp';
-const MASS_KEY = 'mamoulinette.mass';
 
 const follower = new ErgFollower();
 let workout: Workout | undefined;
@@ -634,16 +604,12 @@ let woSending = false;
 /** Après un envoi raté, on attend avant de réessayer pour ne pas marteler le trainer. */
 let woHoldUntil = 0;
 
-try {
-  const saved = Number(prefs.getItem(FTP_KEY));
-  if (saved >= FTP_LIMITS.min) woFtp.value = String(saved);
-  const savedMass = Number(prefs.getItem(MASS_KEY));
-  if (savedMass >= MASS_LIMITS.min && savedMass <= MASS_LIMITS.max) massInput.value = String(savedMass);
-} catch {
-  // stockage indisponible (navigation privée) : on garde la valeur par défaut
-}
-const readFtp = () => (Number(woFtp.value) >= 50 ? Number(woFtp.value) : 200);
-const readMass = () => (Number(massInput.value) >= MASS_LIMITS.min ? Number(massInput.value) : DEFAULT_RIDER.massKg);
+const savedFtp = settings.ftpW();
+if (savedFtp !== undefined) woFtp.value = String(savedFtp);
+const savedMass = settings.massKg();
+if (savedMass !== undefined) massInput.value = String(savedMass);
+const readFtp = () => normalizeFtp(Number(woFtp.value));
+const readMass = () => normalizeMass(Number(massInput.value));
 
 /** Appelé par l'écran Séances quand « Rouler » doit se remettre à jour (affecté une fois l'éditeur créé). */
 // Affecté plus bas, une fois l'éditeur créé : lu avant par des fonctions déjà déclarées.
@@ -676,7 +642,7 @@ function refreshWorkoutButtons() {
   refreshEditorRide?.();
   for (const b of [woPause, woSkip, woStop, woEasier, woHarder]) setBlocked(b, runner ? undefined : 'Démarre d’abord la séance.');
   woPause.textContent = woPaused ? 'Reprendre' : 'Pause';
-  // Téléphone couché : les mêmes commandes, posées sur la vue (voir ui/sortie.css).
+  // Téléphone couché : les mêmes commandes, posées sur la vue (voir ui/ride/sortie.css).
   rideQuick.hidden = !runner;
   rqPause.setAttribute('aria-pressed', String(woPaused));
   rqPause.setAttribute('aria-label', woPaused ? 'Reprendre' : 'Pause');
@@ -763,7 +729,7 @@ function renderWorkout(s: WorkoutState | undefined) {
 
 /** Relâche l'ERG pris par la séance : hors sortie virtuelle, le trainer ne le quitte qu'avec une consigne de pente. */
 function releaseErg(reason: string) {
-  if (!ergActive) return;
+  if (!grade.ergActive) return;
   setErgActive(false);
   if (ride || currentState !== 'connected') return log(reason);
   const g = Number(gradeInput.value);
@@ -781,7 +747,7 @@ function tickWorkout() {
   renderWorkout(s);
   if (s.done) {
     const done = { workout: runner.workout, ftpW: runner.ftpW };
-    exporter.onWorkoutFinished(); // l'export s'arrêtera à la fin du dernier palier (export/wiring.ts)
+    exporter.onWorkoutFinished(); // l'export s'arrêtera à la fin du dernier palier (infra/export/wiring.ts)
     finishWorkout('séance terminée');
     return offerRecap(done);
   }
@@ -793,14 +759,14 @@ function tickWorkout() {
     follower.reset();
     return releaseErg(`palier ${STEP_LABEL[s.step.kind].toLowerCase()} : ERG relâché`);
   }
-  if (!ergActive) follower.reset(); // ERG relâché ailleurs (fin de sortie, reconnexion) : on le reprend aussitôt
+  if (!grade.ergActive) follower.reset(); // ERG relâché ailleurs (fin de sortie, reconnexion) : on le reprend aussitôt
   const w = follower.next(s, now);
   if (w === undefined) return;
   woSending = true;
   hub
     .setTargetPower(w)
     .then(() => {
-      if (!ergActive) {
+      if (!grade.ergActive) {
         setErgActive(true);
         log(`séance : ERG engagé à ${w} W`);
       }
@@ -838,7 +804,7 @@ function finishWorkout(reason: string) {
   runner = undefined;
   woPaused = false;
   woErgOptOut = false;
-  if (ergActive) releaseErg(reason);
+  if (grade.ergActive) releaseErg(reason);
   else log(reason);
   renderWorkout(undefined);
   refreshWorkoutButtons();
@@ -858,15 +824,6 @@ homeRideBtn.addEventListener('click', () => {
   courseDialog.showModal();
   $<HTMLButtonElement>('course-go').focus();
 });
-/** Garde le réglage sur l'appareil (`undefined` : revient à la valeur par défaut). */
-function storeSetting(key: string, v: number | undefined) {
-  try {
-    if (v === undefined) prefs.removeItem(key);
-    else prefs.setItem(key, String(v));
-  } catch {
-    // préférence non mémorisée, sans conséquence
-  }
-}
 /** La FTP a changé (ici ou sur un autre appareil) : séance en cours, profil et éditeur suivent. */
 function ftpChanged() {
   if (runner) runner.ftpW = readFtp();
@@ -874,11 +831,11 @@ function ftpChanged() {
   editor.refresh();
 }
 massInput.addEventListener('change', () => {
-  storeSetting(MASS_KEY, readMass());
+  settings.save('mass', readMass());
   syncJournal.record('setting', 'mass', readMass());
 });
 woFtp.addEventListener('change', () => {
-  storeSetting(FTP_KEY, readFtp());
+  settings.save('ftp', readFtp());
   syncJournal.record('setting', 'ftp', readFtp());
   ftpChanged();
 });
@@ -987,12 +944,12 @@ const gears = setupGears({
   keysActive: () => router.current() === 'sortie' && !document.querySelector('dialog[open]'),
   onChange: (s, why) => {
     // Le changement doit se sentir tout de suite : la prochaine mise à jour de la sortie renvoie la pente sans attendre.
-    throttle = s.enabled ? new GradeThrottle(0.2, 500) : new GradeThrottle();
+    grade.setVirtualGears(s.enabled);
     if (why === 'shift') log(`vitesse ${s.gear} (braquet ${s.virtualRatio.toFixed(2)})`);
     else log(s.enabled ? `Zwift Cog : vitesses virtuelles actives, braquet réel ${s.realRatio.toFixed(2)}` : 'Zwift Cog : vitesses virtuelles coupées');
   },
 });
-if (gears.state().enabled) throttle = new GradeThrottle(0.2, 500);
+if (gears.state().enabled) grade.setVirtualGears(true);
 
 const registry = new DeviceRegistry();
 const roleState: Record<DeviceRole, ConnectionState> = { trainer: 'disconnected', hr: 'disconnected' };
@@ -1016,7 +973,7 @@ const radars = [
 ];
 const riderAvatar = $<HTMLImageElement>('rider-avatar');
 riderAvatar.src = portraitFallback;
-void import('./render/rider-portrait')
+void import('./render/riders/rider-portrait')
   .then((m) => m.riderPortrait())
   .then((url) => { riderAvatar.src = url; })
   .catch(() => {}); // l'image de repli reste affichée
@@ -1186,23 +1143,22 @@ if (webBluetoothAvailable()) {
 const params = new URLSearchParams(location.search);
 
 // HUD posé sur la vue 3D (docs/design/hud.md). En qualité réduite, panneaux sans flou.
-/** Profil de rendu : `?quality=high|low`, sinon `low` sur écran tactile (src/render/quality.ts). Le HUD le suit (sans flou en `low`). */
+/** Profil de rendu : `?quality=high|low`, sinon `low` sur écran tactile (src/render/core/quality.ts). Le HUD le suit (sans flou en `low`). */
 const quality = chooseQuality(params.get('quality'), matchMedia('(pointer: coarse)').matches);
 const hud = new RideHud($('hud'), journey, { flat: quality === 'low' });
-const fresh = (at: number) => performance.now() - at <= POWER_STALE_MS;
 function renderHud() {
   if (router.current() !== 'sortie') return;
   hud.update({
-    powerW: power3s.value(performance.now()),
-    heartRateBpm: fresh(lastHr.at) ? lastHr.bpm : undefined,
-    cadenceRpm: fresh(lastCadence.at) ? lastCadence.rpm : undefined,
+    powerW: readings.averagePowerW(),
+    heartRateBpm: readings.heartRateBpm(),
+    cadenceRpm: readings.liveCadenceRpm(),
     // Pendant la sortie, la vitesse virtuelle (celle qui fait avancer la vue) ; sinon celle mesurée par le trainer.
-    speedKmh: ride && lastRide ? lastRide.speedKmh : fresh(lastSpeed.at) ? lastSpeed.kmh : undefined,
+    speedKmh: ride && lastRide ? lastRide.speedKmh : readings.speedKmh(),
     ftpW: runner?.ftpW ?? readFtp(),
     ride: ride && lastRide ? { snapshot: lastRide, climbM: climb.total } : undefined,
     workout: runner && lastWoState ? { workout: runner.workout, state: lastWoState, ftpW: runner.ftpW, intensity: runner.intensity } : undefined,
     message: runner ? lastWoState?.message : undefined,
-    control: ergActive ? 'erg' : ride && trainer?.capabilities.simulation ? 'sim' : undefined,
+    control: grade.ergActive ? 'erg' : ride && trainer?.capabilities.simulation ? 'sim' : undefined,
     trainerConnected: roleState.trainer === 'connected',
     heartRateConnected: roleState.hr === 'connected',
     ...(ride && lastRide ? { junction: journey.pendingJunction(lastRide.distanceM) } : {}),
@@ -1336,44 +1292,41 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   });
 }
 
-// Aperçu du récapitulatif sans rouler, en développement seulement (voir ui/recap-demo.ts) : ?recap, ?recap=libre…
+// Aperçu du récapitulatif sans rouler, en développement seulement (voir ui/recap/recap-demo.ts) : ?recap, ?recap=libre…
 if (import.meta.env.DEV && params.has('recap')) {
   const sample = SAMPLE_WORKOUTS.find((s) => s.id === 'sweet-spot')!;
-  void import('./ui/recap-demo').then((m) => {
+  void import('./ui/recap/recap-demo').then((m) => {
     router.go('sortie');
     m.showRecapDemo($('recap').parentElement!, params.get('recap') ?? '', parseWorkout(sample.fileName, sample.text), readFtp(), journey.name);
   });
 }
 
 // Données du coureur synchronisées avec son compte : FTP, masse, séances, « Mes blocs » (docs/design/compte.md).
-const SETTING_FIELDS: Record<SyncSetting, { input: HTMLInputElement; key: string }> = {
-  ftp: { input: woFtp, key: FTP_KEY },
-  mass: { input: massInput, key: MASS_KEY },
-};
+const SETTING_FIELDS: Record<SyncSetting, HTMLInputElement> = { ftp: woFtp, mass: massInput };
 const settingsSource: SyncSource = {
   kind: 'setting',
   all: () =>
     (Object.keys(SETTING_FIELDS) as SyncSetting[]).flatMap((id): SyncItem[] => {
-      const raw = prefs.getItem(SETTING_FIELDS[id].key);
+      const raw = settings.raw(id);
       // Un réglage sans version (fait avant la synchronisation) cède devant celui du compte.
       return raw === null ? [] : [{ kind: 'setting', id, body: Number(raw), updatedAt: syncJournal.stamp('setting', id) ?? 0 }];
     }),
   apply(items) {
     for (const i of items) {
-      const f = SETTING_FIELDS[i.id as SyncSetting];
-      if (!f) continue;
+      const input = SETTING_FIELDS[i.id as SyncSetting];
+      if (!input) continue;
       const v = typeof i.body === 'number' ? i.body : undefined;
       // Pendant une sortie, la masse de la sortie ne change pas (Ride l'a prise au départ) : seule la valeur gardée suit.
-      f.input.value = String(v ?? f.input.defaultValue);
-      storeSetting(f.key, v);
+      input.value = String(v ?? input.defaultValue);
+      settings.save(i.id as SyncSetting, v);
     }
     if (items.some((i) => i.id === 'ftp')) ftpChanged();
     riderProfile.refresh();
   },
   clear() {
-    for (const f of Object.values(SETTING_FIELDS)) {
-      f.input.value = f.input.defaultValue;
-      storeSetting(f.key, undefined);
+    for (const [id, input] of Object.entries(SETTING_FIELDS) as [SyncSetting, HTMLInputElement][]) {
+      input.value = input.defaultValue;
+      settings.save(id, undefined);
     }
     ftpChanged();
     riderProfile.refresh();

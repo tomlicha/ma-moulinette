@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { TrainerRecord } from '../../src/telemetry/device.ts';
+import type { TrainerRecord } from '../../src/infra/telemetry/device.ts';
 import { createFileDeviceStore } from './device-store.ts';
 
 const kickr: TrainerRecord = { profile: 'wahoo-kickr', brand: 'wahoo', manufacturer: 'Wahoo Fitness', model: 'KICKR CORE', firmware: '1.5.36', protocol: 'wahoo', services: ['b', 'a'] };

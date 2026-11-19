@@ -2,8 +2,8 @@
 
 Référence permanente de l'écran **Récapitulatif**, ouvert à la fin d'une séance ou d'une sortie, avec l'envoi à Strava. Toute évolution part de ce fichier et le met à jour. L'écran est une boîte de dialogue posée sur l'écran Sortie ([sortie.md](sortie.md)).
 
-- Code : [`src/ui/recap.ts`](../../src/ui/recap.ts) (affichage, compte à rebours, états de l'envoi), [`src/ui/recap.css`](../../src/ui/recap.css) (style), [`src/ui/recap-model.ts`](../../src/ui/recap-model.ts) (calculs purs, testés), [`src/ui/recap-demo.ts`](../../src/ui/recap-demo.ts) (aperçu sans rouler).
-- Branchement : `offerRecap()` dans [`src/main.ts`](../../src/main.ts) ; envoi et FIT par [`src/export/wiring.ts`](../../src/export/wiring.ts).
+- Code : [`src/ui/recap/recap.ts`](../../src/ui/recap/recap.ts) (affichage, compte à rebours, états de l'envoi), [`src/ui/recap/recap.css`](../../src/ui/recap/recap.css) (style), [`src/ui/recap/recap-model.ts`](../../src/ui/recap/recap-model.ts) (calculs purs, testés), [`src/ui/recap/recap-demo.ts`](../../src/ui/recap/recap-demo.ts) (aperçu sans rouler).
+- Branchement : `offerRecap()` dans [`src/main.ts`](../../src/main.ts) ; envoi et FIT par [`src/infra/export/wiring.ts`](../../src/infra/export/wiring.ts).
 - Maquettes (claude.ai) : canevas [Direction graphique](https://claude.ai/artifact/XsuzQxwA5WEKoyn8Jxu4nP), rangées « Récapitulatif de fin de sortie » (propositions R1 à R3) et « Récap retenu » (sombre, clair, envoyée).
 - Aperçu en développement : `?recap` (séance, Strava connecté), `?recap=libre`, `?recap=connexion`, `?recap=echec`, `?recap=aucun`. L'envoi y est simulé.
 

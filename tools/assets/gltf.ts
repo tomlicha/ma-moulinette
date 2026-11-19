@@ -3,7 +3,7 @@ import { Document, NodeIO, type Buffer as GBuffer, type Material, type Mesh } fr
 import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions';
 import { quantize, reorder } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
-import { DEFAULT_FINISH, REGION_NAMES } from '../../src/render/asset-contract.ts';
+import { DEFAULT_FINISH, REGION_NAMES } from '../../src/render/core/asset-contract.ts';
 import type { MeshBuilder } from './mesh.ts';
 
 const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));

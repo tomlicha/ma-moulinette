@@ -3,6 +3,37 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 /**
+ * Architecture en couches (docs/architecture.md) : une couche n'importe que des couches inférieures.
+ *
+ *   shared  <  domain  <  infra  <  app  <  ui, render        (main.ts, la racine de composition, importe tout)
+ *
+ * `src/server` (le Worker) est à part : il n'a rien à faire de l'interface, du rendu ni de l'application.
+ * Chaque règle interdit les couches « au-dessus » du dossier concerné. Niveau `warn` pendant la migration : la liste
+ * des avertissements est la dette restante ; elle passera en `error` une fois à zéro.
+ */
+const layer = (name) => `(^|/)${name}/`;
+const forbid = (...names) => ({
+  'no-restricted-imports': [
+    'warn',
+    {
+      patterns: names.map((n) => ({
+        regex: layer(n),
+        message: `Dépendance interdite : cette couche ne doit pas importer « ${n} » (voir docs/architecture.md).`,
+      })),
+    },
+  ],
+});
+const LAYER_RULES = [
+  { files: ['src/shared/**/*.ts'], rules: forbid('domain', 'infra', 'app', 'ui', 'render', 'server') },
+  { files: ['src/domain/**/*.ts'], rules: forbid('infra', 'app', 'ui', 'render', 'server') },
+  { files: ['src/infra/**/*.ts'], rules: forbid('app', 'ui', 'render', 'server') },
+  { files: ['src/app/**/*.ts'], rules: forbid('ui', 'server') },
+  { files: ['src/render/**/*.ts'], rules: forbid('app', 'ui', 'server') },
+  { files: ['src/ui/**/*.ts'], rules: forbid('server') },
+  { files: ['src/server/**/*.ts'], rules: forbid('app', 'ui', 'render') },
+];
+
+/**
  * Règles recommandées, plus celles qui comptent ici : l'application vit de promesses (Bluetooth, envois au
  * trainer, export) ; une promesse oubliée, c'est une erreur qui disparaît sans laisser de trace.
  */
@@ -27,4 +58,5 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }],
     },
   },
+  ...LAYER_RULES,
 );

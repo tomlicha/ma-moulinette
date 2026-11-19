@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { fingerprint, type StoredDevice } from '../../src/telemetry/device.ts';
-import type { DeviceStore } from '../../src/telemetry/receiver.ts';
+import { fingerprint, type StoredDevice } from '../../src/infra/telemetry/device.ts';
+import type { DeviceStore } from '../../src/infra/telemetry/receiver.ts';
 
 /** Fiches trainer en un fichier JSON (développement et `tools/log-server.ts`) : une entrée par installation. */
 export function createFileDeviceStore(path: string): DeviceStore {

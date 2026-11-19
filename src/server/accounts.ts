@@ -6,14 +6,14 @@
  * le coureur le valide ou le change. Les conditions de l'API Strava interdisent de montrer à un autre utilisateur les
  * données d'un athlète ; on ne montre donc ni photo ni activité Strava.
  */
-import { authorizeUrl, exchangeCode, StravaError, type ClientConfig, type Fetch, type Tokens } from '../export/strava/api';
-import { hasCsrfHeader } from '../net/csrf';
+import { authorizeUrl, exchangeCode, StravaError, type ClientConfig, type Fetch, type Tokens } from '../infra/export/strava/api';
+import { hasCsrfHeader } from '../infra/net/csrf';
 
 export const AUTH_PREFIX = '/api/auth/';
 export const SESSION_COOKIE = 'mm_session';
 const OAUTH_COOKIE = 'mm_oauth';
-/** Même en-tête anti-CSRF que la passerelle Strava et la synchronisation (src/net/csrf.ts). */
-export { CSRF_HEADER } from '../net/csrf';
+/** Même en-tête anti-CSRF que la passerelle Strava et la synchronisation (src/infra/net/csrf.ts). */
+export { CSRF_HEADER } from '../infra/net/csrf';
 export const SESSION_TTL_S = 30 * 24 * 3600;
 const OAUTH_TTL_S = 600;
 /**

@@ -6,19 +6,23 @@ import { configDefaults, defineConfig } from 'vitest/config';
 import { createFileDeviceStore } from './tools/logs/device-store.ts';
 import { createFileStore } from './tools/logs/file-store.ts';
 import { serveWith } from './tools/logs/node-http.ts';
-import { createLogReceiver, PREFIX as LOGS_PREFIX } from './src/telemetry/receiver.ts';
-import { LIMITS } from './src/telemetry/report.ts';
+import { createLogReceiver, PREFIX as LOGS_PREFIX } from './src/infra/telemetry/receiver.ts';
+import { LIMITS } from './src/infra/telemetry/report.ts';
 import { serviceWorker } from './tools/offline/service-worker.ts';
 
 /**
  * Empreinte de ce qui dessine le portrait du coureur : les modèles, tout le code de rendu et la version de three.js.
- * Elle sert de clé au portrait gardé dans le navigateur (`src/render/rider-portrait.ts`) : un nouveau modèle ou un
+ * Elle sert de clé au portrait gardé dans le navigateur (`src/render/riders/rider-portrait.ts`) : un nouveau modèle ou un
  * changement de rendu le refait une fois, sinon il est relu tel quel. Tout `src/render/` plutôt qu'une liste de
  * fichiers à tenir à jour : au pire, un portrait refait pour rien après une mise à jour du décor.
  */
 function riderPortraitKey(): string {
   const hash = createHash('sha256');
-  const render = readdirSync('src/render').filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')).sort();
+  // `recursive` : le rendu est rangé en sous-dossiers (core, world, riders). Chemins en `/`, quel que soit le système.
+  const render = readdirSync('src/render', { recursive: true, encoding: 'utf8' })
+    .map((f) => f.replaceAll('\\', '/'))
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+    .sort();
   for (const f of ['src/assets/avatar.glb', 'src/assets/bike.glb', ...render.map((f) => `src/render/${f}`), 'node_modules/three/package.json']) {
     hash.update(f).update(readFileSync(f));
   }

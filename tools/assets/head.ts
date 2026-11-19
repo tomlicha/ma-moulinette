@@ -14,8 +14,8 @@
  * z vers le visage. Toutes les cotes ci-dessous sont dans ce repère, en mètres.
  */
 import { Vector3 } from 'three';
-import { REGION } from '../../src/render/asset-contract.ts';
-import type { Pose } from '../../src/render/rider-pose.ts';
+import { REGION } from '../../src/render/core/asset-contract.ts';
+import type { Pose } from '../../src/render/riders/rider-pose.ts';
 import { curve, keys, MeshBuilder, oval, polyline, roundEnds, smooth, type Skin } from './mesh.ts';
 import { Body, polygonize, simplify, smax, smin, splitRegions, Tube, type Shape } from './sdf.ts';
 
