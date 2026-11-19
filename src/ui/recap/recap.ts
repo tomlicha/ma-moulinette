@@ -4,7 +4,7 @@ import '@fontsource/barlow/700.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './recap.css';
-import type { StravaOutcome, StravaReadiness } from '../../infra/export/wiring';
+import type { StravaOutcome, StravaReadiness } from '../../app/ride-export';
 import { formatDuration } from '../shared/duration';
 import { POWER_ZONES, type RecapSummary } from './recap-model';
 import { zoneOf } from '../../domain/workout/profile';

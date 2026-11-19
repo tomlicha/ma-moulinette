@@ -1,5 +1,5 @@
 import type { Recording, Sample } from '../../infra/export/recorder';
-import type { StravaOutcome, StravaReadiness } from '../../infra/export/wiring';
+import type { StravaOutcome, StravaReadiness } from '../../app/ride-export';
 import { targetWatts, type Workout } from '../../domain/workout/model';
 import { setupRecap } from './recap';
 import { summarize } from './recap-model';
