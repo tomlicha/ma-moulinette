@@ -247,6 +247,84 @@ describe('EditorSession', () => {
       expect([session.draft!.blocks[0], session.draft!.blocks[2]]).toEqual(others);
     });
 
+    it('échange le bloc sélectionné avec son voisin et le garde sélectionné', () => {
+      const { session } = setup();
+      session.open(draft());
+      const [a, b, c] = session.draft!.blocks;
+      session.select(0);
+      session.moveSelected(1);
+      expect(session.draft!.blocks).toEqual([b, a, c]);
+      expect(session.selected).toBe(1);
+      session.moveSelected(-1);
+      expect(session.draft!.blocks).toEqual([a, b, c]);
+      expect(session.selected).toBe(0);
+    });
+
+    it('ne déplace pas un bloc au-delà des extrémités', () => {
+      const { session, events } = setup();
+      session.open(draft());
+      session.select(0);
+      events.length = 0;
+      session.moveSelected(-1);
+      session.select(2);
+      events.length = 0;
+      session.moveSelected(1);
+      expect(events).toEqual([]);
+      expect(session.history.canUndo).toBe(false);
+    });
+
+    it('duplique le bloc sélectionné juste après lui et sélectionne la copie', () => {
+      const { session } = setup();
+      session.open(draft());
+      session.select(1);
+      const original = session.draft!.blocks[1]!;
+      session.duplicateSelected();
+      expect(session.draft!.blocks).toHaveLength(4);
+      expect(session.draft!.blocks[2]).toEqual(original);
+      expect(session.draft!.blocks[2]).not.toBe(original);
+      expect(session.selected).toBe(2);
+    });
+
+    it('sépare un bloc d\'intervalles en blocs individuels', () => {
+      const { session } = setup();
+      session.open(draft());
+      session.select(1); // le bloc d'intervalles : 5 répétitions
+      session.splitSelected();
+      expect(session.draft!.blocks.length).toBeGreaterThan(3);
+      expect(session.draft!.blocks.some((b) => b.type === 'intervals' && b.repeat === 5)).toBe(false);
+      session.undo();
+      expect(session.draft!.blocks).toHaveLength(3);
+    });
+
+    it('séparer un bloc qui n\'est pas des intervalles ne fait rien', () => {
+      const { session, events } = setup();
+      session.open(draft());
+      session.select(0);
+      events.length = 0;
+      session.splitSelected();
+      expect(events).toEqual([]);
+    });
+
+    it('supprime le bloc sélectionné ; le suivant prend sa place, et le dernier est remplacé par le précédent', () => {
+      const { session } = setup();
+      session.open(draft());
+      const [a, b, c] = session.draft!.blocks;
+      session.select(1);
+      session.deleteSelected();
+      expect(session.draft!.blocks).toEqual([a, c]);
+      expect(session.selected).toBe(1);
+      session.deleteSelected();
+      expect(session.draft!.blocks).toEqual([a]);
+      expect(session.selected).toBe(0);
+      session.deleteSelected();
+      expect(session.draft!.blocks).toEqual([]);
+      session.deleteSelected(); // plus rien à supprimer
+      expect(session.draft!.blocks).toEqual([]);
+      session.undo();
+      expect(session.draft!.blocks).toEqual([a]);
+      void b;
+    });
+
     it('règle une valeur sur une copie, en une entrée d\'historique, et termine la frappe', () => {
       const { session, events } = setup();
       session.open(draft());

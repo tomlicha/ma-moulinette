@@ -1,3 +1,4 @@
+import { splitIntervals } from '../domain/workout/block-ops';
 import { blocksToWorkout, validateBlocks, workoutStats, workoutToBlocks, type EditorBlock, type WorkoutStats } from '../domain/workout/blocks';
 import { UndoHistory } from '../domain/workout/history';
 import type { SavedWorkout, WorkoutLibrary } from '../domain/workout/library';
@@ -246,6 +247,38 @@ export class EditorSession extends TypedEmitter<{
 
   updateSelected(f: (b: EditorBlock) => EditorBlock): void {
     this.commit((bs) => bs.map((b, i) => (i === this.selected ? f(b) : b)));
+  }
+
+  /** Échange le bloc sélectionné avec son voisin (`d` : -1 avant, 1 après) ; il reste sélectionné. */
+  moveSelected(d: number): void {
+    const j = this.selected + d;
+    if (!this.draft || j < 0 || j >= this.draft.blocks.length) return;
+    this.commit((bs) => {
+      const c = [...bs];
+      [c[this.selected], c[j]] = [c[j]!, c[this.selected]!];
+      return c;
+    }, j);
+  }
+
+  /** Copie le bloc sélectionné juste après lui et sélectionne la copie. */
+  duplicateSelected(): void {
+    const b = this.draft?.blocks[this.selected];
+    if (!b) return;
+    const at = this.selected + 1;
+    this.commit((bs) => [...bs.slice(0, at), structuredClone(b), ...bs.slice(at)], at);
+  }
+
+  /** Sépare les répétitions du bloc d'intervalles sélectionné en blocs individuels. */
+  splitSelected(): void {
+    const b = this.draft?.blocks[this.selected];
+    if (b?.type !== 'intervals') return;
+    this.commit((bs) => [...bs.slice(0, this.selected), ...splitIntervals(b), ...bs.slice(this.selected + 1)]);
+  }
+
+  /** Supprime le bloc sélectionné ; le suivant (ou le dernier) prend sa place. */
+  deleteSelected(): void {
+    if (!this.draft?.blocks.length) return;
+    this.commit((bs) => bs.filter((_, i) => i !== this.selected), this.selected);
   }
 
   /** Insère des blocs (copies) à l'indice `at` et sélectionne le premier : une seule entrée d'historique. */
