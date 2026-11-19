@@ -4,6 +4,7 @@ import '@fontsource/barlow/700.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './recap.css';
+import { COUNTDOWN_S, RecapSender, type SendState } from '../../app/recap-sender';
 import type { StravaOutcome, StravaReadiness } from '../../app/ride-export';
 import { formatDuration } from '../shared/duration';
 import { POWER_ZONES, type RecapSummary } from './recap-model';
@@ -12,11 +13,9 @@ import { zoneOf } from '../../domain/workout/profile';
 /**
  * Écran récapitulatif de fin de sortie (docs/design/recap.md) : une boîte de dialogue modale posée sur l'écran Sortie.
  * Grand écran : carte « Ligne d'arrivée » sur la scène floutée. Téléphone couché : « Bilan » plein écran.
- * Si Strava est connecté, l'envoi part seul au bout du compte à rebours ; « Continuer » ne l'annule pas.
+ * Si Strava est connecté, l'envoi part seul au bout du compte à rebours ; « Continuer » ne l'annule pas. L'envoi, son compte
+ * à rebours et ses essais sont dans app/recap-sender.ts : cet écran affiche ses états et lui signale les gestes.
  */
-
-/** Durée du compte à rebours avant l'envoi automatique à Strava. */
-export const COUNTDOWN_S = 8;
 
 export interface RecapContent {
   summary: RecapSummary;
@@ -40,8 +39,6 @@ export interface RecapActions {
   /** « Terminer » : arrêter la sortie et revenir à l'accueil. */
   onFinish(): void;
 }
-
-type State = 'countdown' | 'manual' | 'sending' | 'sent' | 'error' | 'none';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const CHART_W = 1000;
@@ -145,18 +142,28 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
   const drain = el('drain');
   drain.style.animationDuration = `${COUNTDOWN_S}s`;
 
-  let state: State = 'none';
   let content: RecapContent | undefined;
-  let timer: ReturnType<typeof setInterval> | undefined;
-  let left = 0;
+  const sender = new RecapSender({ send: (name) => actions.send(name), name: () => nameInput.value });
 
-  function setState(s: State, info?: { title?: string; sub?: string; url?: string }) {
-    state = s;
+  /** Ce que dit l'écran d'un résultat d'envoi : le message d'état, et l'adresse de l'activité si Strava en a donné une. */
+  function describe(s: SendState, out: StravaOutcome | undefined): { title: string; sub: string; url?: string } | undefined {
+    if (!out) return undefined;
+    if (out.ok) {
+      return {
+        title: out.processing ? `Reçue par Strava à ${fmtClock(Date.now())}` : `Envoyée sur Strava à ${fmtClock(Date.now())}`,
+        sub: out.processing ? `${out.name} · traitement en cours chez Strava` : out.name,
+        ...(out.activityUrl ? { url: out.activityUrl } : {}),
+      };
+    }
+    return s === 'error' || s === 'none' ? { title: out.login ? 'Connexion Strava à refaire' : 'Envoi impossible', sub: out.message } : undefined;
+  }
+
+  function render(s: SendState, info?: { title?: string; sub?: string; url?: string }) {
     actionsEl.dataset.state = s;
     sendBtn.disabled = s === 'sending';
     set(
       'sendLabel',
-      s === 'sending' ? 'Envoi…' : content?.strava === 'login' ? 'Connecter Strava et envoyer' : s === 'error' ? 'Réessayer' : 'Envoyer à Strava',
+      s === 'sending' ? 'Envoi…' : sender.readiness === 'login' ? 'Connecter Strava et envoyer' : s === 'error' ? 'Réessayer' : 'Envoyer à Strava',
     );
     el('count').hidden = s !== 'countdown';
     drain.classList.toggle('run', s === 'countdown');
@@ -167,7 +174,7 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
     // reste un vrai lien (robots, audit SEO « crawlable-anchors »).
     if (info?.url) viewLink.href = info.url;
     // Ce qui ne sert pas dans l'état courant est masqué ; la disposition suit `data-state` (recap.css).
-    const show: Record<string, State[]> = {
+    const show: Record<string, SendState[]> = {
       status: ['sent', 'error'],
       send: ['countdown', 'manual', 'sending', 'error'],
       view: info?.url ? ['sent'] : [],
@@ -181,60 +188,25 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
     if (s === 'none' && info?.title) el('status').hidden = false;
   }
 
-  const stopCountdown = () => {
-    clearInterval(timer);
-    timer = undefined;
-  };
-
-  function tick() {
+  sender.on('state', (s, out) => render(s, describe(s, out)));
+  sender.on('tick', (left) => {
     set('secs', String(left));
     set('secs2', String(left));
-    if (left <= 0) {
-      stopCountdown();
-      void doSend();
-    }
-    left--;
-  }
+  });
 
-  /** Arrête le compte à rebours sans envoyer : l'envoi attend un geste. */
-  function holdCountdown() {
-    if (state !== 'countdown') return;
-    stopCountdown();
-    setState('manual');
-  }
-
-  async function doSend() {
-    if (!content || state === 'sending' || state === 'sent') return;
-    stopCountdown();
-    setState('sending');
-    const out = await actions.send(nameInput.value.trim() || content.defaultName);
-    if (out.ok) {
-      setState('sent', {
-        title: out.processing ? `Reçue par Strava à ${fmtClock(Date.now())}` : `Envoyée sur Strava à ${fmtClock(Date.now())}`,
-        sub: out.processing ? `${out.name} · traitement en cours chez Strava` : out.name,
-        ...(out.activityUrl ? { url: out.activityUrl } : {}),
-      });
-    } else {
-      // Accès Strava perdu : le bouton dit qu'il rouvrira la connexion, pas seulement « Réessayer ».
-      if (out.login) content.strava = 'login';
-      setState(out.kept ? 'error' : 'none', { title: out.login ? 'Connexion Strava à refaire' : 'Envoi impossible', sub: out.message });
-    }
-  }
-
-  sendBtn.addEventListener('click', () => void doSend());
-  el('skip').addEventListener('click', holdCountdown);
+  sendBtn.addEventListener('click', () => void sender.send());
+  el('skip').addEventListener('click', () => sender.hold());
   el('fit').addEventListener('click', () => {
-    holdCountdown();
+    sender.hold();
     actions.downloadFit();
   });
   // Modifier le nom suspend l'envoi automatique : il partira d'un geste, sous le nom choisi.
-  nameInput.addEventListener('input', holdCountdown);
-  nameInput.addEventListener('pointerdown', holdCountdown);
+  nameInput.addEventListener('input', () => sender.hold());
+  nameInput.addEventListener('pointerdown', () => sender.hold());
 
   /** Fermer par « Continuer » ou Échap n'annule pas un envoi programmé : il part tout de suite. */
   function leave(then: () => void) {
-    if (state === 'countdown') void doSend();
-    stopCountdown();
+    sender.release();
     if (dialog.open) dialog.close();
     then();
   }
@@ -392,18 +364,10 @@ export function setupRecap(dialog: HTMLDialogElement, actions: RecapActions) {
     },
     show(c: RecapContent) {
       content = c;
-      stopCountdown();
       fill(c);
       nameInput.value = c.defaultName;
       set('continueLabel', c.rideRunning ? 'Continuer à rouler' : 'Reprendre la sortie');
-      if (c.strava === 'ready') {
-        left = COUNTDOWN_S;
-        setState('countdown');
-        tick();
-        timer = setInterval(tick, 1000);
-      } else {
-        setState(c.strava === 'none' ? 'none' : 'manual');
-      }
+      sender.begin(c.strava, c.defaultName);
       if (!dialog.open) dialog.showModal();
       // Le focus va à l'action principale (Entrée envoie tout de suite), pas au champ du nom, qui suspendrait l'envoi.
       (c.strava === 'none' ? el<HTMLButtonElement>('continue') : sendBtn).focus();

@@ -10,6 +10,7 @@ Trois parcours pilotés dans un vrai navigateur (Chromium, via Playwright) contr
 | `app` | Trainer simulé : connexion, sortie libre, ERG manuel, séance (intensité, pause, palier suivant, ERG relâché puis repris), arrêt, récapitulatif, perte du trainer en pleine sortie et reprise | ~2 min |
 | `autostart` | Démarrage au premier coup de pédale : sortie libre, arrêt volontaire non défait, séance choisie sur l'accueil, séance arrêtée non relancée | ~25 s |
 | `gears` | Vitesses virtuelles du Zwift Cog : interrupteur, plateau (bornes, arrondi), boutons, clavier (seulement sur la Sortie), butées, mémoire au rechargement | ~10 s |
+| `recap` | Récapitulatif et envoi à Strava (aperçu `?recap=…`, envoi simulé) : compte à rebours, envoi automatique, suspension par un geste, Continuer et Échap, Strava à connecter, refus puis nouvel essai, pas de relais | ~2,5 min (la page, chargée de rendu 3D, tient mal les délais) |
 | `gpu` | Perte du contexte WebGL de la vue 3D : trois reprises sur un canevas neuf, puis renoncement | ~15 s |
 | `editor` | Écran Séances, sur ordinateur et sur iPhone en paysage (844 × 390, plein écran) : étagère, glisser-déposer, clavier, annuler/rétablir, enregistrement, bibliothèque, saisie exacte | ~60 s |
 
@@ -28,7 +29,7 @@ npx playwright install chromium     # si aucun Chromium n'est déjà installé
 
 ```
 npm run e2e                          # les trois scénarios
-npm run e2e -- editor                # un seul (app, autostart, gears, gpu, editor)
+npm run e2e -- editor                # un seul (app, autostart, gears, recap, gpu, editor)
 npm run e2e -- --out .e2e/avant      # choisir le dossier des traces (défaut : .e2e/last)
 npm run e2e -- --url http://localhost:5173/   # contre un serveur déjà lancé
 ```
