@@ -63,6 +63,17 @@ module.exports = async function app({ browser, url }) {
         exportStravaHidden: h('export-strava'),
         route: document.getElementById('hud')?.innerText?.replace(/\s+/g, ' ').slice(0, 200) ?? null,
         // L'écran Appareils en entier (cartes, boutons, radars), sans son fond animé.
+        // La séance choisie, sur l'accueil : liste, profil dessiné, nom.
+        homeWorkout: (() => {
+          const select = document.getElementById('home-wo-select');
+          return JSON.stringify({
+            meta: document.getElementById('home-wo-meta')?.textContent,
+            shapes: document.getElementById('home-wo-shapes')?.innerHTML,
+            options: select?.innerHTML,
+            value: select?.value,
+            startBlocked: document.getElementById('home-wo-start')?.getAttribute('aria-disabled'),
+          });
+        })(),
         devices: (() => {
           const copy = document.querySelector('[data-view="appareils"]')?.cloneNode(true);
           copy?.querySelector('#dev-scenes')?.remove();

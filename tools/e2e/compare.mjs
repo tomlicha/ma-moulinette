@@ -41,8 +41,10 @@ function compareApp(a, b) {
     if (!y) return say(`étape « ${x.label} » absente après`);
     for (const k of Object.keys(x)) {
       if (k === 'route') continue; // le HUD change à chaque instant
-      const vx = typeof x[k] === 'string' ? neutral(x[k]) : x[k];
-      const vy = typeof y[k] === 'string' ? neutral(y[k]) : y[k];
+      // Un texte court : chiffres neutralisés (durées, compteurs). Un DOM entier : tel quel, sauf les adresses `blob:`.
+      const norm = (v) => (typeof v !== 'string' ? v : v.length > 300 ? v.replace(/blob:[^"')\s]+/g, 'blob:URL') : neutral(v));
+      const vx = norm(x[k]);
+      const vy = norm(y[k]);
       if (vx === vy) continue;
       if (typeof x[k] === 'string' && x[k].length > 300) {
         // Un DOM entier : on montre où il diffère plutôt que tout le texte.
