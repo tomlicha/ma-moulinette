@@ -19,6 +19,13 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
+/** Un bouton avec son libellé et son action. */
+export function button(label: string, onClick: () => void, cls = '') {
+  const b = el('button', { textContent: label, type: 'button', className: cls });
+  b.addEventListener('click', onClick);
+  return b;
+}
+
 export function svg(tag: string, attrs: Record<string, string | number>): SVGElement {
   const e = document.createElementNS(SVG_NS, tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
