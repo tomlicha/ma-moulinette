@@ -230,6 +230,20 @@ export class EditorSession extends TypedEmitter<{
     this.emit('changed');
   }
 
+  /**
+   * Règle une valeur d'un bloc en modifiant une copie des blocs : une entrée d'historique, et la frappe en cours est
+   * terminée. `set` reçoit `v` et modifie les blocs de la séance ouverte.
+   */
+  commitSet(set: (v: number) => void, v: number): void {
+    const d = this.draft;
+    if (!d || d.readOnly) return;
+    this.history.record(d.blocks);
+    this.typing = false;
+    d.blocks = structuredClone(d.blocks);
+    set(v);
+    this.emit('changed');
+  }
+
   updateSelected(f: (b: EditorBlock) => EditorBlock): void {
     this.commit((bs) => bs.map((b, i) => (i === this.selected ? f(b) : b)));
   }
