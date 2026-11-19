@@ -41,6 +41,9 @@ import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
 import { setupWorkoutEditor } from './ui/editor/workout-editor';
 import { RideHud } from './ui/ride/hud';
+import { HudPresenter } from './ui/ride/hud-presenter';
+import { RideLoadingView } from './ui/ride/ride-loading-view';
+import { CrowdView } from './ui/ride/crowd-view';
 import { setupRideMenu } from './ui/ride/ride-menu';
 import { setupRecap } from './ui/recap/recap';
 import { summarize } from './ui/recap/recap-model';
@@ -52,7 +55,7 @@ import { setupCoursePicker } from './ui/home/course-picker';
 import { setupCourseMap } from './ui/home/course-map';
 import { setupAccount } from './ui/account/account-chip';
 import { WorldClient } from './infra/net/world-client';
-import { crowdLine, RiderTags } from './ui/ride/rider-tags';
+import { RiderTags } from './ui/ride/rider-tags';
 import { RidePanel } from './ui/ride/ride-panel';
 import { controlModes } from './ui/ride/radar-model';
 import { blocksToWorkout } from './domain/workout/blocks';
@@ -910,100 +913,42 @@ const params = new URLSearchParams(location.search);
 /** Profil de rendu : `?quality=high|low`, sinon `low` sur écran tactile (src/render/core/quality.ts). Le HUD le suit (sans flou en `low`). */
 const quality = chooseQuality(params.get('quality'), matchMedia('(pointer: coarse)').matches);
 const hud = new RideHud($('hud'), journey, { flat: quality === 'low' });
-function renderHud() {
-  if (router.current() !== 'sortie') return;
-  const live = rideSession.snapshot; // la sortie en cours ; `undefined` hors sortie
-  const runner = workoutSession.runner;
-  const woState = workoutSession.state;
-  hud.update({
-    powerW: readings.averagePowerW(),
-    heartRateBpm: readings.heartRateBpm(),
-    cadenceRpm: readings.liveCadenceRpm(),
-    // Pendant la sortie, la vitesse virtuelle (celle qui fait avancer la vue) ; sinon celle mesurée par le trainer.
-    speedKmh: live ? live.speedKmh : readings.speedKmh(),
-    ftpW: runner?.ftpW ?? readFtp(),
-    ride: live ? { snapshot: live, climbM: rideSession.climbM } : undefined,
-    workout: runner && woState ? { workout: runner.workout, state: woState, ftpW: runner.ftpW, intensity: runner.intensity } : undefined,
-    message: runner ? woState?.message : undefined,
-    control: trainerCtl.ergActive ? 'erg' : live && trainerCtl.capabilities?.simulation ? 'sim' : undefined,
-    trainerConnected: devices.states.trainer === 'connected',
-    heartRateConnected: devices.states.hr === 'connected',
-    ...(live ? { junction: journey.pendingJunction(live.distanceM) } : {}),
-  });
-  // Encart : la carte suit le coureur ; elle passe seule au premier plan 250 m avant un carrefour (docs/design/sortie.md).
-  const at = live ? live.distanceM : 0;
-  ridePanel.update({
-    distanceM: at,
-    pending: live ? journey.pendingJunction(at) : undefined,
-    // Sur la piste d'un vélodrome : la touche de sortie remplace le panneau « Carrefour » de chaque tour.
-    trackExit: live && journey.onTrack(at) ? { armed: journey.trackExitArmed, inM: journey.trackExitInM(at) } : undefined,
-  });
-}
-setInterval(renderHud, 250);
-// Choix au carrefour : touche du HUD, ou flèches gauche et droite pour glisser la sélection d'une route à l'autre.
-hud.onChoose = (i) => {
-  if (journey.choose(i)) renderHud();
-};
-document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey || router.current() !== 'sortie' || document.querySelector('dialog[open]')) return;
-  const t = e.target;
-  if (t instanceof HTMLElement && t.closest('input, select, textarea, [contenteditable]')) return;
-  const by = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
-  // Sur la piste : flèche droite, sortir à la prochaine porte ; flèche gauche, rester sur la piste.
-  const live = rideSession.snapshot;
-  if (by && live && journey.onTrack(live.distanceM)) {
-    e.preventDefault();
-    journey.setTrackExit(by > 0);
-    renderHud();
-    return;
-  }
-  const p = by && live ? journey.pendingJunction(live.distanceM) : undefined;
-  if (!by || !p) return;
-  e.preventDefault();
-  if (journey.choose(Math.min(p.options.length - 1, Math.max(0, p.selected + by)))) renderHud();
+const riderTags = new RiderTags($('rider-tags'));
+const ridePanel = new RidePanel($('near'), { journey, prefs });
+// Ce que le HUD et l'encart affichent à chaque instant, et les choix du coureur sur la route (hud-presenter.ts).
+new HudPresenter({
+  hud,
+  ridePanel,
+  journey,
+  readings,
+  trainer: trainerCtl,
+  devices,
+  rideSession,
+  workoutSession,
+  readFtp,
+  rideScreenOpen: () => router.current() === 'sortie',
 });
 /** Écran de chargement de la sortie (index.html, sortie.css) : visible tant que la vue 3D n'a pas dessiné sa première image. */
-const rideLoading = $('ride-loading');
-const rideLoadingBar = rideLoading.querySelector<HTMLElement>('.rl-bar')!;
-const showRideProgress = (done: number, step: string) => {
-  $('ride-loading-step').textContent = step;
-  rideLoadingBar.style.setProperty('--p', String(done));
-  rideLoadingBar.setAttribute('aria-valuenow', String(Math.round(done * 100)));
-};
+const rideLoading = new RideLoadingView();
 // `?relief=1` : relief réel ; `?relief=2` : plus marqué. Par défaut 1,6 : un 6 % se voit comme un 10 %.
 const reliefParam = Number(params.get('relief'));
 const relief = params.get('relief') && Number.isFinite(reliefParam) ? Math.min(3, Math.max(1, reliefParam)) : undefined;
 
-rideViews.on('progress', showRideProgress);
+rideViews.on('progress', (done, step) => rideLoading.progress(done, step));
 rideViews.on('ready', (v) => {
   performance.mark('view-ready'); // relevé par tools/audit/startup.cjs
-  void v.firstFrame.then(() => (rideLoading.hidden = true));
+  void v.firstFrame.then(() => rideLoading.hide());
   v.setActive(router.current() === 'sortie');
   v.setOthers(() => world.riders());
   v.onTags = (tags) => riderTags.set(tags);
   v.onNearby = (n) => ridePanel.setNearby(n, rideSession.active ? rideSession.draft : 0);
-  v.onStats = (s) => {
-    $('view-stats').textContent =
-      `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +
-      `p50 ${s.frameP50Ms.toFixed(1)} ms · p95 ${s.frameP95Ms.toFixed(1)} ms · ` +
-      `${(s.triangles / 1000).toFixed(0)} k triangles · ${s.drawCalls} appels`;
-  };
+  v.onStats = (s) => rideLoading.showStats(s);
   log(`rendu 3D : ${v.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · qualité ${quality}${rideViews.losses ? ` · reprise n° ${rideViews.losses}` : ''}`);
 });
 rideViews.on('lost', (loss, attempt, max) => log(`rendu 3D : GPU perdu (${loss.api} : ${loss.message}), reprise ${attempt}/${max}`));
-rideViews.on('retrying', () => {
-  // Un canevas garde le contexte qu'il a perdu, et three.js ne recrée pas ses ressources : on repart d'un canevas neuf.
-  const old = $<HTMLCanvasElement>('view');
-  old.replaceWith(old.cloneNode(false) as HTMLCanvasElement);
-  rideLoading.hidden = false;
-  showRideProgress(0, 'Reprise de la vue 3D');
-});
+rideViews.on('retrying', () => rideLoading.retry());
 rideViews.on('unavailable', (e) => {
-  $('view-stats').textContent = 'rendu 3D indisponible';
-  rideLoading.hidden = false;
-  rideLoading.dataset.state = 'error';
-  $('ride-loading-title').textContent = 'Vue 3D indisponible';
-  $('ride-loading-step').textContent = 'La sortie fonctionne sans elle : mesures, profil et séance restent affichés.';
+  rideLoading.unavailable();
   log(`rendu 3D indisponible : ${e instanceof Error ? e.message : e}`);
 });
 // three.js (~1 Mio) n'est demandé qu'après le premier affichage, pendant un temps mort : l'accueil répond tout de suite.
@@ -1095,24 +1040,9 @@ const account = setupAccount({
     void sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
   },
 });
-const riderTags = new RiderTags($('rider-tags'));
-const ridePanel = new RidePanel($('near'), { journey, prefs });
-ridePanel.onTrackExit = () => {
-  journey.setTrackExit(!journey.trackExitArmed);
-  renderHud();
-};
-const crowd = $('crowd');
 /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
-function showCrowd() {
-  const s = world.status;
-  crowd.hidden = s === 'offline' || s === 'signed-out' || s === 'name-pending';
-  crowd.dataset.state = s === 'online' ? 'on' : 'off';
-  crowd.textContent = s === 'online' ? crowdLine(world.population) : s === 'connecting' ? 'Connexion…' : s === 'replaced' ? 'Connecté sur un autre appareil' : s === 'outdated' ? 'Mise à jour : recharger la page' : 'Connexion perdue, nouvel essai…';
-  if (s !== 'online') {
-    riderTags.clear();
-    ridePanel.clearNearby();
-  }
-}
+const crowdView = new CrowdView(riderTags, ridePanel);
+const showCrowd = () => crowdView.render(world.status, world.population);
 world.onStatus = (s) => {
   account.setWorld(s, world.population);
   showCrowd();

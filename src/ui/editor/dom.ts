@@ -6,7 +6,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** Les petits outils d'écran partagés par les morceaux de l'éditeur de séance. */
 
-export const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+export { byId } from '../shared/dom';
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
