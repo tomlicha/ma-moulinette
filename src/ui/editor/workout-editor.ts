@@ -10,13 +10,12 @@ import {
   type WorkoutStats,
 } from '../../domain/workout/blocks';
 import { blockIndexAt, blockRanges, blockShort, describeBlock, nudgeDuration, nudgePower, splitIntervals } from '../../domain/workout/block-ops';
-import { UndoHistory } from '../../domain/workout/history';
+import { EditorSession, type EditorDraft } from '../../app/editor-session';
 import type { BlockLibrary, SavedBlock } from '../../domain/workout/block-library';
 import type { SavedWorkout, WorkoutLibrary } from '../../domain/workout/library';
 import { targetWatts, type Workout } from '../../domain/workout/model';
 import { profilePeakW, profileShapes, zoneOf, type Zone } from '../../domain/workout/profile';
 import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks, type PresetCategory } from '../../domain/workout/presets';
-import { parseWorkout } from '../../domain/workout/runner';
 import { SAMPLE_WORKOUTS } from '../../domain/workout/samples';
 import { effortSeconds, intensityWord, timeInZones, ZONES, zoneName, zoneReading, type ZoneTimes } from '../../domain/workout/zones';
 import { setBlocked, type BlockReason } from '../shared/blocked';
@@ -29,16 +28,7 @@ const H = 120;
 const POWER_STEP = 0.05;
 const DURATION_STEP_S = 15;
 
-interface Draft {
-  /** Identifiant dans la bibliothèque, une fois la séance enregistrée. */
-  id?: string;
-  /** Modèle livré avec l'application : affiché en lecture seule, on le duplique pour le modifier. */
-  sampleId?: string;
-  readOnly?: boolean;
-  name: string;
-  description: string;
-  blocks: EditorBlock[];
-}
+type Draft = EditorDraft;
 
 export interface EditorOptions {
   library: WorkoutLibrary;
@@ -106,7 +96,6 @@ export function setupWorkoutEditor(o: EditorOptions) {
   const tip = $('ed-tip');
   const inspector = $<HTMLFormElement>('ed-inspector');
   const cadenceDialog = $<HTMLDialogElement>('ed-cadence');
-  const history = new UndoHistory<EditorBlock[]>();
   const sea = document.querySelector<HTMLElement>('.sea')!;
   const overlay = $('ed-over');
   /** Téléphone en paysage : écran sans défilement, commandes posées sur le bloc (docs/design/seances.md, piste J). */
@@ -117,23 +106,20 @@ export function setupWorkoutEditor(o: EditorOptions) {
   };
   setPanel();
 
-  let draft: Draft | undefined;
-  let selected = 0;
-  /** Version enregistrée (ou ouverte), pour l'indicateur « modifiée » et les écarts du résumé. */
-  let baseline = '';
-  let baseStats: WorkoutStats | undefined;
-  let baseZones: ZoneTimes | undefined;
-  /** Saisie clavier en cours dans un champ : une seule entrée d'historique pour toute la frappe. */
-  let typing = false;
-
   const ftp = () => o.readFtp();
-  const workout = (): Workout => blocksToWorkout(draft?.name ?? '', draft?.description, draft?.blocks ?? []);
-  const isDirty = () => !!draft && !draft.readOnly && JSON.stringify(draft) !== baseline;
+  const session = new EditorSession({
+    library: o.library,
+    ftp,
+    log: o.log,
+    confirmDiscard: () => confirm('Abandonner les modifications en cours ?'),
+  });
+  const workout = (): Workout => session.workout();
+  const isDirty = () => session.isDirty();
 
   // --- Bibliothèque ---
 
   /** Clé d'une séance ouverte : `lib:<id>` (enregistrée) ou `sample:<id>` (modèle) ; rien pour un brouillon. */
-  const keyOf = (d: Draft | undefined) => (d?.id ? `lib:${d.id}` : d?.sampleId ? `sample:${d.sampleId}` : undefined);
+  const keyOf = (d: Draft | undefined = session.draft) => session.keyOf(d);
   const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
   /** Message dans la bibliothèque (le journal est masqué sur cet écran) : import refusé, enregistrement impossible. */
@@ -155,16 +141,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
     return b;
   }
 
-  function sampleWorkout(id: string): Workout | undefined {
-    const s = SAMPLE_WORKOUTS.find((x) => x.id === id);
-    if (!s) return undefined;
-    try {
-      return parseWorkout(s.fileName, s.text);
-    } catch (e) {
-      o.log(`modèle illisible (${s.fileName}) : ${e instanceof Error ? e.message : e}`);
-      return undefined;
-    }
-  }
+  const sampleWorkout = (id: string) => session.sampleWorkout(id);
 
   /** Aperçu du profil d'une séance (mêmes couleurs de zones que l'éditeur), pour sa ligne dans la bibliothèque. */
   function miniProfile(w: Workout, cls = 'lib-mini') {
@@ -199,12 +176,12 @@ export function setupWorkoutEditor(o: EditorOptions) {
     const focusKey = active instanceof HTMLElement && active.closest('.sea-lib') ? active.dataset.key : undefined;
     const q = fold($<HTMLInputElement>('lib-search').value.trim());
     const match = (name: string) => !q || fold(name).includes(q);
-    const current = keyOf(draft);
+    const current = keyOf(session.draft);
 
     const saved = o.library.list();
     const mine: HTMLElement[] = [];
     // Une séance nouvelle, importée ou copiée n'est pas encore dans la bibliothèque : on la montre en tête, ouverte.
-    if (draft && !draft.id && !draft.readOnly) mine.push(libRow('draft', workout(), 'Non enregistrée', true));
+    if (session.draft && !session.draft.id && !session.draft.readOnly) mine.push(libRow('draft', workout(), 'Non enregistrée', true));
     for (const w of saved.filter((x) => match(x.name))) {
       const key = `lib:${w.id}`;
       mine.push(libRow(key, blocksToWorkout(w.name, w.description, w.blocks), summary(w.blocks), current === key, () => pick(key), () => remove(w)));
@@ -223,189 +200,90 @@ export function setupWorkoutEditor(o: EditorOptions) {
     if (focusKey) document.querySelector<HTMLElement>(`.sea-lib [data-key="${CSS.escape(focusKey)}"]`)?.focus();
   }
 
-  /** Clic dans la bibliothèque : la séance s'ouvre, et devient la séance choisie de l'application. */
-  function pick(key: string) {
-    setPanel();
-    if (key === keyOf(draft)) return;
-    if (openKey(key)) o.onFocus(key);
-  }
+  // --- Ouverture, enregistrement, modifications : l'état est dans la session (app/editor-session.ts) ---
 
-  /** Ouvre la séance désignée par sa clé ; `false` si elle n'existe plus ou si l'utilisateur garde son brouillon. */
-  function openKey(key: string): boolean {
-    const [kind, id = ''] = key.split(':');
-    if (kind === 'lib') {
-      const w = o.library.get(id);
-      return !!w && open({ id: w.id, name: w.name, description: w.description ?? '', blocks: structuredClone(w.blocks) });
-    }
-    const w = sampleWorkout(id);
-    if (!w) return false;
-    return open({ sampleId: id, readOnly: true, name: w.name, description: w.description ?? '', blocks: workoutToBlocks(w, ftp()).blocks });
-  }
-
-  /** Rien d'utilisable ouvert : la première séance de l'utilisateur, sinon le premier modèle. */
-  function openFallback(syncChoice: boolean) {
-    const first = o.library.list()[0];
-    const key = first ? `lib:${first.id}` : SAMPLE_WORKOUTS[0] ? `sample:${SAMPLE_WORKOUTS[0].id}` : undefined;
-    if (key && openKey(key) && syncChoice) o.onFocus(key);
-  }
-
-  function remove(w: SavedWorkout) {
-    if (!confirm(`Supprimer la séance « ${w.name} » ?`)) return;
-    o.library.remove(w.id);
-    o.log(`séance supprimée : ${w.name}`);
-    const wasOpen = draft?.id === w.id;
-    if (wasOpen) {
-      draft = undefined;
-      baseline = '';
-    }
-    renderLibrary();
-    o.onLibraryChange();
-    if (wasOpen) openFallback(true);
-  }
-
-  function openFromWorkoutFile(fileName: string, text: string) {
-    let w;
-    try {
-      w = parseWorkout(fileName, text);
-    } catch (e) {
-      say(`import impossible (${fileName}) : ${e instanceof Error ? e.message : e}`);
-      return;
-    }
-    const { blocks, warnings } = workoutToBlocks(w, ftp());
-    if (open({ name: w.name, description: w.description ?? '', blocks }, true)) {
-      for (const m of [...w.warnings, ...warnings]) o.log(`import : ${m}`);
-    }
-  }
-
-  /** Le modèle ouvert devient une séance à soi, à enregistrer : on ne modifie jamais un modèle. */
-  function duplicateModel() {
-    if (!draft?.readOnly) return;
-    open({ name: `${draft.name} (copie)`, description: draft.description, blocks: structuredClone(draft.blocks) }, true);
-  }
-
-  /**
-   * À l'arrivée sur l'écran : on ouvre la séance choisie dans l'application, sauf si un brouillon modifié est en cours.
-   * Une séance sans modification suit le choix fait ailleurs (accueil, sortie).
-   */
-  function sync() {
-    setPanel();
-    const want = o.currentChoice();
-    if (draft && (isDirty() || !want || want === keyOf(draft))) {
-      renderLibrary();
-      render();
-      return;
-    }
-    if (!(want && openKey(want)) && !draft) openFallback(false);
-  }
-
-  // --- Ouverture, enregistrement ---
-
-  /** Ouvre un brouillon ; `false` si l'utilisateur préfère garder ses modifications en cours. */
-  function open(d: Draft, unsaved = false): boolean {
-    if (isDirty() && !confirm('Abandonner les modifications en cours ?')) return false;
-    draft = d;
-    selected = Math.min(1, d.blocks.length - 1);
-    history.clear();
-    typing = false;
-    // Une séance importée ou nouvelle n'a pas de version enregistrée : elle part « modifiée ».
-    baseline = unsaved ? '' : JSON.stringify(d);
-    const w = workout();
-    baseStats = unsaved ? undefined : workoutStats(w, ftp());
-    baseZones = unsaved ? undefined : timeInZones(w, ftp());
-    nameIn.value = d.name;
-    descIn.value = d.description;
+  // La session publie ; la vue pose les questions, redessine et prévient l'application.
+  session.on('opened', () => {
+    nameIn.value = session.draft!.name;
+    descIn.value = session.draft!.description;
     setPanel();
     say();
     renderLibrary();
     render();
     renderShelf();
-    return true;
+  });
+  session.on('changed', () => render());
+  session.on('focused', (key) => o.onFocus(key));
+
+  const open = (d: Draft, unsaved = false) => session.open(d, unsaved);
+  const commit = (change: (blocks: EditorBlock[]) => EditorBlock[], nextSelected?: number) => session.commit(change, nextSelected);
+  const updateSelected = (f: (b: EditorBlock) => EditorBlock) => session.updateSelected(f);
+  const addBlocks = (blocks: EditorBlock[], at: number) => session.addBlocks(blocks, at);
+  const select = (i: number) => session.select(i);
+  const undo = () => session.undo();
+  const redo = () => session.redo();
+
+  /** Clic dans la bibliothèque : la séance s'ouvre, et devient la séance choisie de l'application. */
+  function pick(key: string) {
+    setPanel();
+    if (key === keyOf()) return;
+    if (session.openKey(key)) o.onFocus(key);
+  }
+
+  function remove(w: SavedWorkout) {
+    if (!confirm(`Supprimer la séance « ${w.name} » ?`)) return;
+    const wasOpen = session.removeSaved(w);
+    o.log(`séance supprimée : ${w.name}`);
+    renderLibrary();
+    o.onLibraryChange();
+    if (wasOpen) session.openFallback(true);
+  }
+
+  function openFromWorkoutFile(fileName: string, text: string) {
+    const r = session.importFile(fileName, text);
+    if (r.kind === 'error') say(`import impossible (${fileName}) : ${r.message}`);
+    else if (r.kind === 'opened') for (const m of r.warnings) o.log(`import : ${m}`);
+  }
+
+  /** À l'arrivée sur l'écran : on ouvre la séance choisie dans l'application, sauf si un brouillon modifié est en cours. */
+  function sync() {
+    setPanel();
+    if (!session.syncTo(o.currentChoice())) return;
+    renderLibrary();
+    render();
   }
 
   function save(): string | undefined {
-    if (!draft || draft.readOnly || validateBlocks(draft.blocks).length) return undefined;
-    try {
-      const saved = o.library.save({
-        id: draft.id,
-        name: draft.name.trim() || 'Séance sans nom',
-        description: draft.description.trim() || undefined,
-        blocks: draft.blocks,
-      });
-      draft.id = saved.id;
-      draft.name = saved.name;
-      nameIn.value = saved.name;
-      baseline = JSON.stringify(draft);
-      baseStats = workoutStats(workout(), ftp());
-      baseZones = timeInZones(workout(), ftp());
-      say();
-      o.log(`séance enregistrée : ${saved.name}`);
-      renderLibrary();
-      o.onLibraryChange();
-      render();
-      o.onFocus(`lib:${saved.id}`);
-      return saved.id;
-    } catch (e) {
-      say(`enregistrement impossible (stockage du navigateur plein ou bloqué) : ${e instanceof Error ? e.message : e}`);
+    const r = session.save();
+    if (!r) return undefined;
+    if (r.kind === 'failed') {
+      say(`enregistrement impossible (stockage du navigateur plein ou bloqué) : ${r.message}`);
       return undefined;
     }
-  }
-
-  // --- Modifications ---
-
-  /** Applique une modification des blocs en l'inscrivant d'abord dans l'historique. */
-  function commit(change: (blocks: EditorBlock[]) => EditorBlock[], nextSelected = selected) {
-    if (!draft || draft.readOnly) return;
-    history.record(draft.blocks);
-    draft.blocks = change(draft.blocks);
-    selected = Math.max(0, Math.min(nextSelected, draft.blocks.length - 1));
+    const saved = r.workout;
+    nameIn.value = saved.name;
+    say();
+    o.log(`séance enregistrée : ${saved.name}`);
+    renderLibrary();
+    o.onLibraryChange();
     render();
-  }
-
-  const updateSelected = (f: (b: EditorBlock) => EditorBlock) =>
-    commit((bs) => bs.map((b, i) => (i === selected ? f(b) : b)));
-
-  /** Insère des blocs (copies) à l'indice `at` et sélectionne le premier : une seule entrée d'historique. */
-  function addBlocks(blocks: EditorBlock[], at: number) {
-    commit((bs) => [...bs.slice(0, at), ...structuredClone(blocks), ...bs.slice(at)], at);
-  }
-
-  function select(i: number) {
-    if (!draft?.blocks.length) return;
-    selected = Math.max(0, Math.min(i, draft.blocks.length - 1));
-    render();
-  }
-
-  function undo() {
-    if (!draft || draft.readOnly) return;
-    const prev = history.undo(draft.blocks);
-    if (!prev) return;
-    draft.blocks = prev;
-    selected = Math.min(selected, prev.length - 1);
-    render();
-  }
-
-  function redo() {
-    if (!draft || draft.readOnly) return;
-    const next = history.redo(draft.blocks);
-    if (!next) return;
-    draft.blocks = next;
-    selected = Math.min(selected, next.length - 1);
-    render();
+    o.onFocus(`lib:${saved.id}`);
+    return saved.id;
   }
 
   // --- Rendu ---
 
   function render(keepInspector = false) {
-    if (!draft) return;
+    if (!session.draft) return;
     const w = workout();
     const f = ftp();
     const stats = workoutStats(w, f);
     const zones = timeInZones(w, f);
-    const ro = !!draft.readOnly;
+    const ro = !!session.draft.readOnly;
     $('ed-sub').textContent = `${fmtLong(stats.durationS)} · charge ${stats.load}${ro ? ' · lecture seule' : isDirty() ? ' · modifiée' : ''}`;
     $('ed-dirty').hidden = !isDirty();
     $('ed-readonly').hidden = !ro;
-    $('ed-kicker').textContent = ro ? 'Modèle' : draft.id ? 'Mes séances' : 'Nouvelle séance';
+    $('ed-kicker').textContent = ro ? 'Modèle' : session.draft.id ? 'Mes séances' : 'Nouvelle séance';
     $('ed-bbar').classList.toggle('locked', ro);
     nameIn.readOnly = ro;
     descIn.readOnly = ro;
@@ -415,16 +293,16 @@ export function setupWorkoutEditor(o: EditorOptions) {
     inspector.inert = ro;
     inspector.classList.toggle('ro', ro);
     const roReason = 'Un modèle est en lecture seule : duplique-le pour le modifier.';
-    for (const id of ['ed-undo', 'ed-undo2']) setBlocked($<HTMLButtonElement>(id), history.canUndo ? undefined : ro ? roReason : 'Rien à annuler pour l’instant.');
-    for (const id of ['ed-redo', 'ed-redo2']) setBlocked($<HTMLButtonElement>(id), history.canRedo ? undefined : ro ? roReason : 'Rien à rétablir : tu n’as rien annulé.');
-    setBlocked($<HTMLButtonElement>('ed-del'), ro ? roReason : draft.blocks.length ? undefined : 'Aucun bloc à supprimer.');
+    for (const id of ['ed-undo', 'ed-undo2']) setBlocked($<HTMLButtonElement>(id), session.history.canUndo ? undefined : ro ? roReason : 'Rien à annuler pour l’instant.');
+    for (const id of ['ed-redo', 'ed-redo2']) setBlocked($<HTMLButtonElement>(id), session.history.canRedo ? undefined : ro ? roReason : 'Rien à rétablir : tu n’as rien annulé.');
+    setBlocked($<HTMLButtonElement>('ed-del'), ro ? roReason : session.draft.blocks.length ? undefined : 'Aucun bloc à supprimer.');
     renderSummary(stats, zones);
     renderChart(w, f);
     renderBlockBar();
     if (keepInspector) refreshInspectorText();
     else renderInspector();
     renderZones(zones);
-    const errors = validateBlocks(draft.blocks);
+    const errors = validateBlocks(session.draft.blocks);
     $('ed-errors').replaceChildren(...errors.map((e) => el('li', { textContent: e })));
     for (const id of ['ed-save', 'ed-export']) setBlocked($<HTMLButtonElement>(id), errors.length ? `À corriger d’abord : ${errors[0]}` : undefined);
     renderRide(errors);
@@ -432,7 +310,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
   }
 
   /** « Rouler » attend une séance valide, puis un trainer connecté ; l'application rappelle quand la connexion change. */
-  function renderRide(errors = draft ? validateBlocks(draft.blocks) : []) {
+  function renderRide(errors = session.draft ? validateBlocks(session.draft.blocks) : []) {
     setBlocked($<HTMLButtonElement>('ed-ride'), errors.length ? `À corriger d’abord : ${errors[0]}` : o.rideBlock());
   }
 
@@ -453,10 +331,10 @@ export function setupWorkoutEditor(o: EditorOptions) {
         el('div', { className: 'v' }, v, small ? el('small', { textContent: ` ${small}` }) : '', d ? el('span', { className: 'delta', textContent: d }) : ''),
       );
     $('ed-summary').replaceChildren(
-      cell('Durée', fmtLong(s.durationS), `dont ${fmtLong(effortSeconds(z))} d'effort`, delta(s.durationS / 60, baseStats && baseStats.durationS / 60, 0, ' min')),
-      cell('Moyenne', `${s.avgW} W`, `${Math.round((s.avgW / f) * 100)} % de ta FTP (${f} W)`, delta(s.avgW, baseStats?.avgW)),
-      cell('Intensité', s.intensity.toFixed(2).replace('.', ','), '1,00 = tenir sa FTP', delta(s.intensity, baseStats?.intensity, 2), intensityWord(s.intensity)),
-      cell('Charge', String(s.load), '1 h à la FTP = 100', delta(s.load, baseStats?.load)),
+      cell('Durée', fmtLong(s.durationS), `dont ${fmtLong(effortSeconds(z))} d'effort`, delta(s.durationS / 60, session.baseStats && session.baseStats.durationS / 60, 0, ' min')),
+      cell('Moyenne', `${s.avgW} W`, `${Math.round((s.avgW / f) * 100)} % de ta FTP (${f} W)`, delta(s.avgW, session.baseStats?.avgW)),
+      cell('Intensité', s.intensity.toFixed(2).replace('.', ','), '1,00 = tenir sa FTP', delta(s.intensity, session.baseStats?.intensity, 2), intensityWord(s.intensity)),
+      cell('Charge', String(s.load), '1 h à la FTP = 100', delta(s.load, session.baseStats?.load)),
     );
   }
 
@@ -502,7 +380,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
     for (const s of profileShapes(w, f, W, H)) bars.append(svg('path', { d: s.d, class: s.zone }));
     const ftpLine = svg('line', { x1: 0, x2: W, y1: y(f), y2: y(f), stroke: 'currentColor', 'stroke-opacity': 0.55, 'stroke-dasharray': '8 6', 'vector-effect': 'non-scaling-stroke' });
     root.replaceChildren(bands, bars, ftpLine);
-    const r = blockRanges(draft!.blocks)[selected];
+    const r = blockRanges(session.draft!.blocks)[session.selected];
     if (r) {
       root.append(
         svg('rect', {
@@ -517,13 +395,13 @@ export function setupWorkoutEditor(o: EditorOptions) {
         }),
       );
     }
-    root.setAttribute('aria-label', `Profil de la séance, ${draft!.blocks.length} blocs, ${fmtLong(total)}`);
+    root.setAttribute('aria-label', `Profil de la séance, ${session.draft!.blocks.length} blocs, ${fmtLong(total)}`);
 
     $('ed-xaxis').replaceChildren(...[0, 0.25, 0.5, 0.75, 1].map((k) => el('span', { textContent: fmtLong(Math.round(k * total)) })));
   }
 
   function selectedZone(): Zone | undefined {
-    const b = draft?.blocks[selected];
+    const b = session.draft?.blocks[session.selected];
     if (!b || b.type === 'free') return undefined;
     const main = b.type === 'steady' ? b.power : b.type === 'intervals' ? b.onPower : (b.from + b.to) / 2;
     return zoneOf(main);
@@ -535,17 +413,17 @@ export function setupWorkoutEditor(o: EditorOptions) {
    * et porte la poignée qui le déplace (voir plus bas).
    */
   function renderBlockBar() {
-    const blocks = draft!.blocks;
-    const b = blocks[selected];
+    const blocks = session.draft!.blocks;
+    const b = blocks[session.selected];
     $('ed-bbar').hidden = !b;
     if (!b) return;
     $('bb-name').textContent = BLOCK_LABEL[b.type];
     $('bb-short').textContent = blockShort(b);
-    $('bb-pos').textContent = `${selected + 1}/${blocks.length}`;
+    $('bb-pos').textContent = `${session.selected + 1}/${blocks.length}`;
     const main = b.type === 'free' ? undefined : b.type === 'steady' ? b.power : b.type === 'intervals' ? b.onPower : (b.from + b.to) / 2;
     $('bb-main').style.borderLeftColor = main === undefined ? 'var(--muted)' : `var(--${zoneOf(main)})`;
-    $<HTMLButtonElement>('bb-prev').disabled = selected === 0;
-    $<HTMLButtonElement>('bb-next').disabled = selected >= blocks.length - 1;
+    $<HTMLButtonElement>('bb-prev').disabled = session.selected === 0;
+    $<HTMLButtonElement>('bb-next').disabled = session.selected >= blocks.length - 1;
     $('bb-handle').hidden = blocks.length < 2;
   }
 
@@ -572,7 +450,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   /** Reconstruit les onglets et les cartes : à l'ouverture d'une séance, au changement d'onglet, de « Mes blocs » ou de FTP. */
   function renderShelf() {
-    const ro = !!draft?.readOnly;
+    const ro = !!session.draft?.readOnly;
     const tab = (id: ShelfTab, label: string, zone?: string) => {
       const b = el('button', { type: 'button', className: 'sh-tab' });
       if (zone) {
@@ -607,8 +485,8 @@ export function setupWorkoutEditor(o: EditorOptions) {
       if (ro) setBlocked(card, 'Un modèle est en lecture seule : duplique-le pour le modifier.');
       else
         card.addEventListener('click', () => {
-          if (justDraggedCard || !draft) return;
-          addBlocks(item.blocks, draft.blocks.length ? selected + 1 : 0);
+          if (justDraggedCard || !session.draft) return;
+          addBlocks(item.blocks, session.draft.blocks.length ? session.selected + 1 : 0);
         });
       const wrap = el('div', { className: 'sh-item' }, card);
       if (item.mine) {
@@ -667,7 +545,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   shelfCardsEl.addEventListener('pointerdown', (e) => {
     const card = (e.target as HTMLElement).closest<HTMLElement>('.sh-card');
-    if (!card || !draft || draft.readOnly || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!card || !session.draft || session.draft.readOnly || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const item = shelfItemsNow[Number(card.dataset.i)];
     if (!item) return;
     const total = workout().steps.reduce((t, st) => t + st.durationS, 0) || 1;
@@ -680,11 +558,11 @@ export function setupWorkoutEditor(o: EditorOptions) {
       mouse: e.pointerType === 'mouse',
       active: false,
       inside: false,
-      at: draft.blocks.length,
+      at: session.draft.blocks.length,
       el: card,
       ghostW: Math.max(28, Math.min(width * 0.5, (summarizeBlocks(item.blocks).durationS / total) * width)),
       width,
-      ranges: blockRanges(draft.blocks),
+      ranges: blockRanges(session.draft.blocks),
       total,
     };
   });
@@ -773,17 +651,17 @@ export function setupWorkoutEditor(o: EditorOptions) {
   }
 
   handleEl.addEventListener('pointerdown', (e) => {
-    if (!draft || draft.readOnly || draft.blocks.length < 2 || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!session.draft || session.draft.readOnly || session.draft.blocks.length < 2 || (e.pointerType === 'mouse' && e.button !== 0)) return;
     e.preventDefault();
     const w = workout();
     drag = {
-      from: selected,
-      to: selected,
+      from: session.selected,
+      to: session.selected,
       startX: e.clientX,
       pointerId: e.pointerId,
       active: false,
       width: plot.clientWidth,
-      ranges: blockRanges(draft.blocks),
+      ranges: blockRanges(session.draft.blocks),
       total: w.steps.reduce((t, s) => t + s.durationS, 0) || 1,
     };
     handleEl.setPointerCapture?.(e.pointerId);
@@ -825,8 +703,8 @@ export function setupWorkoutEditor(o: EditorOptions) {
   };
   handleEl.addEventListener('pointerup', endDrag);
   handleEl.addEventListener('pointercancel', endDrag);
-  $('bb-prev').addEventListener('click', () => select(selected - 1));
-  $('bb-next').addEventListener('click', () => select(selected + 1));
+  $('bb-prev').addEventListener('click', () => select(session.selected - 1));
+  $('bb-next').addEventListener('click', () => select(session.selected + 1));
 
   // --- Ligne de réglages du bloc sélectionné ---
 
@@ -862,10 +740,10 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   /** Les setters écrivent dans le bloc sélectionné du brouillon : on le copie d'abord, l'historique garde l'original. */
   function commitSet(set: (v: number) => void, v: number) {
-    if (!draft || draft.readOnly) return;
-    history.record(draft.blocks);
-    typing = false;
-    draft.blocks = structuredClone(draft.blocks);
+    if (!session.draft || session.draft.readOnly) return;
+    session.history.record(session.draft.blocks);
+    session.typing = false;
+    session.draft.blocks = structuredClone(session.draft.blocks);
     set(v);
     render();
   }
@@ -905,10 +783,10 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   /** Frappe dans un champ : on modifie le brouillon en place et on redessine tout sauf la ligne de réglages. */
   function liveEdit(apply: () => void) {
-    if (!draft || draft.readOnly) return;
-    if (!typing) {
-      history.record(draft.blocks);
-      typing = true;
+    if (!session.draft || session.draft.readOnly) return;
+    if (!session.typing) {
+      session.history.record(session.draft.blocks);
+      session.typing = true;
     }
     apply();
     render(true);
@@ -935,10 +813,10 @@ export function setupWorkoutEditor(o: EditorOptions) {
     actions.append(
       button('← Avant', () => moveSelected(-1), 'secondary'),
       button('Après →', () => moveSelected(1), 'secondary'),
-      button('Dupliquer', () => commit((bs) => [...bs.slice(0, selected + 1), structuredClone(b), ...bs.slice(selected + 1)], selected + 1), 'secondary'),
+      button('Dupliquer', () => commit((bs) => [...bs.slice(0, session.selected + 1), structuredClone(b), ...bs.slice(session.selected + 1)], session.selected + 1), 'secondary'),
     );
     if (b.type === 'intervals') {
-      const split = button('Séparer', () => commit((bs) => [...bs.slice(0, selected), ...splitIntervals(b), ...bs.slice(selected + 1)]), 'secondary');
+      const split = button('Séparer', () => commit((bs) => [...bs.slice(0, session.selected), ...splitIntervals(b), ...bs.slice(session.selected + 1)]), 'secondary');
       split.title = 'Séparer les répétitions en blocs individuels';
       actions.append(split);
     }
@@ -947,8 +825,8 @@ export function setupWorkoutEditor(o: EditorOptions) {
     actions.append(keep, button('Supprimer', deleteSelected, 'secondary danger'));
     if (keyed) actions.querySelectorAll('button').forEach((x, i) => (x.dataset.key = `act-${i}`));
     const [before, after] = [...actions.querySelectorAll('button')].filter((x) => /Avant|Après/.test(x.textContent ?? ''));
-    if (before) setBlocked(before, selected === 0 ? 'C’est déjà le premier bloc.' : undefined);
-    if (after) setBlocked(after, selected === draft!.blocks.length - 1 ? 'C’est déjà le dernier bloc.' : undefined);
+    if (before) setBlocked(before, session.selected === 0 ? 'C’est déjà le premier bloc.' : undefined);
+    if (after) setBlocked(after, session.selected === session.draft!.blocks.length - 1 ? 'C’est déjà le dernier bloc.' : undefined);
     // Sur téléphone, ces actions vivent dans le menu « ⋯ » : une action faite, il se referme.
     actions.addEventListener('click', () => setPanel());
     return actions;
@@ -956,14 +834,14 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   function renderInspector() {
     const active = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined;
-    const b = draft!.blocks[selected];
+    const b = session.draft!.blocks[session.selected];
     if (!b) {
       inspector.replaceChildren(el('p', { className: 'note', textContent: 'Aucun bloc : ajoute-en depuis l’étagère.' }));
       $('ed-bactions').replaceChildren();
       return;
     }
     const f = ftp();
-    const cur = () => draft!.blocks[selected]!;
+    const cur = () => session.draft!.blocks[session.selected]!;
     const set = <K extends string>(k: K) => (v: number) => ((cur() as unknown as Record<K, number>)[k] = v);
     const z = (p: number) => zoneName(zoneOf(p));
 
@@ -1016,7 +894,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
     // Sur téléphone, l'inspecteur est une feuille (bouton ⋯ sous le profil) : titre et bouton Fermer en tête.
     const close = el('button', { type: 'button', className: 'sheet-x', textContent: 'Fermer' });
     close.dataset.openPanel = '';
-    const head = el('div', { className: 'sheet-head' }, el('strong', { textContent: `${BLOCK_LABEL[b.type]} · bloc ${selected + 1} sur ${draft!.blocks.length}` }), close);
+    const head = el('div', { className: 'sheet-head' }, el('strong', { textContent: `${BLOCK_LABEL[b.type]} · bloc ${session.selected + 1} sur ${session.draft!.blocks.length}` }), close);
     // Sur téléphone, l'inspecteur n'est plus qu'un menu d'actions : une action faite, il se referme.
     inspector.replaceChildren(head, sentence, el('div', { className: 'ed-body' }, line, actions));
     $('ed-bactions').replaceChildren(blockActions(b, false)); // le même menu, dans le « ⋯ » de l'en-tête (téléphone)
@@ -1025,7 +903,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   /** Pendant la frappe : la phrase et les zones des légendes suivent, sans reconstruire les champs. */
   function refreshInspectorText() {
-    const b = draft!.blocks[selected];
+    const b = session.draft!.blocks[session.selected];
     if (!b) return;
     const sentence = inspector.querySelector('.sentence');
     if (sentence) sentence.textContent = describeBlock(b, ftp());
@@ -1055,18 +933,18 @@ export function setupWorkoutEditor(o: EditorOptions) {
   }
 
   function moveSelected(d: number) {
-    const j = selected + d;
-    if (!draft || j < 0 || j >= draft.blocks.length) return;
+    const j = session.selected + d;
+    if (!session.draft || j < 0 || j >= session.draft.blocks.length) return;
     commit((bs) => {
       const c = [...bs];
-      [c[selected], c[j]] = [c[j]!, c[selected]!];
+      [c[session.selected], c[j]] = [c[j]!, c[session.selected]!];
       return c;
     }, j);
   }
 
   function deleteSelected() {
-    if (!draft?.blocks.length) return;
-    commit((bs) => bs.filter((_, i) => i !== selected), selected);
+    if (!session.draft?.blocks.length) return;
+    commit((bs) => bs.filter((_, i) => i !== session.selected), session.selected);
   }
 
   // --- Temps par zone ---
@@ -1086,12 +964,12 @@ export function setupWorkoutEditor(o: EditorOptions) {
       bar.append(s);
     }
     const items = ids
-      .filter((id) => z[id] || baseZones?.[id])
+      .filter((id) => z[id] || session.baseZones?.[id])
       .sort((a, b) => z[b] - z[a])
       .map((id) => {
         const swatch = el('i');
         swatch.style.background = color(id);
-        const was = baseZones && baseZones[id] !== z[id] ? ` (avant : ${formatDuration(baseZones[id])})` : '';
+        const was = session.baseZones && session.baseZones[id] !== z[id] ? ` (avant : ${formatDuration(session.baseZones[id])})` : '';
         return el('li', { title: `${zoneName(id)}${was}` }, swatch, `${zoneName(id)} `, el('strong', { textContent: formatDuration(z[id]) }));
       });
     const parts = [el('span', { className: 'k', textContent: 'Zones' }), bar, el('ul', {}, ...items)];
@@ -1110,11 +988,11 @@ export function setupWorkoutEditor(o: EditorOptions) {
   }
 
   plot.addEventListener('mousemove', (e) => {
-    if (!draft?.blocks.length) return;
+    if (!session.draft?.blocks.length) return;
     const t = timeAt(e);
-    const bi = blockIndexAt(draft.blocks, t);
-    const b = draft.blocks[bi]!;
-    const range = blockRanges(draft.blocks)[bi]!;
+    const bi = blockIndexAt(session.draft.blocks, t);
+    const b = session.draft.blocks[bi]!;
+    const range = blockRanges(session.draft.blocks)[bi]!;
     const w = workout();
     let acc = 0;
     let stepLeft = 0;
@@ -1150,7 +1028,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
   });
   plot.addEventListener('mouseleave', () => (tip.hidden = true));
   plot.addEventListener('click', (e) => {
-    if (draft?.blocks.length) select(blockIndexAt(draft.blocks, timeAt(e)));
+    if (session.draft?.blocks.length) select(blockIndexAt(session.draft.blocks, timeAt(e)));
   });
 
   // --- Saisie d'une valeur exacte, au toucher (téléphone) ---
@@ -1170,8 +1048,8 @@ export function setupWorkoutEditor(o: EditorOptions) {
   let editSpec: EditSpec | undefined;
 
   function openEdit(spec: EditSpec) {
-    const b = draft?.blocks[selected] as unknown as Record<string, number | undefined> | undefined;
-    if (!draft || draft.readOnly || !b) return;
+    const b = session.draft?.blocks[session.selected] as unknown as Record<string, number | undefined> | undefined;
+    if (!session.draft || session.draft.readOnly || !b) return;
     editSpec = spec;
     $('pop-title').textContent = spec.title;
     $('pop-g-power').hidden = !spec.power;
@@ -1220,7 +1098,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
   pop.addEventListener('submit', (e) => {
     e.preventDefault();
     const spec = editSpec;
-    if (!spec || !draft) return;
+    if (!spec || !session.draft) return;
     let ok = true;
     const check = (input: HTMLInputElement, valid: boolean) => {
       input.classList.toggle('invalid', !valid);
@@ -1280,11 +1158,11 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   /** Ajuste d'un pas la puissance d'un champ du bloc sélectionné (même historique que l'inspecteur). */
   function bump(field: PowerField, d: number) {
-    const b = draft?.blocks[selected] as unknown as Record<string, number> | undefined;
+    const b = session.draft?.blocks[session.selected] as unknown as Record<string, number> | undefined;
     const current = b?.[field];
-    if (!draft || draft.readOnly || typeof current !== 'number') return;
+    if (!session.draft || session.draft.readOnly || typeof current !== 'number') return;
     commitSet((v) => {
-      (draft!.blocks[selected] as unknown as Record<string, number>)[field] = v;
+      (session.draft!.blocks[session.selected] as unknown as Record<string, number>)[field] = v;
     }, clampPower(current + d));
   }
 
@@ -1295,8 +1173,8 @@ export function setupWorkoutEditor(o: EditorOptions) {
    */
   function renderOverlay() {
     overlay.replaceChildren();
-    if (!draft || draft.readOnly || !PHONE.matches) return;
-    const b = draft.blocks[selected];
+    if (!session.draft || session.draft.readOnly || !PHONE.matches) return;
+    const b = session.draft.blocks[session.selected];
     const W = plot.clientWidth;
     const H = plot.clientHeight;
     if (!b || !W || !H) return;
@@ -1304,7 +1182,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
     const w = workout();
     const peak = profilePeakW(w, f);
     const total = w.steps.reduce((t, s) => t + s.durationS, 0) || 1;
-    const r = blockRanges(draft.blocks)[selected]!;
+    const r = blockRanges(session.draft.blocks)[session.selected]!;
     const px = (s: number) => (s / total) * W;
     const topOf = (frac: number) => (1 - (frac * f) / peak) * H;
     const put = (node: HTMLElement, cx: number, top: number, half: number) => {
@@ -1402,7 +1280,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && sea.dataset.panel && editor.offsetParent !== null) setPanel();
-    if (!draft || editor.offsetParent === null || isTyping(e.target)) return;
+    if (!session.draft || editor.offsetParent === null || isTyping(e.target)) return;
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && e.key.toLowerCase() === 'z') {
       e.preventDefault();
@@ -1428,7 +1306,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
         e.preventDefault();
         const d = e.key === 'ArrowRight' ? 1 : -1;
         if (e.shiftKey) updateSelected((b) => nudgeDuration(b, d * DURATION_STEP_S));
-        else select(selected + d);
+        else select(session.selected + d);
         break;
       }
       case 'Delete':
@@ -1442,7 +1320,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
   // --- Cadence cible (option, hors de la ligne de réglages) ---
 
   function openCadence() {
-    const b = draft?.blocks[selected];
+    const b = session.draft?.blocks[session.selected];
     if (!b || b.type === 'free') return;
     $('ed-cad-on-label').textContent = b.type === 'intervals' ? 'Effort' : 'Cadence';
     $<HTMLInputElement>('ed-cad-on').value = b.cadenceRpm ? String(b.cadenceRpm) : '';
@@ -1482,22 +1360,22 @@ export function setupWorkoutEditor(o: EditorOptions) {
   // --- Branchements ---
 
   nameIn.addEventListener('input', () => {
-    if (!draft || draft.readOnly) return;
-    draft.name = nameIn.value;
+    if (!session.draft || session.draft.readOnly) return;
+    session.draft.name = nameIn.value;
     $('ed-dirty').hidden = !isDirty();
     // Un brouillon est montré dans la bibliothèque sous son nom : on le tient à jour sans reconstruire la liste.
     const row = document.querySelector('.sea-lib [data-key="draft"] strong');
-    if (row) row.textContent = draft.name || 'Séance sans nom';
+    if (row) row.textContent = session.draft.name || 'Séance sans nom';
   });
   descIn.addEventListener('input', () => {
-    if (!draft || draft.readOnly) return;
-    draft.description = descIn.value;
+    if (!session.draft || session.draft.readOnly) return;
+    session.draft.description = descIn.value;
     $('ed-dirty').hidden = !isDirty();
   });
   // Fin d'une frappe : la prochaine saisie ouvrira une nouvelle entrée d'historique, et les champs reprennent leur forme normale.
   inspector.addEventListener('focusout', () => {
-    if (!typing) return;
-    typing = false;
+    if (!session.typing) return;
+    session.typing = false;
     setTimeout(() => {
       if (!inspector.contains(document.activeElement)) render();
     });
@@ -1533,17 +1411,17 @@ export function setupWorkoutEditor(o: EditorOptions) {
   });
   $('ed-copy').addEventListener('click', () => {
     setPanel();
-    duplicateModel();
+    session.duplicateModel();
   });
   $('ed-ride').addEventListener('click', () => {
-    if (!draft) return;
-    if (draft.readOnly) return o.onRide(`sample:${draft.sampleId}`);
+    if (!session.draft) return;
+    if (session.draft.readOnly) return o.onRide(`sample:${session.draft.sampleId}`);
     const id = save();
     if (id) o.onRide(`lib:${id}`);
   });
   $('ed-export').addEventListener('click', () => {
     setPanel();
-    if (draft) download(`${slug(draft.name)}.zwo`, toZwo(draft.name, draft.description, draft.blocks));
+    if (session.draft) download(`${slug(session.draft.name)}.zwo`, toZwo(session.draft.name, session.draft.description, session.draft.blocks));
   });
   addEventListener('beforeunload', (e) => {
     if (isDirty()) e.preventDefault();
@@ -1560,15 +1438,10 @@ export function setupWorkoutEditor(o: EditorOptions) {
     refreshRide: () => renderRide(),
     /** À appeler quand la FTP change : les watts affichés en dépendent. */
     refresh() {
-      if (draft?.readOnly) {
-        // Les modèles en watts (.erg, .mrc) sont relus en % de la FTP : on les rouvre avec la nouvelle valeur.
-        const key = keyOf(draft);
-        const keep = selected;
-        draft = undefined;
-        if (key && openKey(key)) select(keep);
-      } else {
+      // Un modèle en watts se relit avec la nouvelle FTP : la session le rouvre. Sinon on redessine seulement.
+      if (!session.reopenModel()) {
         renderLibrary();
-        if (draft) render();
+        if (session.draft) render();
       }
       renderShelf();
     },
@@ -1578,21 +1451,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
      * tel quel : l'enregistrer en fera la version la plus récente.
      */
     libraryChanged() {
-      if (draft?.id && !isDirty()) {
-        const w = o.library.get(draft.id);
-        if (!w) {
-          draft = undefined;
-          baseline = '';
-          openFallback(false);
-        } else {
-          const next: Draft = { id: w.id, name: w.name, description: w.description ?? '', blocks: structuredClone(w.blocks) };
-          if (JSON.stringify(next) !== baseline) {
-            const keep = selected;
-            open(next);
-            if (next.blocks.length) select(Math.min(keep, next.blocks.length - 1));
-          }
-        }
-      }
+      session.adoptLibraryChange();
       renderLibrary();
       renderShelf();
     },
