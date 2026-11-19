@@ -23,7 +23,7 @@ import { parseWorkout } from './domain/workout/runner';
 import { nextIntervalGate } from './domain/workout/gate';
 import { DeviceRegistry } from './infra/sensors/device-registry';
 import { browserStore } from './infra/storage/key-value-store';
-import { PROTOCOL_LABEL, type ControlProtocol } from './infra/sensors/protocols/trainer-profiles';
+import { PROTOCOL_LABEL } from './infra/sensors/protocols/trainer-profiles';
 import { formatDuration } from './ui/shared/duration';
 import { setBlocked, setupBlockedHints, type BlockReason } from './ui/shared/blocked';
 import { setupRouter } from './ui/shared/router';
@@ -41,6 +41,8 @@ import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
 import { setupWorkoutEditor } from './ui/editor/workout-editor';
 import { RideHud } from './ui/ride/hud';
+import { DevicesView } from './ui/devices/devices-view';
+import { LogView } from './ui/devices/log-view';
 import { HudPresenter } from './ui/ride/hud-presenter';
 import { RideLoadingView } from './ui/ride/ride-loading-view';
 import { CrowdView } from './ui/ride/crowd-view';
@@ -57,7 +59,6 @@ import { setupAccount } from './ui/account/account-chip';
 import { WorldClient } from './infra/net/world-client';
 import { RiderTags } from './ui/ride/rider-tags';
 import { RidePanel } from './ui/ride/ride-panel';
-import { controlModes } from './ui/ride/radar-model';
 import { blocksToWorkout } from './domain/workout/blocks';
 import { BlockLibrary } from './domain/workout/block-library';
 import { WorkoutLibrary } from './domain/workout/library';
@@ -91,17 +92,7 @@ const noControl = (what: string): BlockReason => ({
   action: { label: 'Changer d’appareil', run: () => router.go('appareils') },
 });
 
-/** État affiché sur les cartes de l'écran Appareils. */
-const stateLabel = (s: ConnectionState) =>
-  s === 'connected' ? 'Connecté' : s === 'connecting' ? 'Connexion…' : s === 'error' ? 'Erreur de connexion' : 'Non connecté';
-const stateEl = $('state');
-const stateHrEl = $('state-hr');
-const connectHr = $<HTMLButtonElement>('connect-hr');
-const disconnectHr = $<HTMLButtonElement>('disconnect-hr');
-const logEl = $('log');
-const connectBle = $<HTMLButtonElement>('connect-ble');
-const connectSim = $<HTMLButtonElement>('connect-sim');
-const disconnectBtn = $<HTMLButtonElement>('disconnect');
+const logView = new LogView();
 const ergBtn = $<HTMLButtonElement>('erg-send');
 const simBtn = $<HTMLButtonElement>('sim-send');
 const ergInput = $<HTMLInputElement>('erg');
@@ -114,17 +105,9 @@ const prefs = browserStore();
 const settings = new SettingsStore(prefs);
 /** Journal de synchronisation avec le compte : FTP, masse, séances et blocs y notent chaque modification (src/infra/sync/). */
 const syncJournal = new SyncJournal(prefs);
-const protocolSelect = $<HTMLSelectElement>('trainer-protocol');
-/** Protocole de pilotage imposé depuis l'aide de l'écran Appareils ; vide = choix automatique selon le modèle. */
-protocolSelect.value = settings.trainerProtocol() ?? '';
-protocolSelect.addEventListener('change', () => {
-  settings.saveTrainerProtocol((protocolSelect.value || undefined) as ControlProtocol | undefined);
-  log(`protocole de pilotage : ${protocolSelect.value ? PROTOCOL_LABEL[protocolSelect.value as ControlProtocol] : 'automatique'}, appliqué à la prochaine connexion`);
-});
-
 function newBleTrainer(): WebBluetoothTrainer {
   const t = new WebBluetoothTrainer();
-  t.forcedProtocol = (protocolSelect.value || undefined) as ControlProtocol | undefined;
+  t.forcedProtocol = devicesView.forcedProtocol;
   return t;
 }
 
@@ -173,9 +156,7 @@ const rideViews = new RideViewLoader({
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join(' ');
 
 function log(msg: string) {
-  const ts = new Date().toLocaleTimeString('fr-FR');
-  logEl.textContent += `${ts}  ${msg}\n`;
-  logEl.scrollTop = logEl.scrollHeight;
+  logView.append(msg);
   telemetry.record(msg);
 }
 
@@ -203,7 +184,7 @@ function renderCogMode() {
       ? ''
       : trainerCtl.capabilities?.virtualGears
         ? 'Braquet géré par le trainer (protocole Zwift).'
-        : protocolSelect.value === 'zwift'
+        : devicesView.forcedProtocol === 'zwift'
           ? 'Ce trainer ne répond pas au protocole Zwift : braquet simulé par la pente envoyée.'
           : 'Braquet simulé par la pente envoyée au trainer. Pour que le trainer le gère lui-même, choisis « Zwift » comme protocole de pilotage sur l’écran Appareils, puis reconnecte-le.';
 }
@@ -211,12 +192,9 @@ function renderCogMode() {
 function setState(s: ConnectionState, detail?: string) {
   renderCogMode();
   exporter.onTrainerState(s);
-  stateEl.dataset.s = s;
-  stateEl.textContent = stateLabel(s);
-  stateEl.title = detail ?? '';
+  devicesView.showTrainerState(s, detail);
   const connected = s === 'connected';
   // Les boutons de connexion sont réglés par renderDevices, plus bas.
-  setBlocked(disconnectBtn, connected ? undefined : 'Aucun trainer connecté.');
   setBlocked(
     ergBtn,
     !connected
@@ -249,12 +227,9 @@ function setState(s: ConnectionState, detail?: string) {
   }
   const dev = trainerCtl.device;
   if (connected && dev) {
-    const c = dev.capabilities;
-    const range = c.powerRange ? `, plage ${c.powerRange.min}–${c.powerRange.max} W` : '';
     const id = dev instanceof WebBluetoothTrainer ? dev.identity : undefined;
     if (id) telemetry.trainer({ profile: id.profile.id, brand: id.profile.brand, label: id.profile.label, ...id.info, protocol: id.protocol, services: id.services });
-    const model = id ? `${id.profile.label}${id.info.firmware ? ` (firmware ${id.info.firmware})` : ''} · pilotage ${id.protocol ? PROTOCOL_LABEL[id.protocol] : 'aucun'} · ` : '';
-    $('caps').textContent = `${model}ERG : ${c.targetPower ? 'oui' : 'non'} · SIM : ${c.simulation ? 'oui' : 'non'}${range}${id?.advice ? `. ${id.advice}` : ''}`;
+    devicesView.showCapabilities(dev.capabilities, id);
   }
   renderDevices();
 }
@@ -358,20 +333,6 @@ rideBtn.addEventListener('click', () => {
   offerRecap();
 });
 
-connectHr.addEventListener('click', () => devices.connectHeartRate(devices.known('hr')?.name));
-$('connect-hr-other').addEventListener('click', () => devices.connectHeartRate());
-disconnectHr.addEventListener('click', () => devices.disconnectHeartRate());
-connectBle.addEventListener('click', () => void devices.connectTrainer(devices.known('trainer')?.name));
-$('connect-ble-other').addEventListener('click', () => void devices.connectTrainer());
-connectSim.addEventListener('click', () => void trainerCtl.connect(new SimulatedTrainer()));
-for (const role of ['trainer', 'hr'] as const) {
-  $(`forget-${role}`).addEventListener('click', () => {
-    const known = devices.known(role);
-    if (!known || !confirm(`Oublier « ${known.name} » ? Il ne sera plus reconnecté au lancement.`)) return;
-    devices.forget(role);
-  });
-}
-disconnectBtn.addEventListener('click', () => trainerCtl.disconnect());
 ergBtn.addEventListener('click', async () => {
   if (trainerCtl.ergActive) {
     trainerCtl.setErgActive(false);
@@ -767,105 +728,47 @@ void import('./render/riders/rider-portrait')
   .then((url) => { riderAvatar.src = url; })
   .catch(() => {}); // l'image de repli reste affichée
 
+/** Les cartes de l'écran Appareils (devices-view.ts) : elles demandent, main.ts relie aux contrôleurs. */
+const devicesView = new DevicesView(radars, {
+  connectTrainer: (useKnown) => void devices.connectTrainer(useKnown ? devices.known('trainer')?.name : undefined),
+  connectSimulator: () => void trainerCtl.connect(new SimulatedTrainer()),
+  disconnectTrainer: () => trainerCtl.disconnect(),
+  connectHeartRate: (useKnown) => devices.connectHeartRate(useKnown ? devices.known('hr')?.name : undefined),
+  disconnectHeartRate: () => devices.disconnectHeartRate(),
+  forget: (role) => devices.forget(role),
+  goRide: () => router.go('accueil'),
+  protocolChanged: (protocol) => {
+    settings.saveTrainerProtocol(protocol);
+    log(`protocole de pilotage : ${protocol ? PROTOCOL_LABEL[protocol] : 'automatique'}, appliqué à la prochaine connexion`);
+  },
+});
+devicesView.setForcedProtocol(settings.trainerProtocol());
+
 function renderDevices() {
-  const roleState = devices.states;
-  const t = devices.known('trainer');
-  const h = devices.known('hr');
-  // Un appareil attendu (éteint) n'occupe pas le rôle : on peut toujours en choisir un autre.
-  const waitingT = devices.trainerWaiting;
-  const busyT = roleState.trainer === 'connected' || (roleState.trainer === 'connecting' && !waitingT);
-  const busyH = roleState.hr === 'connected' || (roleState.hr === 'connecting' && !devices.heartRateWaiting);
-  // Le nom de l'appareil branché prime (le trainer simulé n'est pas mémorisé) ; sinon le dernier appareil connu.
-  $('trainer-known').textContent =
-    roleState.trainer === 'connected' && trainerCtl.name ? trainerCtl.name : t ? `Connu : ${t.name}` : 'Aucun trainer connu.';
-  $('hr-known').textContent =
-    roleState.hr === 'connected' && devices.heartRate?.name ? devices.heartRate.name : h ? `Connu : ${h.name}` : 'Aucun capteur connu. Facultatif.';
-  // Le nom de l'appareil est déjà affiché au-dessus des boutons : le libellé reste court pour que la rangée tienne sur une ligne.
-  connectBle.textContent = t ? 'Reconnecter' : 'Rechercher un trainer';
-  connectHr.textContent = h ? 'Reconnecter' : 'Rechercher un capteur';
-  const bt = webBluetoothAvailable();
-  const noBt = noBluetoothHint(browserUa());
-  const trainerBusy =
-    roleState.trainer === 'connected' ? 'Un trainer est déjà connecté : déconnecte-le d’abord pour en changer.' : 'Connexion du trainer en cours…';
-  const hrBusy =
-    roleState.hr === 'connected' ? 'Un capteur est déjà connecté : déconnecte-le d’abord pour en changer.' : 'Connexion du capteur en cours…';
-  setBlocked(connectBle, !bt ? noBt : busyT ? trainerBusy : undefined);
-  setBlocked(connectHr, !bt ? noBt : busyH ? hrBusy : undefined);
-  setBlocked(connectSim, busyT ? trainerBusy : undefined);
-  // Une rangée par appareil, limitée à ce qui est utile dans l'état courant : connecté, il ne reste que « Déconnecter ».
-  const liveT = roleState.trainer === 'connected';
-  const liveH = roleState.hr === 'connected';
-  connectBle.hidden = liveT;
-  connectSim.hidden = liveT;
-  disconnectBtn.hidden = !liveT;
-  connectHr.hidden = liveH;
-  disconnectHr.hidden = !liveH;
-  $<HTMLButtonElement>('connect-ble-other').hidden = !t || liveT;
-  setBlocked($<HTMLButtonElement>('connect-ble-other'), !bt ? noBt : busyT ? trainerBusy : undefined);
-  $<HTMLButtonElement>('connect-hr-other').hidden = !h || liveH;
-  setBlocked($<HTMLButtonElement>('connect-hr-other'), !bt ? noBt : busyH ? hrBusy : undefined);
-  $<HTMLButtonElement>('forget-trainer').hidden = !t || liveT;
-  $<HTMLButtonElement>('forget-hr').hidden = !h || liveH;
-  setBlocked(disconnectHr, roleState.hr === 'connected' ? undefined : 'Aucun capteur connecté.');
-  setBlocked(
-    $<HTMLButtonElement>('go-ride'),
-    roleState.trainer === 'connected' ? undefined : 'Connecte d’abord ton home trainer, ou choisis « Continuer sans trainer » juste à côté.',
-  );
-  $('sortie-hint').hidden = roleState.trainer === 'connected';
-  rideMenu.setAlert(roleState.trainer !== 'connected');
-  $('card-trainer').dataset.s = roleState.trainer;
-  $('card-hr').dataset.s = roleState.hr;
-  // Nom réel : celui de l'appareil connecté ; sinon le dernier appareil mémorisé, que la reconnexion cherche.
-  const radarDevices = {
+  const states = devices.states;
+  devicesView.render({
     trainer: {
-      state: roleState.trainer,
-      name: (roleState.trainer === 'connected' ? trainerCtl.name : undefined) ?? t?.name,
-      detail: roleState.trainer === 'connected' ? controlModes(trainerCtl.capabilities) : undefined,
+      state: states.trainer,
+      name: trainerCtl.name,
+      known: devices.known('trainer'),
+      waiting: devices.trainerWaiting,
+      capabilities: trainerCtl.capabilities,
     },
-    hr: { state: roleState.hr, name: (roleState.hr === 'connected' ? devices.heartRate?.name : undefined) ?? h?.name },
-  };
-  for (const r of radars) r.update(radarDevices);
+    hr: { state: states.hr, name: devices.heartRate?.name, known: devices.known('hr'), waiting: devices.heartRateWaiting },
+    bluetooth: { available: webBluetoothAvailable(), hint: noBluetoothHint(browserUa()) },
+  });
+  rideMenu.setAlert(states.trainer !== 'connected');
 }
 
 devices.on('changed', renderDevices);
-devices.on('heartRateState', (s, d) => {
-  stateHrEl.dataset.s = s;
-  stateHrEl.textContent = stateLabel(s);
-  stateHrEl.title = d ?? '';
-});
+devices.on('heartRateState', (s, d) => devicesView.showHeartRateState(s, d));
 /** Pendant la reconnexion du lancement : une fois les appareils connus reconnectés, on passe à la sortie sans attendre de clic. */
 devices.on('launchSettled', () => {
   if (router.current() !== 'appareils') return;
   log("appareils connus reconnectés : passage à l'accueil");
   setTimeout(() => router.current() === 'appareils' && router.go('accueil'), 800);
 });
-devices.on('recall', (status) => {
-  const note = $('recall-note');
-  switch (status.kind) {
-    case 'first-use':
-      note.textContent = 'Première utilisation : connecte ton home trainer pour commencer. Il sera reconnu aux prochains lancements.';
-      break;
-    case 'unavailable':
-      note.textContent = 'Ce navigateur ne permet pas de retrouver les appareils sans clic : un clic sur « Reconnecter » par appareil suffit.';
-      break;
-    case 'searching':
-      note.textContent = 'Reconnexion automatique aux appareils connus…';
-      break;
-    case 'failed':
-      note.textContent = 'Reconnexion automatique impossible : un clic sur « Reconnecter » par appareil suffit.';
-      break;
-    case 'permissions-lost':
-      note.textContent = 'Les autorisations Bluetooth de ce site ont été effacées : un clic sur « Reconnecter » par appareil suffit.';
-      break;
-    case 'reconnecting':
-      note.textContent = `Reconnexion automatique : ${status.names.join(', ')}. Allume-les si ce n'est pas déjà fait.`;
-      break;
-  }
-});
-
-$('go-ride').addEventListener('click', () => router.go('accueil'));
-
-$('copy-log').addEventListener('click', () => void navigator.clipboard.writeText(logEl.textContent ?? ''));
+devices.on('recall', (status) => devicesView.showRecall(status));
 
 /** L'export de la sortie : enregistrement, fichier FIT, envoi à Strava. */
 const exporter = new RideExport({ hub, routeName: journey.name, log, platform: browserExportPlatform });
@@ -901,11 +804,7 @@ function offerRecap(done?: { workout: Workout; ftpW: number }) {
 }
 
 
-if (webBluetoothAvailable()) {
-  $('support').textContent = isNativeShell() ? 'Bluetooth disponible.' : 'Web Bluetooth disponible.';
-} else {
-  $('support').textContent = noBluetoothStatus(browserUa());
-}
+devicesView.showSupport(webBluetoothAvailable() ? (isNativeShell() ? 'Bluetooth disponible.' : 'Web Bluetooth disponible.') : noBluetoothStatus(browserUa()));
 
 const params = new URLSearchParams(location.search);
 
