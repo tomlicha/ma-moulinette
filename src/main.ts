@@ -40,7 +40,7 @@ import { TrainerController } from './app/trainer-controller';
 import { setupRiderProfile } from './ui/devices/rider-profile';
 import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
-import { setupWorkoutEditor } from './ui/editor/workout-editor';
+import { lazyWorkoutEditor } from './ui/editor/lazy-editor';
 import { RideHud } from './ui/ride/hud';
 import { RiderInputs } from './ui/ride/rider-inputs';
 import { HomeView } from './ui/home/home-view';
@@ -447,7 +447,8 @@ const library = new WorkoutLibrary(prefs, undefined, syncJournal);
 const blockLibrary = new BlockLibrary(prefs, undefined, syncJournal);
 /** Les séances que l'on peut choisir pour rouler : les nôtres et les modèles (app/workout-catalog.ts). */
 const catalog = new WorkoutCatalog({ library, log });
-const editor = setupWorkoutEditor({
+/** L'éditeur de la page Séances, chargé à la première arrivée sur l'écran (ui/editor/lazy-editor.ts). */
+const editor = lazyWorkoutEditor({
   library,
   blocks: blockLibrary,
   readFtp,
