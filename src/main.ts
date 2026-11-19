@@ -19,7 +19,7 @@ import { setupExport } from './infra/export/wiring';
 import { setupTelemetry } from './infra/telemetry/wiring';
 import { COL_DES_ERABLES } from './domain/course/courses/col-des-erables';
 import { Journey } from './domain/sim/journey';
-import type { ConnectionState, TrainerAdapter } from './infra/sensors/types';
+import type { ConnectionState } from './infra/sensors/types';
 import { ErgFollower } from './domain/workout/erg-follower';
 import { STEP_LABEL, type Workout } from './domain/workout/model';
 import { profileShapes } from './domain/workout/profile';
@@ -35,6 +35,7 @@ import { normalizeFtp, normalizeMass } from './domain/sim/rider-limits';
 import { GradeController } from './app/grade-controller';
 import { SensorReadings } from './app/sensor-readings';
 import { SettingsStore } from './app/settings-store';
+import { TrainerController } from './app/trainer-controller';
 import { setupRiderProfile } from './ui/devices/rider-profile';
 import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
@@ -86,7 +87,7 @@ const needTrainer = (text: string): BlockReason => ({
   action: { label: 'Connecter le trainer', run: () => router.go('appareils') },
 });
 const noControl = (what: string): BlockReason => ({
-  text: `${trainer?.name ?? 'Cet appareil'} mesure ta puissance mais ne pilote pas la résistance (pas de ${what}). Il faut un home trainer connecté pour ça.`,
+  text: `${trainerCtl.name ?? 'Cet appareil'} mesure ta puissance mais ne pilote pas la résistance (pas de ${what}). Il faut un home trainer connecté pour ça.`,
   action: { label: 'Changer d’appareil', run: () => router.go('appareils') },
 });
 
@@ -107,7 +108,6 @@ const ergInput = $<HTMLInputElement>('erg');
 const gradeInput = $<HTMLInputElement>('grade');
 
 const hub = new SensorHub();
-let trainer: TrainerAdapter | undefined;
 
 const prefs = browserStore();
 /** FTP, masse et protocole de pilotage gardés sur l'appareil. */
@@ -135,6 +135,8 @@ const rideBtn = $<HTMLButtonElement>('ride-toggle');
 const massInput = $<HTMLInputElement>('mass');
 /** Pente envoyée au trainer (lissage, braquet virtuel, fréquence d'envoi) et état « ERG engagé » : la consigne de puissance prime sur la pente. */
 const grade = new GradeController();
+/** Le trainer branché : connexion, état, commandes ERG et pente. */
+const trainerCtl = new TrainerController({ hub, grade, log });
 /** Le trajet de la page : la simulation, la vue 3D et le HUD le partagent ; il repart du village à chaque sortie. */
 const journey = new Journey(COL_DES_ERABLES);
 let ride: Ride | undefined;
@@ -147,7 +149,6 @@ let lastWoState: WorkoutState | undefined;
 let view: RideView | undefined;
 /** Construction du monde 3D, en tâche de fond dès l'ouverture : elle ne presse que si l'on ouvre la sortie avant la fin. */
 let viewBuild = new Background();
-let currentState: ConnectionState = 'disconnected';
 
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join(' ');
 
@@ -162,22 +163,25 @@ function log(msg: string) {
 // bien après l'évaluation du module.
 const telemetry = setupTelemetry({
   log,
-  context: () => ({
-    trainer: trainer?.name,
-    trainerState: currentState,
-    capabilities: trainer?.capabilities,
-    trainerIdentity: trainer instanceof WebBluetoothTrainer ? trainer.identity : undefined,
-    heartRateState: roleState.hr,
-    rideRunning: !!ride,
-  }),
+  context: () => {
+    const dev = trainerCtl.device;
+    return {
+      trainer: dev?.name,
+      trainerState: trainerCtl.state,
+      capabilities: dev?.capabilities,
+      trainerIdentity: dev instanceof WebBluetoothTrainer ? dev.identity : undefined,
+      heartRateState: roleState.hr,
+      rideRunning: !!ride,
+    };
+  },
 });
 
 /** Menu de la sortie, rubrique Zwift Cog : qui applique le braquet, le trainer ou la pente corrigée. */
 function renderCogMode() {
   $('cog-mode').textContent =
-    currentState !== 'connected'
+    !trainerCtl.connected
       ? ''
-      : trainer?.capabilities.virtualGears
+      : trainerCtl.capabilities?.virtualGears
         ? 'Braquet géré par le trainer (protocole Zwift).'
         : protocolSelect.value === 'zwift'
           ? 'Ce trainer ne répond pas au protocole Zwift : braquet simulé par la pente envoyée.'
@@ -185,7 +189,6 @@ function renderCogMode() {
 }
 
 function setState(s: ConnectionState, detail?: string) {
-  currentState = s;
   renderCogMode();
   exporter.onTrainerState(s);
   stateEl.dataset.s = s;
@@ -198,7 +201,7 @@ function setState(s: ConnectionState, detail?: string) {
     ergBtn,
     !connected
       ? needTrainer('Connecte d’abord ton home trainer pour lui imposer une puissance.')
-      : !trainer?.capabilities.targetPower
+      : !trainerCtl.capabilities?.targetPower
         ? noControl('mode ERG')
         : undefined,
   );
@@ -206,7 +209,7 @@ function setState(s: ConnectionState, detail?: string) {
     simBtn,
     !connected
       ? needTrainer('Connecte d’abord ton home trainer pour lui imposer une pente.')
-      : !trainer?.capabilities.simulation
+      : !trainerCtl.capabilities?.simulation
         ? noControl('mode SIM')
         : ride
           ? 'Pendant la sortie virtuelle, la pente vient du parcours. Arrête la sortie pour régler la pente à la main.'
@@ -222,12 +225,13 @@ function setState(s: ConnectionState, detail?: string) {
     // Trainer perdu (écran en veille, montre qui prend le relais…) : la sortie est mise en pause, pas détruite, et
     // l'adaptateur retente la connexion tout seul (essais rapprochés, puis attente de son signal).
     pauseRide();
-    setErgActive(false);
+    trainerCtl.setErgActive(false);
   }
-  if (connected && trainer) {
-    const c = trainer.capabilities;
+  const dev = trainerCtl.device;
+  if (connected && dev) {
+    const c = dev.capabilities;
     const range = c.powerRange ? `, plage ${c.powerRange.min}–${c.powerRange.max} W` : '';
-    const id = trainer instanceof WebBluetoothTrainer ? trainer.identity : undefined;
+    const id = dev instanceof WebBluetoothTrainer ? dev.identity : undefined;
     if (id) telemetry.trainer({ profile: id.profile.id, brand: id.profile.brand, label: id.profile.label, ...id.info, protocol: id.protocol, services: id.services });
     const model = id ? `${id.profile.label}${id.info.firmware ? ` (firmware ${id.info.firmware})` : ''} · pilotage ${id.protocol ? PROTOCOL_LABEL[id.protocol] : 'aucun'} · ` : '';
     $('caps').textContent = `${model}ERG : ${c.targetPower ? 'oui' : 'non'} · SIM : ${c.simulation ? 'oui' : 'non'}${range}${id?.advice ? `. ${id.advice}` : ''}`;
@@ -236,22 +240,21 @@ function setState(s: ConnectionState, detail?: string) {
   renderDevices();
 }
 
-function attach(t: TrainerAdapter) {
-  // L'adaptateur remplacé peut encore attendre son appareil : il ne doit pas s'y reconnecter dans notre dos.
-  if (trainer && trainer !== t) void trainer.disconnect();
-  trainer = t;
-  hub.attachTrainer(t);
-  t.on('state', (s, d) => {
-    if (trainer !== t) return; // ancien adaptateur remplacé par un nouveau choix d'appareil
-    setState(s, d);
-    log(`trainer : ${s}${d ? ` (${d})` : ''}`);
-    if (s === 'connected' && t instanceof WebBluetoothTrainer && t.deviceId) {
-      registry.remember('trainer', { id: t.deviceId, name: t.name });
-      renderDevices();
-    }
-    maybeLeaveDevices();
-  });
-}
+// Le trainer change d'état (connexion, perte, reconnexion automatique) : l'écran et la sortie suivent.
+trainerCtl.on('state', (s, d) => {
+  setState(s, d);
+  log(`trainer : ${s}${d ? ` (${d})` : ''}`);
+  const dev = trainerCtl.device;
+  if (s === 'connected' && dev instanceof WebBluetoothTrainer && dev.deviceId) {
+    registry.remember('trainer', { id: dev.deviceId, name: dev.name });
+    renderDevices();
+  }
+  maybeLeaveDevices();
+});
+trainerCtl.on('erg', (engaged) => {
+  ergBtn.textContent = engaged ? "Désengager l'ERG" : "Engager l'ERG";
+  ergBtn.classList.toggle('secondary', engaged);
+});
 
 hub.on('log', log);
 hub.on('raw', (src, data) => {
@@ -273,7 +276,7 @@ function maybeAutoStart(m: { powerW?: number; cadenceRpm?: number }) {
   if (workout && !workoutStartBlock()) {
     log('premier coup de pédale : démarrage de la séance');
     startWorkout();
-  } else if (!ride && currentState === 'connected') {
+  } else if (!ride && trainerCtl.connected) {
     log('premier coup de pédale : démarrage de la sortie');
     startRide();
   }
@@ -335,21 +338,10 @@ function tickRide() {
     cadenceRpm: readings.liveCadenceRpm(),
     rider: ride.rider,
     gearing: gears.state(),
-    trainerAppliesGears: !!trainer?.capabilities.virtualGears,
-    canSimulate: currentState === 'connected' && !!trainer?.capabilities.simulation,
+    trainerAppliesGears: !!trainerCtl.capabilities?.virtualGears,
+    canSimulate: trainerCtl.canSimulate,
   });
-  if (command) {
-    hub.setSimulation(command).catch((e) => {
-      log(`pente non envoyée : ${e instanceof Error ? e.message : e}`);
-      setTimeout(() => grade.retry(), 2000); // nouvel essai, sans marteler le trainer
-    });
-  }
-}
-
-function setErgActive(on: boolean) {
-  grade.setErgActive(on);
-  ergBtn.textContent = on ? "Désengager l'ERG" : "Engager l'ERG";
-  ergBtn.classList.toggle('secondary', on);
+  if (command) trainerCtl.sendCourseGrade(command);
 }
 
 // Écran allumé tant qu'on est sur l'application, quel que soit l'écran : pendant une séance ERG, on ne touche pas l'écran.
@@ -374,7 +366,7 @@ function startRide() {
   rideBtn.textContent = 'Arrêter la sortie';
   massInput.readOnly = true;
   massInput.title = 'La masse se règle avant de démarrer la sortie.';
-  setState(currentState, trainer?.name);
+  setState(trainerCtl.state, trainerCtl.name);
   log(`sortie virtuelle démarrée (${massKg} kg)`);
 }
 
@@ -403,7 +395,7 @@ function stopRide(resetTrainer = true) {
   if (!ride) return;
   clearInterval(rideTimer);
   ridePaused = false;
-  setErgActive(false);
+  trainerCtl.setErgActive(false);
   view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
   world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
   ride = undefined;
@@ -411,8 +403,8 @@ function stopRide(resetTrainer = true) {
   massInput.readOnly = false;
   massInput.title = '';
   log('sortie virtuelle arrêtée');
-  if (resetTrainer && currentState === 'connected') void hub.setSimulation({ gradePct: 0 }).catch(() => {});
-  setState(currentState, trainer?.name);
+  if (resetTrainer) trainerCtl.resetToFlat();
+  setState(trainerCtl.state, trainerCtl.name);
 }
 
 rideBtn.addEventListener('click', () => {
@@ -423,26 +415,6 @@ rideBtn.addEventListener('click', () => {
   exporter.onRideStopped();
   offerRecap();
 });
-
-async function start(t: TrainerAdapter, nameHint?: string) {
-  attach(t);
-  try {
-    await t.connect(nameHint);
-  } catch (e) {
-    log(`échec de connexion : ${e instanceof Error ? e.message : e}`);
-  }
-}
-
-async function send(label: string, fn: () => Promise<void>): Promise<boolean> {
-  try {
-    await fn();
-    log(`${label} envoyé`);
-    return true;
-  } catch (e) {
-    log(`${label} refusé : ${e instanceof Error ? e.message : e}`);
-    return false;
-  }
-}
 
 function newHeartRateMonitor(): HeartRateMonitor {
   const m = new HeartRateMonitor();
@@ -471,9 +443,9 @@ const connectHrWith = (hint?: string) =>
 connectHr.addEventListener('click', () => connectHrWith(registry.get('hr')?.name));
 $('connect-hr-other').addEventListener('click', () => connectHrWith());
 disconnectHr.addEventListener('click', () => void hrMonitor?.disconnect());
-connectBle.addEventListener('click', () => void start(newBleTrainer(), registry.get('trainer')?.name));
-$('connect-ble-other').addEventListener('click', () => void start(newBleTrainer()));
-connectSim.addEventListener('click', () => void start(new SimulatedTrainer()));
+connectBle.addEventListener('click', () => void trainerCtl.connect(newBleTrainer(), registry.get('trainer')?.name));
+$('connect-ble-other').addEventListener('click', () => void trainerCtl.connect(newBleTrainer()));
+connectSim.addEventListener('click', () => void trainerCtl.connect(new SimulatedTrainer()));
 for (const role of ['trainer', 'hr'] as const) {
   $(`forget-${role}`).addEventListener('click', () => {
     const known = registry.get(role);
@@ -483,10 +455,10 @@ for (const role of ['trainer', 'hr'] as const) {
     renderDevices();
   });
 }
-disconnectBtn.addEventListener('click', () => void trainer?.disconnect());
+disconnectBtn.addEventListener('click', () => trainerCtl.disconnect());
 ergBtn.addEventListener('click', async () => {
-  if (grade.ergActive) {
-    setErgActive(false);
+  if (trainerCtl.ergActive) {
+    trainerCtl.setErgActive(false);
     if (runner) {
       woErgOptOut = true;
       log('ERG désengagé : la séance continue sans imposer de consigne');
@@ -496,7 +468,7 @@ ergBtn.addEventListener('click', async () => {
     } else {
       // Hors sortie, le trainer ne quitte l'ERG qu'avec une consigne de pente.
       const g = Number(gradeInput.value);
-      await send(`ERG désengagé, SIM ${g} %`, () => hub.setSimulation({ gradePct: g }));
+      await trainerCtl.sendGradeAfterErg('ERG désengagé', g);
     }
     return;
   }
@@ -508,17 +480,17 @@ ergBtn.addEventListener('click', async () => {
     return tickWorkout();
   }
   const w = Number(ergInput.value);
-  if (await send(`ERG ${w} W`, () => hub.setTargetPower(w))) setErgActive(true);
+  await trainerCtl.engageErg(w);
 });
 // Changer la cible pendant que l'ERG est engagé l'applique aussitôt.
 ergInput.addEventListener('change', () => {
-  if (!grade.ergActive || runner) return; // en séance, c'est la séance qui fixe la consigne
+  if (!trainerCtl.ergActive || runner) return; // en séance, c'est la séance qui fixe la consigne
   const w = Number(ergInput.value);
-  void send(`ERG ${w} W`, () => hub.setTargetPower(w));
+  void trainerCtl.retargetErg(w);
 });
 simBtn.addEventListener('click', async () => {
   const g = Number(gradeInput.value);
-  if (await send(`SIM ${g} %`, () => hub.setSimulation({ gradePct: g }))) setErgActive(false); // le SIM remplace l'ERG
+  await trainerCtl.setManualGrade(g); // le SIM remplace l'ERG
 });
 gradeInput.addEventListener('input', () => {
   $('grade-out').textContent = `${gradeInput.value} %`;
@@ -618,10 +590,10 @@ let refreshEditorRide: (() => void) | undefined;
 
 /** Ce qui empêche de démarrer une séance, hors le choix de la séance : séance déjà en cours, trainer absent ou sans ERG. */
 function workoutStartBlock(): string | BlockReason | undefined {
-  const canErg = currentState === 'connected' && !!trainer?.capabilities.targetPower;
+  const canErg = trainerCtl.canErg;
   return runner
     ? 'La séance est déjà en cours.'
-    : currentState !== 'connected'
+    : !trainerCtl.connected
       ? needTrainer('La séance pilote la résistance de ton home trainer : connecte-le d’abord.')
       : !canErg
         ? noControl('mode ERG')
@@ -729,11 +701,7 @@ function renderWorkout(s: WorkoutState | undefined) {
 
 /** Relâche l'ERG pris par la séance : hors sortie virtuelle, le trainer ne le quitte qu'avec une consigne de pente. */
 function releaseErg(reason: string) {
-  if (!grade.ergActive) return;
-  setErgActive(false);
-  if (ride || currentState !== 'connected') return log(reason);
-  const g = Number(gradeInput.value);
-  void send(`${reason}, SIM ${g} %`, () => hub.setSimulation({ gradePct: g }));
+  trainerCtl.releaseErg(reason, { rideActive: !!ride, gradePct: Number(gradeInput.value) });
 }
 
 function tickWorkout() {
@@ -742,7 +710,7 @@ function tickWorkout() {
   const dt = (now - woLastTick) / 1000;
   woLastTick = now;
   // Sans trainer connecté, le temps de séance s'arrête : on ne compte pas un palier que personne ne pédale.
-  const running = !woPaused && currentState === 'connected';
+  const running = !woPaused && trainerCtl.connected;
   const s = running ? runner.advance(dt) : runner.state();
   renderWorkout(s);
   if (s.done) {
@@ -759,15 +727,15 @@ function tickWorkout() {
     follower.reset();
     return releaseErg(`palier ${STEP_LABEL[s.step.kind].toLowerCase()} : ERG relâché`);
   }
-  if (!grade.ergActive) follower.reset(); // ERG relâché ailleurs (fin de sortie, reconnexion) : on le reprend aussitôt
+  if (!trainerCtl.ergActive) follower.reset(); // ERG relâché ailleurs (fin de sortie, reconnexion) : on le reprend aussitôt
   const w = follower.next(s, now);
   if (w === undefined) return;
   woSending = true;
-  hub
+  trainerCtl
     .setTargetPower(w)
     .then(() => {
-      if (!grade.ergActive) {
-        setErgActive(true);
+      if (!trainerCtl.ergActive) {
+        trainerCtl.setErgActive(true);
         log(`séance : ERG engagé à ${w} W`);
       }
     })
@@ -783,7 +751,7 @@ function startWorkout() {
   if (!workout) return;
   autoStart = false;
   // La séance se roule sur le parcours : sans sortie en cours, le cycliste resterait immobile dans la vue.
-  if (!ride && currentState === 'connected') startRide();
+  if (!ride && trainerCtl.connected) startRide();
   runner = new WorkoutRunner(workout, readFtp());
   woPaused = false;
   woErgOptOut = false;
@@ -804,7 +772,7 @@ function finishWorkout(reason: string) {
   runner = undefined;
   woPaused = false;
   woErgOptOut = false;
-  if (grade.ergActive) releaseErg(reason);
+  if (trainerCtl.ergActive) releaseErg(reason);
   else log(reason);
   renderWorkout(undefined);
   refreshWorkoutButtons();
@@ -910,7 +878,7 @@ const recap = setupRecap($<HTMLDialogElement>('recap'), {
   // Un envoi programmé est déjà parti avec la sortie figée ; sinon, l'export suivant couvrira toute la sortie.
   onContinue: () => {
     exporter.releaseFrozen();
-    if (!ride && currentState === 'connected') startRide();
+    if (!ride && trainerCtl.connected) startRide();
   },
   onFinish: () => {
     stopRide();
@@ -982,12 +950,13 @@ function renderDevices() {
   const t = registry.get('trainer');
   const h = registry.get('hr');
   // Un appareil attendu (éteint) n'occupe pas le rôle : on peut toujours en choisir un autre.
-  const waitingT = trainer instanceof WebBluetoothTrainer && trainer.waitingForDevice;
+  const dev = trainerCtl.device;
+  const waitingT = dev instanceof WebBluetoothTrainer && dev.waitingForDevice;
   const busyT = roleState.trainer === 'connected' || (roleState.trainer === 'connecting' && !waitingT);
   const busyH = roleState.hr === 'connected' || (roleState.hr === 'connecting' && !hrMonitor?.waitingForDevice);
   // Le nom de l'appareil branché prime (le trainer simulé n'est pas mémorisé) ; sinon le dernier appareil connu.
   $('trainer-known').textContent =
-    roleState.trainer === 'connected' && trainer?.name ? trainer.name : t ? `Connu : ${t.name}` : 'Aucun trainer connu.';
+    roleState.trainer === 'connected' && trainerCtl.name ? trainerCtl.name : t ? `Connu : ${t.name}` : 'Aucun trainer connu.';
   $('hr-known').textContent =
     roleState.hr === 'connected' && hrMonitor?.name ? hrMonitor.name : h ? `Connu : ${h.name}` : 'Aucun capteur connu. Facultatif.';
   // Le nom de l'appareil est déjà affiché au-dessus des boutons : le libellé reste court pour que la rangée tienne sur une ligne.
@@ -1029,8 +998,8 @@ function renderDevices() {
   const radarDevices = {
     trainer: {
       state: roleState.trainer,
-      name: (roleState.trainer === 'connected' ? trainer?.name : undefined) ?? t?.name,
-      detail: roleState.trainer === 'connected' ? controlModes(trainer?.capabilities) : undefined,
+      name: (roleState.trainer === 'connected' ? trainerCtl.name : undefined) ?? t?.name,
+      detail: roleState.trainer === 'connected' ? controlModes(trainerCtl.capabilities) : undefined,
     },
     hr: { state: roleState.hr, name: (roleState.hr === 'connected' ? hrMonitor?.name : undefined) ?? h?.name },
   };
@@ -1085,7 +1054,7 @@ async function reconnectKnownDevices() {
   const td = found.get('trainer');
   if (td) {
     const t = newBleTrainer();
-    attach(t);
+    trainerCtl.attach(t);
     void t.connectDevice(td, true);
   }
   const hd = found.get('hr');
@@ -1158,7 +1127,7 @@ function renderHud() {
     ride: ride && lastRide ? { snapshot: lastRide, climbM: climb.total } : undefined,
     workout: runner && lastWoState ? { workout: runner.workout, state: lastWoState, ftpW: runner.ftpW, intensity: runner.intensity } : undefined,
     message: runner ? lastWoState?.message : undefined,
-    control: grade.ergActive ? 'erg' : ride && trainer?.capabilities.simulation ? 'sim' : undefined,
+    control: trainerCtl.ergActive ? 'erg' : ride && trainerCtl.capabilities?.simulation ? 'sim' : undefined,
     trainerConnected: roleState.trainer === 'connected',
     heartRateConnected: roleState.hr === 'connected',
     ...(ride && lastRide ? { junction: journey.pendingJunction(lastRide.distanceM) } : {}),
@@ -1349,7 +1318,8 @@ const sync = createSyncClient({
 document.addEventListener('visibilitychange', () => {
   void sync.now();
   // Retour au premier plan avec un trainer perdu : la reconnexion est retentée sans attendre son prochain signal.
-  if (document.visibilityState === 'visible' && trainer instanceof WebBluetoothTrainer) trainer.retryNow();
+  const dev = trainerCtl.device;
+  if (document.visibilityState === 'visible' && dev instanceof WebBluetoothTrainer) dev.retryNow();
 });
 addEventListener('online', () => void sync.now());
 setInterval(() => {
@@ -1397,5 +1367,5 @@ setInterval(() => {
 }, 1000);
 
 // En dernier : tout l'état de la page est initialisé avant la première connexion.
-setState(currentState); // chaque bouton reçoit dès le départ sa raison d'être indisponible
+setState(trainerCtl.state); // chaque bouton reçoit dès le départ sa raison d'être indisponible
 void reconnectKnownDevices();
