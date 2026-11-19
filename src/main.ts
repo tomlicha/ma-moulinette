@@ -10,7 +10,6 @@ import { browserUa, noBluetoothHint, noBluetoothStatus } from './infra/sensors/b
 // Vue 3D chargée à la demande (`buildView`) : three.js n'est pas dans le JS du lancement.
 import { chooseQuality } from './render/core/quality';
 import { setupGears } from './ui/ride/gears';
-import { DEFAULT_RIDER } from './domain/sim/physics';
 import { RideExport } from './app/ride-export';
 import { browserExportPlatform, ExportButtons } from './ui/ride/export-buttons';
 import { setupTelemetry } from './infra/telemetry/wiring';
@@ -26,13 +25,13 @@ import { PROTOCOL_LABEL } from './infra/sensors/protocols/trainer-profiles';
 import { formatDuration } from './ui/shared/duration';
 import { setupBlockedHints, type BlockReason } from './ui/shared/blocked';
 import { setupRouter } from './ui/shared/router';
-import { normalizeFtp, normalizeMass } from './domain/sim/rider-limits';
 import { GradeController } from './app/grade-controller';
 import { RideSession } from './app/ride-session';
 import { RideViewLoader } from './app/ride-view-loader';
 import { WorkoutSession } from './app/workout-session';
 import { DeviceManager } from './app/device-manager';
 import { ManualControl } from './app/manual-control';
+import { RiderSettingsSync } from './app/rider-settings-sync';
 import { WorkoutCatalog } from './app/workout-catalog';
 import { SensorReadings } from './app/sensor-readings';
 import { SettingsStore } from './app/settings-store';
@@ -42,6 +41,7 @@ import { setupWheel } from './ui/shared/wheel-picker';
 import { setupAppShell } from './ui/shared/app-shell';
 import { setupWorkoutEditor } from './ui/editor/workout-editor';
 import { RideHud } from './ui/ride/hud';
+import { RiderInputs } from './ui/ride/rider-inputs';
 import { HomeView } from './ui/home/home-view';
 import { RideControlsView } from './ui/ride/ride-controls-view';
 import { WorkoutControlsView } from './ui/ride/workout-controls-view';
@@ -64,9 +64,8 @@ import { RidePanel } from './ui/ride/ride-panel';
 import { BlockLibrary } from './domain/workout/block-library';
 import { WorkoutLibrary } from './domain/workout/library';
 import { SAMPLE_WORKOUTS } from './domain/workout/samples';
-import { createSyncClient, type SyncSource } from './infra/sync/client';
+import { createSyncClient } from './infra/sync/client';
 import { SyncJournal } from './infra/sync/journal';
-import type { SyncItem, SyncSetting } from './infra/sync/protocol';
 import { blockSource, workoutSource } from './infra/sync/sources';
 import { migrateLegacyKeys } from './infra/storage/legacy-storage';
 
@@ -104,7 +103,8 @@ function newBleTrainer(): WebBluetoothTrainer {
 
 /** Dernières mesures des capteurs, tant qu'elles sont fraîches (au-delà de 3 s de silence, le cycliste est à l'arrêt). */
 const readings = new SensorReadings();
-const massInput = $<HTMLInputElement>('mass');
+/** Les champs de FTP et de masse du coureur (rider-inputs.ts). */
+const riderInputs = new RiderInputs();
 /** Pente envoyée au trainer (lissage, braquet virtuel, fréquence d'envoi) et état « ERG engagé » : la consigne de puissance prime sur la pente. */
 const grade = new GradeController();
 /** Le trainer branché : connexion, état, commandes ERG et pente. */
@@ -245,7 +245,7 @@ void keepAwake.set(true);
 
 function startRide() {
   autoStart = false;
-  rideSession.start(Number(massInput.value) || DEFAULT_RIDER.massKg, home.selectedCourseId());
+  rideSession.start(riderInputs.rideMassKg, home.selectedCourseId());
 }
 
 function stopRide(resetTrainer = true) {
@@ -260,8 +260,7 @@ function showRiderStill(distanceM: number) {
 
 rideSession.on('started', (massKg) => {
   rideControls.showRideActive(true);
-  massInput.readOnly = true;
-  massInput.title = 'La masse se règle avant de démarrer la sortie.';
+  riderInputs.lockMass(true);
   setState(trainerCtl.state, trainerCtl.name);
   log(`sortie virtuelle démarrée (${massKg} kg)`);
 });
@@ -278,8 +277,7 @@ rideSession.on('resumed', () => log('trainer reconnecté : sortie reprise'));
 rideSession.on('stopped', (distanceM) => {
   showRiderStill(distanceM);
   rideControls.showRideActive(false);
-  massInput.readOnly = false;
-  massInput.title = '';
+  riderInputs.lockMass(false);
   log('sortie virtuelle arrêtée');
   setState(trainerCtl.state, trainerCtl.name);
 });
@@ -295,7 +293,6 @@ function toggleRide() {
 
 // --- Séance structurée ---
 
-const woFtp = $<HTMLInputElement>('wo-ftp');
 // L'accueil : parcours retenu, menu du parcours, bouton « Rouler » (home-view.ts). Le HUD n'existe pas encore quand le menu
 // se crée (il annonce le premier choix d'emblée) : on ne le touche qu'ensuite.
 let courseUiReady = false;
@@ -353,12 +350,9 @@ const rideControls = new RideControlsView(
   () => router.go('appareils'),
 );
 
-const savedFtp = settings.ftpW();
-if (savedFtp !== undefined) woFtp.value = String(savedFtp);
-const savedMass = settings.massKg();
-if (savedMass !== undefined) massInput.value = String(savedMass);
-const readFtp = () => normalizeFtp(Number(woFtp.value));
-const readMass = () => normalizeMass(Number(massInput.value));
+riderInputs.load({ ftpW: settings.ftpW(), massKg: settings.massKg() });
+const readFtp = () => riderInputs.ftpW;
+const readMass = () => riderInputs.massKg;
 
 /** Appelé par l'écran Séances quand « Rouler » doit se remettre à jour (affecté une fois l'éditeur créé). */
 // Affecté plus bas, une fois l'éditeur créé : lu avant par des fonctions déjà déclarées.
@@ -445,11 +439,11 @@ function ftpChanged() {
   renderProfile();
   editor.refresh();
 }
-massInput.addEventListener('change', () => {
+riderInputs.onMassChange(() => {
   settings.save('mass', readMass());
   syncJournal.record('setting', 'mass', readMass());
 });
-woFtp.addEventListener('change', () => {
+riderInputs.onFtpChange(() => {
   settings.save('ftp', readFtp());
   syncJournal.record('setting', 'ftp', readFtp());
   ftpChanged();
@@ -533,8 +527,8 @@ if (gears.state().enabled) grade.setVirtualGears(true);
 
 /** Même radar sur l'écran Appareils (grand) et sur l'accueil (réduit) : rôle de l'appareil et nom réel dans chaque bulle. */
 const riderProfile = setupRiderProfile({
-  massSource: massInput,
-  ftpSource: woFtp,
+  massSource: riderInputs.massInput,
+  ftpSource: riderInputs.ftpInput,
   readFtp,
   readMass,
   summary: $('rider-summary'),
@@ -699,36 +693,13 @@ if (import.meta.env.DEV && params.has('recap')) {
 }
 
 // Données du coureur synchronisées avec son compte : FTP, masse, séances, « Mes blocs » (docs/design/compte.md).
-const SETTING_FIELDS: Record<SyncSetting, HTMLInputElement> = { ftp: woFtp, mass: massInput };
-const settingsSource: SyncSource = {
-  kind: 'setting',
-  all: () =>
-    (Object.keys(SETTING_FIELDS) as SyncSetting[]).flatMap((id): SyncItem[] => {
-      const raw = settings.raw(id);
-      // Un réglage sans version (fait avant la synchronisation) cède devant celui du compte.
-      return raw === null ? [] : [{ kind: 'setting', id, body: Number(raw), updatedAt: syncJournal.stamp('setting', id) ?? 0 }];
-    }),
-  apply(items) {
-    for (const i of items) {
-      const input = SETTING_FIELDS[i.id as SyncSetting];
-      if (!input) continue;
-      const v = typeof i.body === 'number' ? i.body : undefined;
-      // Pendant une sortie, la masse de la sortie ne change pas (Ride l'a prise au départ) : seule la valeur gardée suit.
-      input.value = String(v ?? input.defaultValue);
-      settings.save(i.id as SyncSetting, v);
-    }
-    if (items.some((i) => i.id === 'ftp')) ftpChanged();
-    riderProfile.refresh();
-  },
-  clear() {
-    for (const [id, input] of Object.entries(SETTING_FIELDS) as [SyncSetting, HTMLInputElement][]) {
-      input.value = input.defaultValue;
-      settings.save(id, undefined);
-    }
-    ftpChanged();
-    riderProfile.refresh();
-  },
-};
+const riderSettingsSync = new RiderSettingsSync({
+  settings,
+  journal: syncJournal,
+  inputs: riderInputs,
+  ftpChanged,
+  refreshProfile: () => riderProfile.refresh(),
+});
 /** Séances changées depuis un autre appareil : l'éditeur et la liste de la sortie suivent, la séance choisie aussi. */
 function workoutsChanged(ids: Set<string>) {
   editor.libraryChanged();
@@ -739,7 +710,7 @@ function workoutsChanged(ids: Set<string>) {
 }
 const sync = createSyncClient({
   journal: syncJournal,
-  sources: [settingsSource, workoutSource(library, workoutsChanged), blockSource(blockLibrary, () => editor.libraryChanged())],
+  sources: [riderSettingsSync, workoutSource(library, workoutsChanged), blockSource(blockLibrary, () => editor.libraryChanged())],
   log,
 });
 // Retour sur la page, retour du réseau, et toutes les deux minutes tant qu'elle est visible : les autres appareils ont pu changer quelque chose.
