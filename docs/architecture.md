@@ -4,8 +4,8 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ main.ts                  racine de composition                   │
-│   construit les objets et les branche ; la logique en sort peu à peu │
+│ composition/             COMPOSITION (main.ts : 4 lignes)         │
+│   construit les objets et les branche, module par module           │
 ├──────────────────────────────────────────────────────────────────┤
 │ ui/<écran>/   render/        PRÉSENTATION                        │
 │   Views (DOM) et rendu 3D. Aucune règle métier.                  │
@@ -38,7 +38,8 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 
 ```
 src/
-├─ main.ts            racine de composition : crée et relie les morceaux (~750 lignes), avec quelques règles de coordination
+├─ main.ts            quatre lignes : appelle composeApp()
+├─ composition/       la racine de composition, un module par ensemble : platform, rider, trainer, devices, ride, workout, hud, recap, screens, account, launch ; wiring.ts (ce qu'ils se passent), index.ts (l'ordre)
 ├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart, VirtualGearbox, RecapSender
 ├─ domain/
 │  ├─ sim/            physique, Ride, Journey, aspiration, vitesses virtuelles, lissage de la pente
@@ -83,7 +84,7 @@ Les classes de `app/` ont chacune une seule raison de changer :
 | `AutoStart` | le démarrage au premier coup de pédale (sortie libre ou séance choisie), armé à l'arrivée sur l'écran Sortie | l'écran, le démarrage lui-même (il le demande) |
 | `WorkoutSession` | la séance choisie et son déroulement ; la consigne ERG qu'elle impose | la sortie (l'appelant démarre l'une avec l'autre), l'export, le récapitulatif |
 
-Ces classes se parlent par **événements typés** (`shared/util/typed-emitter.ts`) : `RideSession` publie `started`, `tick`, `paused`, `resumed`, `stopped` ; `TrainerController` publie `state` et `erg` ; `WorkoutSession` publie `state`, `changed`, `started`, `stepped`, `completing`, `ended` ; `DeviceManager` publie `changed`, `heartRateState`, `recall`, `launchSettled` ; `RideViewLoader` publie `progress`, `ready`, `lost`, `retrying`, `unavailable` ; `RideExport` publie `changed`, `resumed` ; `EditorSession` publie `opened`, `changed`, `focused`. Les écouteurs sont appelés dans l'ordre d'abonnement, de façon synchrone : l'ordre des effets reste lisible. `main.ts` y branche la vue 3D, la salle, l'export, le récapitulatif et les boutons.
+Ces classes se parlent par **événements typés** (`shared/util/typed-emitter.ts`) : `RideSession` publie `started`, `tick`, `paused`, `resumed`, `stopped` ; `TrainerController` publie `state` et `erg` ; `WorkoutSession` publie `state`, `changed`, `started`, `stepped`, `completing`, `ended` ; `DeviceManager` publie `changed`, `heartRateState`, `recall`, `launchSettled` ; `RideViewLoader` publie `progress`, `ready`, `lost`, `retrying`, `unavailable` ; `RideExport` publie `changed`, `resumed` ; `EditorSession` publie `opened`, `changed`, `focused`. Les écouteurs sont appelés dans l'ordre d'abonnement, de façon synchrone : l'ordre des effets reste lisible. `composition/` y branche la vue 3D, la salle, l'export, le récapitulatif et les boutons.
 
 ## Règles
 
@@ -103,9 +104,16 @@ Quelques liens restent à surveiller, permis par la règle mais discutables : `s
 
 Les scénarios de `tools/e2e/` (voir son README) pilotent l'application dans Chromium, avec le trainer simulé, et comparent deux séries de traces : états des boutons, journal, DOM complet des écrans Séances, Appareils et Accueil. C'est ainsi qu'ont été validés tous les découpages ci-dessus : `npm run e2e -- --out .e2e/avant` sur le code d'avant, `.e2e/apres` sur le code d'après, puis `npm run e2e:compare -- .e2e/avant .e2e/apres` ; « identique » veut dire que le comportement n'a pas changé.
 
-## Reste à faire
+## La composition
 
-`main.ts` n'écoute plus un seul bouton ni ne remplit un seul champ lui-même. Il fait encore ~750 lignes : la création des morceaux, leur câblage par événements, et les règles qui touchent plusieurs morceaux à la fois (`setState` : l'état du trainer se répercute sur les vues, la sortie, l'export ; `startRide`, `toggleRide`, `chooseWorkout`, `startWorkout`, `offerRecap`, `ftpChanged`). C'est le rôle d'une racine de composition ; un « coordinateur » qui reprendrait ce câblage ne ferait que le déplacer. À extraire seulement quand une règle de cette colonne gagne un test propre, comme `AutoStart`.
+`src/composition/` est le seul endroit qui connaît toutes les couches : il crée les objets et les branche. Elle est au-dessus de `ui` et `render`, et personne ne l'importe (règle ESLint) ; `main.ts` ne fait qu'appeler `composeApp()`.
+
+- Chaque module (`platform`, `rider`, `trainer`, `devices`, `ride`, `workout`, `hud`, `recap`, `screens`, `account`, `launch`) est une fonction `composeX(w)` qui crée ses objets, les range dans `w` (le `Wiring`, typé dans `wiring.ts`) quand un autre module en a besoin, et lit ceux des autres.
+- **L'ordre d'`index.ts` compte** : un module ne lit *tout de suite* (à la création d'un objet, hors fonction ou écouteur) que ce que les modules précédents ont rangé. Le reste se lit à l'usage, dans une fonction ou un écouteur : `w.router.go(…)`, `w.world.riders()`. Le routeur (`screens`) vient presque en dernier : il applique l'écran courant dès sa création, donc tout ce que son écouteur touche doit exister.
+- Un objet qu'un seul module utilise reste une variable locale de ce module ; un objet partagé va dans `Wiring`.
+- Les règles qui touchent plusieurs morceaux (`setState` : l'état du trainer se répercute sur les vues, la sortie, l'export ; `startRide`, `toggleRide`, `chooseWorkout`, `startWorkout`, `offerRecap`, `ftpChanged`) sont des fonctions de leur module de composition. Elles passent dans une classe de `app/` quand l'une gagne un test propre, comme `AutoStart`.
+
+## Reste à faire
 
 1. Les `setupX()` de `ui/` qui restent (menu de la sortie, routeur, fiche du coureur, compte, coque de l'application, roulette) sont des fonctions de DOM sans règle métier à isoler : les passer en classes `View` serait cosmétique. Le compte (`ui/account/account-chip.ts`) mélange le réseau et l'affichage : à scinder si on y touche (nom affiché, connexion Strava).
 2. Le scénario `app` du `tools/e2e` ne couvre pas le Bluetooth réel, ni la connexion à un compte, ni un envoi réel à Strava : à compléter avec des essais sur le matériel.

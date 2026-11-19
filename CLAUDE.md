@@ -4,7 +4,7 @@
 
 Le code de `src/` est rangé en couches (`shared < domain < infra < app < ui, render`) : une couche n'importe que des couches inférieures, vérifié par ESLint. Voir [docs/architecture.md](docs/architecture.md). Pour tout nouveau code :
 
-- **Ne rien ajouter à `src/main.ts`** (la racine de composition) : la logique va dans une classe de `src/app/` (orchestration), `src/domain/` (règles pures, sans DOM) ou `src/infra/` (Bluetooth, réseau, stockage).
+- **Ne rien ajouter à `src/main.ts`** (4 lignes : il appelle `composeApp()`). La logique va dans une classe de `src/app/` (orchestration), `src/domain/` (règles pures, sans DOM) ou `src/infra/` (Bluetooth, réseau, stockage). Un nouvel objet à créer et à brancher va dans le module de `src/composition/` de son ensemble, jamais dans `main.ts` ; l'ordre des modules (`composition/index.ts`) compte, voir [docs/architecture.md](docs/architecture.md).
 - Une classe, une responsabilité ; horloge, stockage et réseau injectés par le constructeur ; un test à côté.
 - Une Vue (`src/ui/<écran>/`) affiche et signale des intentions, sans règle métier.
 
