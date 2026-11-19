@@ -10,8 +10,8 @@ const out = resolve(root, process.argv[2] ?? 'docs/design/parcours-carte.svg');
 
 const server = await createServer({ root, appType: 'custom', server: { middlewareMode: true }, logLevel: 'error' });
 try {
-  const { renderNetworkMap } = await server.ssrLoadModule('/src/sim/network-map.ts');
-  const { COL_DES_ERABLES } = await server.ssrLoadModule('/src/sim/courses/col-des-erables.ts');
+  const { renderNetworkMap } = await server.ssrLoadModule('/src/domain/course/network-map.ts');
+  const { COL_DES_ERABLES } = await server.ssrLoadModule('/src/domain/course/courses/col-des-erables.ts');
   const { svg, width, height } = renderNetworkMap(COL_DES_ERABLES);
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, svg, 'utf8');

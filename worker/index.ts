@@ -2,7 +2,7 @@
  * Récepteur de journaux sur Cloudflare Workers : le même gestionnaire que `tools/log-server.ts`, avec D1 pour stockage.
  * Secrets à créer avec `npx wrangler secret put INGEST_TOKEN` et `READ_TOKEN` ; jamais dans wrangler.toml.
  */
-import { createLogReceiver } from '../src/telemetry/receiver.ts';
+import { createLogReceiver } from '../src/infra/telemetry/receiver.ts';
 import { createD1DeviceStore, createD1Store, RETENTION_MS, type D1Database } from './d1-store.ts';
 
 interface Env {

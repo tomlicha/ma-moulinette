@@ -1,22 +1,22 @@
 import * as THREE from 'three/webgpu';
-import type { Journey } from '../sim/journey';
-import { createRenderer, type Backend } from './renderer';
-import { ambianceFor, type Mood } from './ambiance';
-import { loadRiderAssets, type RiderAssets } from './assets';
-import { Rider } from './rider';
-import { OthersLayer, type RiderTag } from './others';
-import { nearby, type NearbyRiders } from './others-model';
-import type { RemoteRiderView } from '../net/world-client';
-import { Background, BackgroundStopped } from './background';
-import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world';
-import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world-layout';
-import { IntervalGates } from './interval-gate';
-import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, SEATED_STATE, standingStep, type StandingState } from './ride-feel';
-import type { IntervalGate } from '../workout/gate';
-import type { Surface } from '../sim/velodrome-track';
-import { pixelRatioFor, type Quality } from './quality';
+import type { Journey } from '../domain/sim/journey';
+import { createRenderer, type Backend } from './core/renderer';
+import { ambianceFor, type Mood } from './core/ambiance';
+import { loadRiderAssets, type RiderAssets } from './core/assets';
+import { Rider } from './riders/rider';
+import { OthersLayer, type RiderTag } from './riders/others';
+import { nearby, type NearbyRiders } from './riders/others-model';
+import type { RemoteRiderView } from '../infra/net/world-client';
+import { Background, BackgroundStopped } from '../shared/util/background';
+import { buildWorldSteps, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW, type World } from './world/world';
+import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from './world/world-layout';
+import { IntervalGates } from './world/interval-gate';
+import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, SEATED_STATE, standingStep, type StandingState } from './core/ride-feel';
+import type { IntervalGate } from '../domain/workout/gate';
+import type { Surface } from '../domain/course/velodrome-track';
+import { pixelRatioFor, type Quality } from './core/quality';
 
-export type { Quality } from './quality';
+export type { Quality } from './core/quality';
 
 /** Perte du GPU : pilote réinitialisé, mémoire reprise par le système, onglet longtemps en arrière-plan… */
 export interface GpuLoss {

@@ -18,9 +18,9 @@ Le plan ci-dessus est schématique : rayons de virage (50 m) et lignes droites (
 
 ## Ce qui change par rapport aux Érables
 
-1. **Une boucle fermée et plate.** Pas de pente à envoyer au trainer : toujours 0 %. L'interface `Course` ([`course.ts`](../../src/sim/course.ts)) et la classe `Route` ([`route.ts`](../../src/sim/route.ts), boucle à segments, dénivelé net nul) suffisent pour la simulation, l'export FIT et le récapitulatif. Aucun nouveau modèle physique.
+1. **Une boucle fermée et plate.** Pas de pente à envoyer au trainer : toujours 0 %. L'interface `Course` ([`course.ts`](../../src/domain/course/course.ts)) et la classe `Route` ([`route.ts`](../../src/domain/course/route.ts), boucle à segments, dénivelé net nul) suffisent pour la simulation, l'export FIT et le récapitulatif. Aucun nouveau modèle physique.
 2. **Pas de carrefour.** Le réseau routier (`RoadNetwork`) impose des routes d'au moins 150 m entre deux nœuds, pas de cul-de-sac, un angle minimal aux carrefours : une piste de 500 m qui se referme sur elle-même n'est pas son cas. Un vélodrome n'a donc **pas besoin d'être une route du réseau** ; en revanche le multijoueur situe les coureurs par route et abscisse (`NetPosition`). À trancher, voir « Décisions ».
-3. **Un monde à part.** Le décor, le sol et les routes sont déduits du réseau des Érables ([`world-layout.ts`](../../src/render/world-layout.ts)). Un vélodrome est une scène propre : piste inclinée, tribunes, pelouse centrale, ciel. Peu de géométrie, donc peu de coût.
+3. **Un monde à part.** Le décor, le sol et les routes sont déduits du réseau des Érables ([`world-layout.ts`](../../src/render/world/world-layout.ts)). Un vélodrome est une scène propre : piste inclinée, tribunes, pelouse centrale, ciel. Peu de géométrie, donc peu de coût.
 4. **La pente n'est pas l'effort.** Ce qui rend la piste intéressante est ailleurs : le rythme (tours chronométrés), la ligne et les virages, la foule, l'attaque finale.
 
 ## Trois propositions
@@ -57,9 +57,9 @@ Piste seule (comme A), mais avec les autres coureurs de la salle sur la même bo
 ## La scène
 
 - **Piste inclinée** : bande de béton clair avec la ligne de côtière (bleue), la ligne des sprinters (rouge) et la ligne de poursuite (noire), les virages relevés (angle à confirmer). Le coureur monte dans le virage à l'image ; la pente envoyée au trainer reste 0 %.
-- **Caméra** : celle de [`ride-feel.ts`](../../src/render/ride-feel.ts), avec un roulis dans les virages (comme le balancement de pédalage) pour suivre l'inclinaison.
+- **Caméra** : celle de [`ride-feel.ts`](../../src/render/core/ride-feel.ts), avec un roulis dans les virages (comme le balancement de pédalage) pour suivre l'inclinaison.
 - **Lieux** : tribunes, pelouse centrale, arche d'arrivée, panneau « Vélodrome André-Pétrieux · 499,75 m ». Les douches du vélodrome, où les vainqueurs de Paris-Roubaix voient leur nom gravé sur une plaque, sont un détail qui parle aux connaisseurs : à vérifier avant de l'inclure.
-- **Ambiance** : un parcours porte une `ambiance` ([`ambiance.ts`](../../src/render/ambiance.ts)). Proposition : lumière d'avril, ciel du nord, plus gris que le Col des Érables.
+- **Ambiance** : un parcours porte une `ambiance` ([`ambiance.ts`](../../src/render/core/ambiance.ts)). Proposition : lumière d'avril, ciel du nord, plus gris que le Col des Érables.
 - **Ce qui bouge** : drapeaux, foule (instances animées en carte graphique, sur le modèle des arbres), les autres coureurs.
 
 ## Interface (sortie, iPhone en plein écran)

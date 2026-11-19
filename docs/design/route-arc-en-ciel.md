@@ -2,7 +2,7 @@
 
 Spécification permanente. Proposée et construite le 18 novembre 2026. Une route de lumière suspendue dans le ciel de nuit, au-dessus du Col des Érables, où l'on monte par un ascenseur posé au bord du lac. Le document décrit le tracé, l'ascenseur, le rendu, ce qui a changé dans le moteur ([parcours.md](parcours.md)) et ce qui reste.
 
-Code : données [`src/sim/courses/arc-en-ciel.ts`](../../src/sim/courses/arc-en-ciel.ts), rendu [`src/render/sky-road.ts`](../../src/render/sky-road.ts), tests [`src/sim/lift.test.ts`](../../src/sim/lift.test.ts).
+Code : données [`src/domain/course/courses/arc-en-ciel.ts`](../../src/domain/course/courses/arc-en-ciel.ts), rendu [`src/render/world/sky-road.ts`](../../src/render/world/sky-road.ts), tests [`src/domain/sim/lift.test.ts`](../../src/domain/sim/lift.test.ts).
 
 ![Plan et profil](route-arc-en-ciel-plan.svg)
 
@@ -115,11 +115,11 @@ Ce que ça donne : le trainer reste à plat dans la cabine ; la montée du réca
 
 Aux nœuds du ciel, ni plaque d'asphalte ni poteau indicateur (`WorldLayout.skyNodes`).
 
-Les panneaux de pente sont calculés par [`road-features.ts`](../../src/sim/road-features.ts) et viendront tout seuls : sur la Route arc-en-ciel, ce sont des panneaux de lumière.
+Les panneaux de pente sont calculés par [`road-features.ts`](../../src/domain/course/road-features.ts) et viendront tout seuls : sur la Route arc-en-ciel, ce sont des panneaux de lumière.
 
 ### La nuit
 
-Une ambiance `night`, à côté de `day` et `sunset` ([`ambiance.ts`](../../src/render/ambiance.ts)) :
+Une ambiance `night`, à côté de `day` et `sunset` ([`ambiance.ts`](../../src/render/core/ambiance.ts)) :
 
 - un ciel bleu nuit très foncé, des étoiles qui scintillent, dessinées par le ciel sans géométrie (`Ambiance.stars`), une bande douce de Voie lactée, et une lune au sud-est qui tient lieu de soleil (lumière froide et faible) ;
 - des nuages gris-bleu éclairés par la lune. Ils flottent à la hauteur habituelle, sous la route du ciel : on roule au-dessus d'eux ;
@@ -142,14 +142,14 @@ Ce qui bouge : la lumière qui court, les étoiles qui scintillent, les anneaux 
 3. **L'ascenseur** (`surface: 'lift'`, `lift: { lengthM, durationS }`) : un tracé réduit à un point, une hauteur qui monte en douceur, un cap qui tourne. Le contrôle ne lui applique ni longueur minimale, ni pente, ni écart, ni angle. Le virage n'est pas arrondi à son pied ni à son sommet.
 4. **Deux altitudes.** `Journey.altitudeAt` donne l'altitude pédalée : celle du monde, moins ce que les ascenseurs ont donné (`Leg.liftedM`). La simulation, le HUD, le récapitulatif et le FIT s'en servent. `pointAt` garde l'altitude du monde pour l'image. `courseStats` et l'invite de carrefour ne comptent pas la montée en ascenseur.
 5. **`Ride`** avance au pas de la cabine dans un ascenseur (`Course.liftAt`), pente nulle ; `RideSnapshot.liftProgress` dit où en est la montée. `RideView` avance aussi au pas de la cabine et donne sa hauteur au monde (`World.setRide`).
-6. **La carte** ([`network-map.ts`](../../src/sim/network-map.ts)) :
+6. **La carte** ([`network-map.ts`](../../src/domain/course/network-map.ts)) :
    - un filet de lumière au milieu des routes du ciel ;
    - l'ascenseur en pastille fléchée, avec ses deux altitudes ;
    - le triangle du sommet reste au Sommet du col (le point le plus haut au sol) ;
    - la planche s'allonge pour loger le quatrième profil.
 
    La carte de sortie ne trace pas l'ascenseur.
-7. **L'accueil** a une quatrième scène dessinée, « Route arc-en-ciel » ([`home-scenes.ts`](../../src/ui/home-scenes.ts)).
+7. **L'accueil** a une quatrième scène dessinée, « Route arc-en-ciel » ([`home-scenes.ts`](../../src/ui/home/home-scenes.ts)).
 
 ## Interface (sortie, iPhone en plein écran)
 

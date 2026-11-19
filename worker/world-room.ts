@@ -4,7 +4,7 @@
  * chaque WebSocket garde son coureur en pièce jointe, pour reconstruire la salle au réveil.
  * Le Worker (`worker/app.ts`) a déjà vérifié la session et la version : il passe le coureur dans les en-têtes.
  */
-import { COL_DES_ERABLES } from '../src/sim/courses/col-des-erables.ts';
+import { COL_DES_ERABLES } from '../src/domain/course/courses/col-des-erables.ts';
 import { Room, TICK_MS, type Connection, type Member } from '../src/server/room.ts';
 
 /** Ce que ce module utilise des WebSocket de Cloudflare : de quoi le tester sans leurs types. */

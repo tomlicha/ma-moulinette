@@ -8,11 +8,11 @@
  *   npm run bots -- --url wss://…/api/world/ws        autre serveur
  */
 import { parseArgs } from 'node:util';
-import { WorldClient, WORLD_PATH } from '../../src/net/world-client.ts';
-import { COL_DES_ERABLES } from '../../src/sim/courses/col-des-erables.ts';
-import { Journey } from '../../src/sim/journey.ts';
-import { DEFAULT_RIDER } from '../../src/sim/physics.ts';
-import { Ride } from '../../src/sim/ride.ts';
+import { WorldClient, WORLD_PATH } from '../../src/infra/net/world-client.ts';
+import { COL_DES_ERABLES } from '../../src/domain/course/courses/col-des-erables.ts';
+import { Journey } from '../../src/domain/sim/journey.ts';
+import { DEFAULT_RIDER } from '../../src/domain/sim/physics.ts';
+import { Ride } from '../../src/domain/sim/ride.ts';
 
 const { values } = parseArgs({
   options: {

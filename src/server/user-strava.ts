@@ -1,9 +1,9 @@
 /**
- * Envoi des sorties sur le compte Strava du coureur connecté : la passerelle (src/export/strava/relay.ts) travaille sur
+ * Envoi des sorties sur le compte Strava du coureur connecté : la passerelle (src/infra/export/strava/relay.ts) travaille sur
  * les jetons obtenus à la connexion. Sans compte, rien à envoyer : la page ne propose que l'export FIT. Un accès Strava
  * à renouveler passe par la connexion des comptes, dans une fenêtre qui se referme seule.
  */
-import { createStravaRelay, PREFIX, type RelayOptions } from '../export/strava/relay';
+import { createStravaRelay, PREFIX, type RelayOptions } from '../infra/export/strava/relay';
 import type { createAccounts } from './accounts';
 
 const json = (body: unknown, status = 200) =>

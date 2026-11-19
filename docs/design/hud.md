@@ -2,7 +2,7 @@
 
 Référence permanente du HUD affiché par-dessus la vue 3D (écran **Sortie**, voir [sortie.md](sortie.md) pour l'écran lui-même). Toute évolution du HUD part de ce fichier et le met à jour.
 
-- Code : [`src/ui/hud.ts`](../../src/ui/hud.ts) (affichage), [`src/ui/hud.css`](../../src/ui/hud.css) (style), [`src/ui/hud-model.ts`](../../src/ui/hud-model.ts) (calculs purs, testés).
+- Code : [`src/ui/ride/hud.ts`](../../src/ui/ride/hud.ts) (affichage), [`src/ui/ride/hud.css`](../../src/ui/ride/hud.css) (style), [`src/ui/ride/hud-model.ts`](../../src/ui/ride/hud-model.ts) (calculs purs, testés).
 - Branchement : `renderHud()` dans [`src/main.ts`](../../src/main.ts), rafraîchi à 4 Hz tant que l'écran Sortie est affiché.
 - Planches de travail (claude.ai) : [trois propositions](https://claude.ai/artifact/749sgeL3BqXciEr1dpn4q2), [lisibilité](https://claude.ai/artifact/BwzRiDrk5v9ZZM63hjqmaK), [paliers à venir](https://claude.ai/artifact/7NTViEqa8FnhgmXXgDvoif). Direction graphique d'origine : [Direction graphique](https://claude.ai/artifact/XsuzQxwA5WEKoyn8Jxu4nP), planches Main, Erg et Style.
 
@@ -41,7 +41,7 @@ Le HUD est mis en page dans une scène fixe de **1280 × 720 px**, puis ajustée
 - **Sortie libre**, y compris avant le départ : les trois panneaux, version sortie. Avant le départ, le parcours et la pente sont en « – », le profil montre la première route en entier ; le HUD ne change donc pas de forme au démarrage.
 - **Séance** : les trois panneaux, version séance ; la vitesse sort du bloc central pour laisser la place à la cible.
 
-**Porte du palier suivant** (dans la scène 3D, pas dans le HUD) : en séance, 30 s avant chaque changement de palier, une arche enjambe la route devant le cycliste, de la couleur de la zone du palier qui commence (`--hz1` … `--hz6`, blanc devant un palier libre). La séance avançant au temps, la porte est posée là où le cycliste sera à sa vitesse du moment (au moins 2 m/s, au plus 400 m devant) et se recale en douceur ; il la franchit au début du palier, puis elle s'efface. Rien sur le dernier palier ni en pause. Logique dans `workout/gate.ts`, rendu dans `render/interval-gate.ts`.
+**Porte du palier suivant** (dans la scène 3D, pas dans le HUD) : en séance, 30 s avant chaque changement de palier, une arche enjambe la route devant le cycliste, de la couleur de la zone du palier qui commence (`--hz1` … `--hz6`, blanc devant un palier libre). La séance avançant au temps, la porte est posée là où le cycliste sera à sa vitesse du moment (au moins 2 m/s, au plus 400 m devant) et se recale en douceur ; il la franchit au début du palier, puis elle s'efface. Rien sur le dernier palier ni en pause. Logique dans `domain/workout/gate.ts`, rendu dans `render/world/interval-gate.ts`.
 
 **Liste « À suivre »** (séance, panneau gauche, sous un filet) :
 
@@ -121,14 +121,14 @@ Typographie (polices servies par l'application via `@fontsource`, jamais depuis 
 | Temps, distance, pente | `RideSnapshot` de la sortie virtuelle |
 | Dénivelé positif | `ClimbCounter`, cumul des altitudes de la sortie |
 | Prochain sommet, profil à venir | altitude du trajet (`nextSummitM`, `profileWindow`, `Journey.roadAt` pour les bornes de la route) : le trajet par défaut au-delà du prochain carrefour |
-| Bandeau de l'ascenseur | `Journey.liftAt` (avancement, altitudes, nom de l'arrivée), textes par `liftBanner` de `ui/hud-model.ts` (testé) |
+| Bandeau de l'ascenseur | `Journey.liftAt` (avancement, altitudes, nom de l'arrivée), textes par `liftBanner` de `ui/ride/hud-model.ts` (testé) |
 | Carrefour annoncé | `Journey.pendingJunction` ; panneau « Carrefour » sous le panneau central ([parcours.md](parcours.md)) |
-| Zone | `zoneOf` de `workout/profile.ts`, FTP de la séance ou saisie |
+| Zone | `zoneOf` de `domain/workout/profile.ts`, FTP de la séance ou saisie |
 | Cible, écart, palier, profil de séance | `WorkoutState` du déroulement de séance, `profileShapes` |
-| Liste « À suivre », n° de répétition | `upcoming`, `findSeries` et `repetitionAt` de `ui/hud-model.ts` (testés), intensité de la séance |
+| Liste « À suivre », n° de répétition | `upcoming`, `findSeries` et `repetitionAt` de `ui/ride/hud-model.ts` (testés), intensité de la séance |
 
 ## À faire
 
-- Mesurer le coût du flou au-dessus du canevas WebGPU sur un Android d'entrée de gamme ; sinon basculer en `flat` (fait par défaut sur écran tactile depuis le 16 novembre 2026 : qualité réduite, `src/render/quality.ts`).
+- Mesurer le coût du flou au-dessus du canevas WebGPU sur un Android d'entrée de gamme ; sinon basculer en `flat` (fait par défaut sur écran tactile depuis le 16 novembre 2026 : qualité réduite, `src/render/core/quality.ts`).
 - Vérifier le contraste sur des captures du vrai rendu, pas seulement sur les maquettes.
 - Téléphone : vérifier la version compacte sur de vrais appareils (elle n'a été mesurée qu'en émulation), et la place du message de séance sur les écrans de moins de 360 px de haut.

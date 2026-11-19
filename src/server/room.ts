@@ -9,8 +9,8 @@
  *   { type: 'join', slot, name }                            un coureur arrive
  *   { type: 'leave', slot }                                  un coureur part
  */
-import type { RoadNetwork } from '../sim/network';
-import { INTEREST_K, INTEREST_RANGE_M, MSG_SNAPSHOT, SNAPSHOT_MAX, StateCodec, STATE_BYTES } from '../net/protocol';
+import type { RoadNetwork } from '../domain/course/network';
+import { INTEREST_K, INTEREST_RANGE_M, MSG_SNAPSHOT, SNAPSHOT_MAX, StateCodec, STATE_BYTES } from '../infra/net/protocol';
 
 /** Cadence des instantanés, en ms. */
 export const TICK_MS = 250;

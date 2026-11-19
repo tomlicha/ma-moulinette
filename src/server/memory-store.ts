@@ -1,4 +1,4 @@
-import type { Tokens } from '../export/strava/api';
+import type { Tokens } from '../infra/export/strava/api';
 import type { AccountStore, Provider, User } from './accounts';
 import type { SyncRow, SyncStore } from './sync';
 

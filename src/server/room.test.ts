@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { COL_DES_ERABLES } from '../sim/courses/col-des-erables';
-import { Journey } from '../sim/journey';
-import { MSG_SNAPSHOT, StateCodec, type RiderState } from '../net/protocol';
-import { WorldClient, type WorldStatus } from '../net/world-client';
+import { COL_DES_ERABLES } from '../domain/course/courses/col-des-erables';
+import { Journey } from '../domain/sim/journey';
+import { MSG_SNAPSHOT, StateCodec, type RiderState } from '../infra/net/protocol';
+import { WorldClient, type WorldStatus } from '../infra/net/world-client';
 import { CLOSE_REPLACED, MAX_SPEED_MS, Room, STATE_TTL_MS, TICK_MS, type Connection } from './room';
 
 const codec = new StateCodec(COL_DES_ERABLES);

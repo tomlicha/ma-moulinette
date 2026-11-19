@@ -18,21 +18,21 @@
  * - `pale` : cuissard gris clair sur le premier coureur, pour juger le modelé du bassin, invisible en noir.
  */
 import * as THREE from 'three/webgpu';
-import { ambianceFor, type Mood } from '../../src/render/ambiance';
-import { loadRiderAssets } from '../../src/render/assets';
-import type { Kit } from '../../src/render/region-material';
-import { createRenderer } from '../../src/render/renderer';
-import { Rider } from '../../src/render/rider';
-import { buildWorld, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW } from '../../src/render/world';
-import { fovFor, LOOK_AHEAD_M, lookHeight } from '../../src/render/ride-feel';
-import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from '../../src/render/world-layout';
-import { COL_DES_ERABLES } from '../../src/sim/courses/col-des-erables';
-import { IntervalGates } from '../../src/render/interval-gate';
-import type { Zone } from '../../src/workout/profile';
-import { Journey } from '../../src/sim/journey';
-import { DAY } from '../../src/render/ambiance';
-import { buildVelodrome } from '../../src/render/velodrome';
-import { VELODROME } from '../../src/sim/velodrome-track';
+import { ambianceFor, type Mood } from '../../src/render/core/ambiance';
+import { loadRiderAssets } from '../../src/render/core/assets';
+import type { Kit } from '../../src/render/core/region-material';
+import { createRenderer } from '../../src/render/core/renderer';
+import { Rider } from '../../src/render/riders/rider';
+import { buildWorld, CAMERA_FAR_M, WORLD_HIGH, WORLD_LOW } from '../../src/render/world/world';
+import { fovFor, LOOK_AHEAD_M, lookHeight } from '../../src/render/core/ride-feel';
+import { DEFAULT_RELIEF, forwardOf, sideOf, WorldLayout } from '../../src/render/world/world-layout';
+import { COL_DES_ERABLES } from '../../src/domain/course/courses/col-des-erables';
+import { IntervalGates } from '../../src/render/world/interval-gate';
+import type { Zone } from '../../src/domain/workout/profile';
+import { Journey } from '../../src/domain/sim/journey';
+import { DAY } from '../../src/render/core/ambiance';
+import { buildVelodrome } from '../../src/render/world/velodrome';
+import { VELODROME } from '../../src/domain/course/velodrome-track';
 
 const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (params.has(k) ? Number(params.get(k)) : d);

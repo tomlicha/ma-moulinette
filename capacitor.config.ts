@@ -6,7 +6,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * session (SameSite=Lax), contrôle d'origine du WebSocket, relais Strava. Avec des fichiers embarqués, l'origine serait
  * `capacitor://localhost` et chacun de ces appels échouerait.
  *
- * Le Bluetooth reste natif : le pont (`src/sensors/native-bluetooth.ts`) est injecté dans la page par le plugin.
+ * Le Bluetooth reste natif : le pont (`src/infra/sensors/ble/native-bluetooth.ts`) est injecté dans la page par le plugin.
  * Autre serveur (préproduction, Mac en développement) : `CAP_SERVER_URL=https://… npm run ios:sync`, qui accorde aussi
  * `WKAppBoundDomains` d'Info.plist et la page hors ligne à ce serveur (`tools/ios/sync.mjs`).
  *

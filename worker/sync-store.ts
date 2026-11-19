@@ -1,5 +1,5 @@
 import type { SyncRow, SyncStore } from '../src/server/sync.ts';
-import type { SyncKind } from '../src/sync/protocol.ts';
+import type { SyncKind } from '../src/infra/sync/protocol.ts';
 import type { D1Database } from './d1-store.ts';
 
 interface Row {

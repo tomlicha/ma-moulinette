@@ -10,8 +10,8 @@
  * le pire cas pour un index spatial : tout le monde a des centaines de voisins).
  */
 import { parseArgs } from 'node:util';
-import { StateCodec } from '../../src/net/protocol.ts';
-import { COL_DES_ERABLES } from '../../src/sim/courses/col-des-erables.ts';
+import { StateCodec } from '../../src/infra/net/protocol.ts';
+import { COL_DES_ERABLES } from '../../src/domain/course/courses/col-des-erables.ts';
 import { Room, TICK_MS, type Connection } from '../../src/server/room.ts';
 
 const { values } = parseArgs({ options: { sizes: { type: 'string', default: '50,200,500,1000,2000' } } });

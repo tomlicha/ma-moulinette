@@ -1,0 +1,1600 @@
+import {
+  BLOCK_LABEL,
+  blocksToWorkout,
+  defaultBlock,
+  toZwo,
+  validateBlocks,
+  workoutStats,
+  workoutToBlocks,
+  type EditorBlock,
+  type WorkoutStats,
+} from '../../domain/workout/blocks';
+import { blockIndexAt, blockRanges, blockShort, describeBlock, nudgeDuration, nudgePower, splitIntervals } from '../../domain/workout/block-ops';
+import { UndoHistory } from '../../domain/workout/history';
+import type { BlockLibrary, SavedBlock } from '../../domain/workout/block-library';
+import type { SavedWorkout, WorkoutLibrary } from '../../domain/workout/library';
+import { targetWatts, type Workout } from '../../domain/workout/model';
+import { profilePeakW, profileShapes, zoneOf, type Zone } from '../../domain/workout/profile';
+import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks, type PresetCategory } from '../../domain/workout/presets';
+import { parseWorkout } from '../../domain/workout/runner';
+import { SAMPLE_WORKOUTS } from '../../domain/workout/samples';
+import { effortSeconds, intensityWord, timeInZones, ZONES, zoneName, zoneReading, type ZoneTimes } from '../../domain/workout/zones';
+import { setBlocked, type BlockReason } from '../shared/blocked';
+import './seances.css';
+import { formatDuration, parseDuration } from '../shared/duration';
+
+const SVG = 'http://www.w3.org/2000/svg';
+const W = 1000;
+const H = 120;
+const POWER_STEP = 0.05;
+const DURATION_STEP_S = 15;
+
+interface Draft {
+  /** Identifiant dans la bibliothèque, une fois la séance enregistrée. */
+  id?: string;
+  /** Modèle livré avec l'application : affiché en lecture seule, on le duplique pour le modifier. */
+  sampleId?: string;
+  readOnly?: boolean;
+  name: string;
+  description: string;
+  blocks: EditorBlock[];
+}
+
+export interface EditorOptions {
+  library: WorkoutLibrary;
+  /** « Mes blocs » : blocs mis de côté par l'utilisateur, proposés dans l'étagère. */
+  blocks: BlockLibrary;
+  readFtp: () => number;
+  log: (msg: string) => void;
+  /** La bibliothèque a changé : la liste des séances de l'écran de sortie doit être reconstruite. */
+  onLibraryChange: () => void;
+  /** Séance choisie dans l'application (`lib:<id>` ou `sample:<id>`, vide si aucune) : celle que l'écran ouvre en premier. */
+  currentChoice: () => string;
+  /** L'utilisateur a ouvert cette séance dans l'éditeur : elle devient la séance choisie de l'application. */
+  onFocus: (key: string) => void;
+  /** Rouler cette séance : va sur la sortie et la démarre. */
+  onRide: (key: string) => void;
+  /** Pourquoi on ne peut pas rouler maintenant (pas de trainer, séance déjà en cours), sinon `undefined`. */
+  rideBlock: () => string | BlockReason | undefined;
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props: Partial<HTMLElementTagNameMap[K]> = {},
+  ...children: (Node | string)[]
+): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  e.append(...children);
+  return e;
+}
+
+function svg(tag: string, attrs: Record<string, string | number>): SVGElement {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  return e;
+}
+
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/xml' }));
+  el('a', { href: url, download: name }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+const slug = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'seance';
+
+const pct = (fraction: number) => Math.round(fraction * 100);
+const fmtLong = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}` : formatDuration(s));
+const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('input, textarea, select, dialog[open]');
+/** Bibliothèque et navigation ont leurs propres touches : les flèches et Suppr n'y touchent pas aux blocs. */
+const isElsewhere = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('.sea-lib, .home-top, .ed-shelf');
+
+/**
+ * Écran « Séances » : bibliothèque (mes séances, modèles, import) et éditeur à profil direct, sur le même écran
+ * (docs/design/seances.md). Une séance est toujours ouverte : en choisir une dans la bibliothèque l'ouvre
+ * aussitôt. Le profil, la bande de structure et la ligne de réglages montrent le même bloc sélectionné ;
+ * chaque modification passe par `commit`, qui l'inscrit dans l'historique avant de redessiner.
+ * Un modèle s'ouvre en lecture seule : on peut le parcourir et le rouler, ou le dupliquer pour le modifier.
+ */
+export function setupWorkoutEditor(o: EditorOptions) {
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const editor = $('editor');
+  const nameIn = $<HTMLInputElement>('ed-name');
+  const descIn = $<HTMLTextAreaElement>('ed-desc');
+  const plot = $('ed-plot');
+  const tip = $('ed-tip');
+  const inspector = $<HTMLFormElement>('ed-inspector');
+  const cadenceDialog = $<HTMLDialogElement>('ed-cadence');
+  const history = new UndoHistory<EditorBlock[]>();
+  const sea = document.querySelector<HTMLElement>('.sea')!;
+  const overlay = $('ed-over');
+  /** Téléphone en paysage : écran sans défilement, commandes posées sur le bloc (docs/design/seances.md, piste J). */
+  const PHONE = matchMedia('(pointer: coarse) and (orientation: landscape) and (max-height: 460px)');
+  /** Panneau ouvert sur téléphone : `lib` (bibliothèque), `more` (menu ⋯), `add`, `block` (réglages du bloc) ; vide : aucun. */
+  const setPanel = (p = '') => {
+    sea.dataset.panel = p;
+  };
+  setPanel();
+
+  let draft: Draft | undefined;
+  let selected = 0;
+  /** Version enregistrée (ou ouverte), pour l'indicateur « modifiée » et les écarts du résumé. */
+  let baseline = '';
+  let baseStats: WorkoutStats | undefined;
+  let baseZones: ZoneTimes | undefined;
+  /** Saisie clavier en cours dans un champ : une seule entrée d'historique pour toute la frappe. */
+  let typing = false;
+
+  const ftp = () => o.readFtp();
+  const workout = (): Workout => blocksToWorkout(draft?.name ?? '', draft?.description, draft?.blocks ?? []);
+  const isDirty = () => !!draft && !draft.readOnly && JSON.stringify(draft) !== baseline;
+
+  // --- Bibliothèque ---
+
+  /** Clé d'une séance ouverte : `lib:<id>` (enregistrée) ou `sample:<id>` (modèle) ; rien pour un brouillon. */
+  const keyOf = (d: Draft | undefined) => (d?.id ? `lib:${d.id}` : d?.sampleId ? `sample:${d.sampleId}` : undefined);
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+  /** Message dans la bibliothèque (le journal est masqué sur cet écran) : import refusé, enregistrement impossible. */
+  function say(msg?: string) {
+    const p = $('lib-msg');
+    p.textContent = msg ?? '';
+    p.hidden = !msg;
+    if (msg) o.log(msg);
+  }
+
+  function summary(blocks: EditorBlock[]) {
+    const s = workoutStats(blocksToWorkout('x', undefined, blocks), ftp());
+    return `${fmtLong(s.durationS)} · ${s.avgW} W · charge ${s.load}`;
+  }
+
+  function button(label: string, onClick: () => void, cls = '') {
+    const b = el('button', { textContent: label, type: 'button', className: cls });
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function sampleWorkout(id: string): Workout | undefined {
+    const s = SAMPLE_WORKOUTS.find((x) => x.id === id);
+    if (!s) return undefined;
+    try {
+      return parseWorkout(s.fileName, s.text);
+    } catch (e) {
+      o.log(`modèle illisible (${s.fileName}) : ${e instanceof Error ? e.message : e}`);
+      return undefined;
+    }
+  }
+
+  /** Aperçu du profil d'une séance (mêmes couleurs de zones que l'éditeur), pour sa ligne dans la bibliothèque. */
+  function miniProfile(w: Workout, cls = 'lib-mini') {
+    const root = svg('svg', { class: cls, viewBox: '0 0 100 40', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+    for (const s of profileShapes(w, ftp(), 100, 40)) root.append(svg('path', { d: s.d, class: s.zone }));
+    return root;
+  }
+
+  function libRow(key: string, w: Workout, meta: string, pressed: boolean, onPick?: () => void, onRemove?: () => void) {
+    const main = el(
+      'button',
+      { type: 'button', className: 'lib-item' },
+      miniProfile(w),
+      el('span', { className: 'lib-text' }, el('strong', { textContent: w.name || 'Séance sans nom' }), el('small', { textContent: meta })),
+    );
+    main.dataset.key = key;
+    main.setAttribute('aria-pressed', String(pressed));
+    if (onPick) main.addEventListener('click', onPick);
+    const row = el('li', { className: 'lib-row' }, main);
+    if (onRemove) {
+      const del = el('button', { type: 'button', className: 'lib-del', textContent: '✕', title: 'Supprimer' });
+      del.setAttribute('aria-label', `Supprimer la séance « ${w.name} »`);
+      del.addEventListener('click', onRemove);
+      row.append(del);
+    }
+    return row;
+  }
+
+  function renderLibrary() {
+    // Les lignes sont reconstruites à chaque ouverture : le focus clavier revient sur la même ligne.
+    const active = document.activeElement;
+    const focusKey = active instanceof HTMLElement && active.closest('.sea-lib') ? active.dataset.key : undefined;
+    const q = fold($<HTMLInputElement>('lib-search').value.trim());
+    const match = (name: string) => !q || fold(name).includes(q);
+    const current = keyOf(draft);
+
+    const saved = o.library.list();
+    const mine: HTMLElement[] = [];
+    // Une séance nouvelle, importée ou copiée n'est pas encore dans la bibliothèque : on la montre en tête, ouverte.
+    if (draft && !draft.id && !draft.readOnly) mine.push(libRow('draft', workout(), 'Non enregistrée', true));
+    for (const w of saved.filter((x) => match(x.name))) {
+      const key = `lib:${w.id}`;
+      mine.push(libRow(key, blocksToWorkout(w.name, w.description, w.blocks), summary(w.blocks), current === key, () => pick(key), () => remove(w)));
+    }
+    if (!mine.length) mine.push(el('li', { className: 'note', textContent: saved.length ? 'Aucune séance ne correspond.' : 'Aucune séance enregistrée : crée-en une ou duplique un modèle.' }));
+    $('lib-list').replaceChildren(...mine);
+    $('lib-count').textContent = String(saved.length);
+
+    const samples = SAMPLE_WORKOUTS.flatMap((s) => {
+      const w = sampleWorkout(s.id);
+      return w && match(w.name) ? [libRow(`sample:${s.id}`, w, summary(workoutToBlocks(w, ftp()).blocks), current === `sample:${s.id}`, () => pick(`sample:${s.id}`))] : [];
+    });
+    $('lib-samples').replaceChildren(...(samples.length ? samples : [el('li', { className: 'note', textContent: 'Aucun modèle ne correspond.' })]));
+    $('lib-sample-count').textContent = String(SAMPLE_WORKOUTS.length);
+
+    if (focusKey) document.querySelector<HTMLElement>(`.sea-lib [data-key="${CSS.escape(focusKey)}"]`)?.focus();
+  }
+
+  /** Clic dans la bibliothèque : la séance s'ouvre, et devient la séance choisie de l'application. */
+  function pick(key: string) {
+    setPanel();
+    if (key === keyOf(draft)) return;
+    if (openKey(key)) o.onFocus(key);
+  }
+
+  /** Ouvre la séance désignée par sa clé ; `false` si elle n'existe plus ou si l'utilisateur garde son brouillon. */
+  function openKey(key: string): boolean {
+    const [kind, id = ''] = key.split(':');
+    if (kind === 'lib') {
+      const w = o.library.get(id);
+      return !!w && open({ id: w.id, name: w.name, description: w.description ?? '', blocks: structuredClone(w.blocks) });
+    }
+    const w = sampleWorkout(id);
+    if (!w) return false;
+    return open({ sampleId: id, readOnly: true, name: w.name, description: w.description ?? '', blocks: workoutToBlocks(w, ftp()).blocks });
+  }
+
+  /** Rien d'utilisable ouvert : la première séance de l'utilisateur, sinon le premier modèle. */
+  function openFallback(syncChoice: boolean) {
+    const first = o.library.list()[0];
+    const key = first ? `lib:${first.id}` : SAMPLE_WORKOUTS[0] ? `sample:${SAMPLE_WORKOUTS[0].id}` : undefined;
+    if (key && openKey(key) && syncChoice) o.onFocus(key);
+  }
+
+  function remove(w: SavedWorkout) {
+    if (!confirm(`Supprimer la séance « ${w.name} » ?`)) return;
+    o.library.remove(w.id);
+    o.log(`séance supprimée : ${w.name}`);
+    const wasOpen = draft?.id === w.id;
+    if (wasOpen) {
+      draft = undefined;
+      baseline = '';
+    }
+    renderLibrary();
+    o.onLibraryChange();
+    if (wasOpen) openFallback(true);
+  }
+
+  function openFromWorkoutFile(fileName: string, text: string) {
+    let w;
+    try {
+      w = parseWorkout(fileName, text);
+    } catch (e) {
+      say(`import impossible (${fileName}) : ${e instanceof Error ? e.message : e}`);
+      return;
+    }
+    const { blocks, warnings } = workoutToBlocks(w, ftp());
+    if (open({ name: w.name, description: w.description ?? '', blocks }, true)) {
+      for (const m of [...w.warnings, ...warnings]) o.log(`import : ${m}`);
+    }
+  }
+
+  /** Le modèle ouvert devient une séance à soi, à enregistrer : on ne modifie jamais un modèle. */
+  function duplicateModel() {
+    if (!draft?.readOnly) return;
+    open({ name: `${draft.name} (copie)`, description: draft.description, blocks: structuredClone(draft.blocks) }, true);
+  }
+
+  /**
+   * À l'arrivée sur l'écran : on ouvre la séance choisie dans l'application, sauf si un brouillon modifié est en cours.
+   * Une séance sans modification suit le choix fait ailleurs (accueil, sortie).
+   */
+  function sync() {
+    setPanel();
+    const want = o.currentChoice();
+    if (draft && (isDirty() || !want || want === keyOf(draft))) {
+      renderLibrary();
+      render();
+      return;
+    }
+    if (!(want && openKey(want)) && !draft) openFallback(false);
+  }
+
+  // --- Ouverture, enregistrement ---
+
+  /** Ouvre un brouillon ; `false` si l'utilisateur préfère garder ses modifications en cours. */
+  function open(d: Draft, unsaved = false): boolean {
+    if (isDirty() && !confirm('Abandonner les modifications en cours ?')) return false;
+    draft = d;
+    selected = Math.min(1, d.blocks.length - 1);
+    history.clear();
+    typing = false;
+    // Une séance importée ou nouvelle n'a pas de version enregistrée : elle part « modifiée ».
+    baseline = unsaved ? '' : JSON.stringify(d);
+    const w = workout();
+    baseStats = unsaved ? undefined : workoutStats(w, ftp());
+    baseZones = unsaved ? undefined : timeInZones(w, ftp());
+    nameIn.value = d.name;
+    descIn.value = d.description;
+    setPanel();
+    say();
+    renderLibrary();
+    render();
+    renderShelf();
+    return true;
+  }
+
+  function save(): string | undefined {
+    if (!draft || draft.readOnly || validateBlocks(draft.blocks).length) return undefined;
+    try {
+      const saved = o.library.save({
+        id: draft.id,
+        name: draft.name.trim() || 'Séance sans nom',
+        description: draft.description.trim() || undefined,
+        blocks: draft.blocks,
+      });
+      draft.id = saved.id;
+      draft.name = saved.name;
+      nameIn.value = saved.name;
+      baseline = JSON.stringify(draft);
+      baseStats = workoutStats(workout(), ftp());
+      baseZones = timeInZones(workout(), ftp());
+      say();
+      o.log(`séance enregistrée : ${saved.name}`);
+      renderLibrary();
+      o.onLibraryChange();
+      render();
+      o.onFocus(`lib:${saved.id}`);
+      return saved.id;
+    } catch (e) {
+      say(`enregistrement impossible (stockage du navigateur plein ou bloqué) : ${e instanceof Error ? e.message : e}`);
+      return undefined;
+    }
+  }
+
+  // --- Modifications ---
+
+  /** Applique une modification des blocs en l'inscrivant d'abord dans l'historique. */
+  function commit(change: (blocks: EditorBlock[]) => EditorBlock[], nextSelected = selected) {
+    if (!draft || draft.readOnly) return;
+    history.record(draft.blocks);
+    draft.blocks = change(draft.blocks);
+    selected = Math.max(0, Math.min(nextSelected, draft.blocks.length - 1));
+    render();
+  }
+
+  const updateSelected = (f: (b: EditorBlock) => EditorBlock) =>
+    commit((bs) => bs.map((b, i) => (i === selected ? f(b) : b)));
+
+  /** Insère des blocs (copies) à l'indice `at` et sélectionne le premier : une seule entrée d'historique. */
+  function addBlocks(blocks: EditorBlock[], at: number) {
+    commit((bs) => [...bs.slice(0, at), ...structuredClone(blocks), ...bs.slice(at)], at);
+  }
+
+  function select(i: number) {
+    if (!draft?.blocks.length) return;
+    selected = Math.max(0, Math.min(i, draft.blocks.length - 1));
+    render();
+  }
+
+  function undo() {
+    if (!draft || draft.readOnly) return;
+    const prev = history.undo(draft.blocks);
+    if (!prev) return;
+    draft.blocks = prev;
+    selected = Math.min(selected, prev.length - 1);
+    render();
+  }
+
+  function redo() {
+    if (!draft || draft.readOnly) return;
+    const next = history.redo(draft.blocks);
+    if (!next) return;
+    draft.blocks = next;
+    selected = Math.min(selected, next.length - 1);
+    render();
+  }
+
+  // --- Rendu ---
+
+  function render(keepInspector = false) {
+    if (!draft) return;
+    const w = workout();
+    const f = ftp();
+    const stats = workoutStats(w, f);
+    const zones = timeInZones(w, f);
+    const ro = !!draft.readOnly;
+    $('ed-sub').textContent = `${fmtLong(stats.durationS)} · charge ${stats.load}${ro ? ' · lecture seule' : isDirty() ? ' · modifiée' : ''}`;
+    $('ed-dirty').hidden = !isDirty();
+    $('ed-readonly').hidden = !ro;
+    $('ed-kicker').textContent = ro ? 'Modèle' : draft.id ? 'Mes séances' : 'Nouvelle séance';
+    $('ed-bbar').classList.toggle('locked', ro);
+    nameIn.readOnly = ro;
+    descIn.readOnly = ro;
+    $('ed-save').hidden = ro;
+    $('ed-export').hidden = ro;
+    $('ed-copy').hidden = !ro;
+    inspector.inert = ro;
+    inspector.classList.toggle('ro', ro);
+    const roReason = 'Un modèle est en lecture seule : duplique-le pour le modifier.';
+    for (const id of ['ed-undo', 'ed-undo2']) setBlocked($<HTMLButtonElement>(id), history.canUndo ? undefined : ro ? roReason : 'Rien à annuler pour l’instant.');
+    for (const id of ['ed-redo', 'ed-redo2']) setBlocked($<HTMLButtonElement>(id), history.canRedo ? undefined : ro ? roReason : 'Rien à rétablir : tu n’as rien annulé.');
+    setBlocked($<HTMLButtonElement>('ed-del'), ro ? roReason : draft.blocks.length ? undefined : 'Aucun bloc à supprimer.');
+    renderSummary(stats, zones);
+    renderChart(w, f);
+    renderBlockBar();
+    if (keepInspector) refreshInspectorText();
+    else renderInspector();
+    renderZones(zones);
+    const errors = validateBlocks(draft.blocks);
+    $('ed-errors').replaceChildren(...errors.map((e) => el('li', { textContent: e })));
+    for (const id of ['ed-save', 'ed-export']) setBlocked($<HTMLButtonElement>(id), errors.length ? `À corriger d’abord : ${errors[0]}` : undefined);
+    renderRide(errors);
+    renderOverlay();
+  }
+
+  /** « Rouler » attend une séance valide, puis un trainer connecté ; l'application rappelle quand la connexion change. */
+  function renderRide(errors = draft ? validateBlocks(draft.blocks) : []) {
+    setBlocked($<HTMLButtonElement>('ed-ride'), errors.length ? `À corriger d’abord : ${errors[0]}` : o.rideBlock());
+  }
+
+  function delta(now: number, before: number | undefined, digits = 0, unit = '') {
+    if (before === undefined) return '';
+    const d = +(now - before).toFixed(digits);
+    if (d === 0) return '';
+    return `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(digits).replace('.', ',')}${unit}`;
+  }
+
+  function renderSummary(s: WorkoutStats, z: ZoneTimes) {
+    const f = ftp();
+    const cell = (k: string, v: string, h: string, d = '', small = '') =>
+      el(
+        'div',
+        { title: h },
+        el('div', { className: 'k', textContent: k }),
+        el('div', { className: 'v' }, v, small ? el('small', { textContent: ` ${small}` }) : '', d ? el('span', { className: 'delta', textContent: d }) : ''),
+      );
+    $('ed-summary').replaceChildren(
+      cell('Durée', fmtLong(s.durationS), `dont ${fmtLong(effortSeconds(z))} d'effort`, delta(s.durationS / 60, baseStats && baseStats.durationS / 60, 0, ' min')),
+      cell('Moyenne', `${s.avgW} W`, `${Math.round((s.avgW / f) * 100)} % de ta FTP (${f} W)`, delta(s.avgW, baseStats?.avgW)),
+      cell('Intensité', s.intensity.toFixed(2).replace('.', ','), '1,00 = tenir sa FTP', delta(s.intensity, baseStats?.intensity, 2), intensityWord(s.intensity)),
+      cell('Charge', String(s.load), '1 h à la FTP = 100', delta(s.load, baseStats?.load)),
+    );
+  }
+
+  function renderChart(w: Workout, f: number) {
+    const peak = profilePeakW(w, f);
+    const y = (watts: number) => H - (watts / peak) * H;
+    const top = (watts: number) => `${(1 - watts / peak) * 100}%`;
+    const total = w.steps.reduce((t, s) => t + s.durationS, 0) || 1;
+
+    // Axe vertical : % de FTP et watts, FTP en gras.
+    const yaxis = $('ed-yaxis');
+    yaxis.replaceChildren(
+      ...[
+        [peak, `${Math.round((peak / f) * 100)} % · ${Math.round(peak)} W`, ''],
+        [f, `FTP · ${f} W`, 'ftp'],
+        [0.75 * f, `75 % · ${Math.round(0.75 * f)} W`, ''],
+        [0.5 * f, `50 % · ${Math.round(0.5 * f)} W`, ''],
+        [0, '0', ''],
+      ].map(([watts, label, cls]) => {
+        const s = el('span', { textContent: label as string, className: cls as string });
+        s.style.top = top(watts as number);
+        return s;
+      }),
+    );
+
+    // Bandes de zones, puis paliers, ligne de FTP et cadre du bloc sélectionné.
+    const root = $('ed-svg');
+    const bands = svg('g', {});
+    const labels: HTMLElement[] = [];
+    const selZone = selectedZone();
+    ZONES.forEach((z, i) => {
+      const lo = z.from * f;
+      const hi = Math.min(peak, (ZONES[i + 1]?.from ?? Infinity) * f);
+      if (lo >= peak) return;
+      bands.append(svg('rect', { x: 0, y: y(hi), width: W, height: y(lo) - y(hi), fill: `var(--${z.id})`, 'fill-opacity': 0.1 }));
+      const label = el('span', { textContent: z.name, className: z.id === selZone ? 'on' : '' });
+      label.style.top = top((lo + hi) / 2);
+      labels.push(label);
+    });
+    $('ed-zone-labels').replaceChildren(...labels);
+
+    const bars = svg('g', { class: 'ed-svg-bars' });
+    for (const s of profileShapes(w, f, W, H)) bars.append(svg('path', { d: s.d, class: s.zone }));
+    const ftpLine = svg('line', { x1: 0, x2: W, y1: y(f), y2: y(f), stroke: 'currentColor', 'stroke-opacity': 0.55, 'stroke-dasharray': '8 6', 'vector-effect': 'non-scaling-stroke' });
+    root.replaceChildren(bands, bars, ftpLine);
+    const r = blockRanges(draft!.blocks)[selected];
+    if (r) {
+      root.append(
+        svg('rect', {
+          x: (r.start / total) * W,
+          y: 0.5,
+          width: ((r.end - r.start) / total) * W,
+          height: H - 1,
+          fill: 'none',
+          stroke: 'var(--accent)',
+          'stroke-width': 2,
+          'vector-effect': 'non-scaling-stroke',
+        }),
+      );
+    }
+    root.setAttribute('aria-label', `Profil de la séance, ${draft!.blocks.length} blocs, ${fmtLong(total)}`);
+
+    $('ed-xaxis').replaceChildren(...[0, 0.25, 0.5, 0.75, 1].map((k) => el('span', { textContent: fmtLong(Math.round(k * total)) })));
+  }
+
+  function selectedZone(): Zone | undefined {
+    const b = draft?.blocks[selected];
+    if (!b || b.type === 'free') return undefined;
+    const main = b.type === 'steady' ? b.power : b.type === 'intervals' ? b.onPower : (b.from + b.to) / 2;
+    return zoneOf(main);
+  }
+
+  /**
+   * Barre du bloc sélectionné, sous le profil : le profil montre déjà tous les blocs, en couleur, et se touche pour en
+   * choisir un ; cette barre en donne le nom et le détail, la place (3/9), permet de passer au précédent ou au suivant,
+   * et porte la poignée qui le déplace (voir plus bas).
+   */
+  function renderBlockBar() {
+    const blocks = draft!.blocks;
+    const b = blocks[selected];
+    $('ed-bbar').hidden = !b;
+    if (!b) return;
+    $('bb-name').textContent = BLOCK_LABEL[b.type];
+    $('bb-short').textContent = blockShort(b);
+    $('bb-pos').textContent = `${selected + 1}/${blocks.length}`;
+    const main = b.type === 'free' ? undefined : b.type === 'steady' ? b.power : b.type === 'intervals' ? b.onPower : (b.from + b.to) / 2;
+    $('bb-main').style.borderLeftColor = main === undefined ? 'var(--muted)' : `var(--${zoneOf(main)})`;
+    $<HTMLButtonElement>('bb-prev').disabled = selected === 0;
+    $<HTMLButtonElement>('bb-next').disabled = selected >= blocks.length - 1;
+    $('bb-handle').hidden = blocks.length < 2;
+  }
+
+  // --- Étagère de blocs préfaits (docs/design/seances.md, piste S) ---
+
+  type ShelfTab = 'all' | PresetCategory | 'zones' | 'blank' | 'mine';
+  interface ShelfItem {
+    id: string;
+    name: string;
+    blocks: EditorBlock[];
+    mine?: SavedBlock;
+  }
+  let shelfTab: ShelfTab = 'all';
+  let shelfItemsNow: ShelfItem[] = [];
+  const shelfTabsEl = $('sh-tabs');
+  const shelfCardsEl = $('sh-cards');
+
+  function shelfItems(): ShelfItem[] {
+    if (shelfTab === 'blank') return blankPresets();
+    if (shelfTab === 'zones') return ZONE_PRESETS;
+    if (shelfTab === 'mine') return o.blocks.list().map((b) => ({ id: b.id, name: b.name, blocks: b.blocks, mine: b }));
+    return BLOCK_PRESETS.filter((p) => shelfTab === 'all' || p.category === shelfTab);
+  }
+
+  /** Reconstruit les onglets et les cartes : à l'ouverture d'une séance, au changement d'onglet, de « Mes blocs » ou de FTP. */
+  function renderShelf() {
+    const ro = !!draft?.readOnly;
+    const tab = (id: ShelfTab, label: string, zone?: string) => {
+      const b = el('button', { type: 'button', className: 'sh-tab' });
+      if (zone) {
+        const dot = el('i');
+        dot.style.background = `var(--${zone})`;
+        b.append(dot);
+      }
+      b.append(label);
+      b.setAttribute('aria-pressed', String(shelfTab === id));
+      b.addEventListener('click', () => {
+        shelfTab = id;
+        shelfCardsEl.scrollLeft = 0;
+        renderShelf();
+      });
+      return b;
+    };
+    shelfTabsEl.replaceChildren(tab('all', 'Tous'), tab('zones', 'Par zone'), ...PRESET_CATEGORIES.map((c) => tab(c.id, c.name, c.zone)), tab('blank', 'Vierges'), tab('mine', '★ Mes blocs'));
+
+    shelfItemsNow = shelfItems();
+    const cards = shelfItemsNow.map((item, i) => {
+      const sum = summarizeBlocks(item.blocks);
+      const meta = `${fmtLong(sum.durationS)}${sum.power !== undefined ? ` · ${pct(sum.power)} %` : ''}`;
+      const card = el(
+        'button',
+        { type: 'button', className: 'sh-card' },
+        el('span', { className: 'sh-grip' }),
+        miniProfile(blocksToWorkout('x', undefined, item.blocks), 'sh-mini'),
+        el('span', { className: 'sh-text' }, el('strong', { textContent: item.name }), el('small', { textContent: meta })),
+      );
+      card.dataset.i = String(i);
+      card.title = `${item.name} : toucher pour l’ajouter après le bloc sélectionné, ou glisser sur le profil`;
+      if (ro) setBlocked(card, 'Un modèle est en lecture seule : duplique-le pour le modifier.');
+      else
+        card.addEventListener('click', () => {
+          if (justDraggedCard || !draft) return;
+          addBlocks(item.blocks, draft.blocks.length ? selected + 1 : 0);
+        });
+      const wrap = el('div', { className: 'sh-item' }, card);
+      if (item.mine) {
+        const mine = item.mine;
+        const del = el('button', { type: 'button', className: 'sh-del', textContent: '✕', title: 'Retirer de Mes blocs' });
+        del.setAttribute('aria-label', `Retirer « ${mine.name} » de Mes blocs`);
+        del.addEventListener('click', () => {
+          if (!confirm(`Retirer le bloc « ${mine.name} » de Mes blocs ?`)) return;
+          o.blocks.remove(mine.id);
+          renderShelf();
+        });
+        wrap.append(del);
+      }
+      return wrap;
+    });
+    shelfCardsEl.replaceChildren(
+      ...(cards.length ? cards : [el('p', { className: 'sh-empty', textContent: 'Aucun bloc ici : « Enregistrer comme bloc », dans le menu du bloc, le range sur l’étagère.' })]),
+    );
+  }
+
+  /** Range le bloc sélectionné dans « Mes blocs » et ouvre cet onglet. */
+  function saveAsBlock(b: EditorBlock) {
+    const name = prompt('Nom du bloc', `${BLOCK_LABEL[b.type]} ${blockShort(b)}`);
+    if (name === null) return;
+    try {
+      o.blocks.save(name, [b]);
+      o.log(`bloc enregistré : ${name.trim() || 'Bloc sans nom'}`);
+      shelfTab = 'mine';
+      shelfCardsEl.scrollLeft = 0;
+      renderShelf();
+    } catch (e) {
+      say(`enregistrement du bloc impossible (stockage du navigateur plein ou bloqué) : ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  // Glisser une carte sur le profil : un cadre en pointillés la suit, un repère montre où elle tombera ; la lâcher ailleurs annule.
+  interface CardDrag {
+    blocks: EditorBlock[];
+    startX: number;
+    startY: number;
+    pointerId: number;
+    mouse: boolean;
+    active: boolean;
+    inside: boolean;
+    at: number;
+    el: HTMLElement;
+    ghostW: number;
+    width: number;
+    ranges: { start: number; end: number }[];
+    total: number;
+    ghost?: HTMLElement;
+    line?: HTMLElement;
+  }
+  let cardDrag: CardDrag | undefined;
+  let justDraggedCard = false;
+
+  shelfCardsEl.addEventListener('pointerdown', (e) => {
+    const card = (e.target as HTMLElement).closest<HTMLElement>('.sh-card');
+    if (!card || !draft || draft.readOnly || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const item = shelfItemsNow[Number(card.dataset.i)];
+    if (!item) return;
+    const total = workout().steps.reduce((t, st) => t + st.durationS, 0) || 1;
+    const width = plot.clientWidth;
+    cardDrag = {
+      blocks: item.blocks,
+      startX: e.clientX,
+      startY: e.clientY,
+      pointerId: e.pointerId,
+      mouse: e.pointerType === 'mouse',
+      active: false,
+      inside: false,
+      at: draft.blocks.length,
+      el: card,
+      ghostW: Math.max(28, Math.min(width * 0.5, (summarizeBlocks(item.blocks).durationS / total) * width)),
+      width,
+      ranges: blockRanges(draft.blocks),
+      total,
+    };
+  });
+  shelfCardsEl.addEventListener('pointermove', (e) => {
+    const d = cardDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (!d.active) {
+      // Au doigt, un geste horizontal fait défiler l'étagère : on ne saisit la carte qu'en la tirant vers le haut.
+      const start = d.mouse ? Math.hypot(dx, dy) > 6 : dy < -8 && Math.abs(dy) > Math.abs(dx);
+      if (!start) return;
+      d.active = true;
+      d.el.setPointerCapture?.(e.pointerId);
+      d.ghost = el('div', { className: 'dd-ghost' });
+      d.line = el('div', { className: 'dd-line' });
+      d.ghost.style.width = `${d.ghostW}px`;
+      plot.append(d.ghost, d.line);
+      overlay.style.visibility = 'hidden';
+    }
+    const r = plot.getBoundingClientRect();
+    d.inside = e.clientY >= r.top - 24 && e.clientY <= r.bottom + 24 && e.clientX >= r.left - 12 && e.clientX <= r.right + 12;
+    d.ghost!.hidden = d.line!.hidden = !d.inside;
+    const px = (sec: number) => (sec / d.total) * d.width;
+    const x = Math.max(0, Math.min(d.width, e.clientX - r.left));
+    d.ghost!.style.left = `${Math.max(0, Math.min(d.width - d.ghostW, x - d.ghostW / 2))}px`;
+    // Place visée : autant de blocs que de milieux déjà franchis.
+    d.at = d.ranges.filter((b) => px((b.start + b.end) / 2) < x).length;
+    const edge = d.ranges.length ? (d.at < d.ranges.length ? px(d.ranges[d.at]!.start) : px(d.ranges[d.ranges.length - 1]!.end)) : 0;
+    d.line!.style.left = `${edge}px`;
+  });
+  const endCardDrag = (e: PointerEvent) => {
+    const d = cardDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    cardDrag = undefined;
+    d.el.releasePointerCapture?.(e.pointerId);
+    overlay.style.visibility = '';
+    d.ghost?.remove();
+    d.line?.remove();
+    if (!d.active) return; // un simple appui : le clic ajoute après le bloc sélectionné
+    justDraggedCard = true;
+    setTimeout(() => (justDraggedCard = false));
+    if (e.type === 'pointerup' && d.inside) addBlocks(d.blocks, d.at);
+  };
+  shelfCardsEl.addEventListener('pointerup', endCardDrag);
+  shelfCardsEl.addEventListener('pointercancel', endCardDrag);
+
+  /**
+   * Téléphone : la barre du bloc sélectionné monte dans l'en-tête, à côté du titre, et l'étagère occupe le bas.
+   * Ailleurs, elle reste sous le profil.
+   */
+  const barEl = $('ed-bbar');
+  function placeBar() {
+    const target = PHONE.matches ? document.querySelector<HTMLElement>('.sea-hero-row')! : document.querySelector<HTMLElement>('.ed-srow')!;
+    if (barEl.parentElement !== target) target.prepend(barEl);
+  }
+  PHONE.addEventListener('change', placeBar);
+
+  // --- Déplacer un bloc : on tient la poignée de la barre et on la fait glisser sur le profil ---
+
+  interface BlockDrag {
+    from: number;
+    to: number;
+    startX: number;
+    pointerId: number;
+    active: boolean;
+    width: number;
+    ranges: { start: number; end: number }[];
+    total: number;
+    ghost?: HTMLElement;
+    line?: HTMLElement;
+  }
+  let drag: BlockDrag | undefined;
+  const handleEl = $('bb-handle');
+  const DRAG_THRESHOLD_PX = 4;
+
+  /** Place le bloc `from` à l'indice `to` et le sélectionne : une seule entrée d'historique. */
+  function moveBlock(from: number, to: number) {
+    if (from === to) return;
+    commit((bs) => {
+      const c = [...bs];
+      const [m] = c.splice(from, 1);
+      c.splice(to, 0, m!);
+      return c;
+    }, to);
+  }
+
+  handleEl.addEventListener('pointerdown', (e) => {
+    if (!draft || draft.readOnly || draft.blocks.length < 2 || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    const w = workout();
+    drag = {
+      from: selected,
+      to: selected,
+      startX: e.clientX,
+      pointerId: e.pointerId,
+      active: false,
+      width: plot.clientWidth,
+      ranges: blockRanges(draft.blocks),
+      total: w.steps.reduce((t, s) => t + s.durationS, 0) || 1,
+    };
+    handleEl.setPointerCapture?.(e.pointerId);
+  });
+  handleEl.addEventListener('pointermove', (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    const dx = e.clientX - d.startX;
+    if (!d.active) {
+      if (Math.abs(dx) < DRAG_THRESHOLD_PX) return;
+      d.active = true;
+      handleEl.classList.add('dragging');
+      d.ghost = el('div', { className: 'dd-ghost' });
+      d.line = el('div', { className: 'dd-line' });
+      plot.append(d.ghost, d.line);
+      overlay.style.visibility = 'hidden'; // les capsules du bloc reviennent au dépôt
+    }
+    const px = (s: number) => (s / d.total) * d.width;
+    const me = d.ranges[d.from]!;
+    const left = Math.max(0, Math.min(d.width - (px(me.end) - px(me.start)), px(me.start) + dx));
+    d.ghost!.style.left = `${left}px`;
+    d.ghost!.style.width = `${px(me.end) - px(me.start)}px`;
+    // Place visée : autant de blocs que de milieux franchis par le centre du bloc tenu.
+    const centre = left + (px(me.end) - px(me.start)) / 2;
+    const others = d.ranges.filter((_, i) => i !== d.from);
+    d.to = others.filter((r) => px((r.start + r.end) / 2) < centre).length;
+    d.line!.style.left = `${d.to < others.length ? px(others[d.to]!.start) : px(others[others.length - 1]!.end)}px`;
+  });
+  const endDrag = (e: PointerEvent) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    drag = undefined;
+    handleEl.releasePointerCapture?.(e.pointerId);
+    handleEl.classList.remove('dragging');
+    overlay.style.visibility = '';
+    d.ghost?.remove();
+    d.line?.remove();
+    if (d.active && e.type === 'pointerup') moveBlock(d.from, d.to);
+  };
+  handleEl.addEventListener('pointerup', endDrag);
+  handleEl.addEventListener('pointercancel', endDrag);
+  $('bb-prev').addEventListener('click', () => select(selected - 1));
+  $('bb-next').addEventListener('click', () => select(selected + 1));
+
+  // --- Ligne de réglages du bloc sélectionné ---
+
+  /** Champ de puissance en % avec boutons ±5 % ; `key` sert à rendre le focus après redessin. */
+  function powerStepper(label: string, value: number, set: (v: number) => void, key: string) {
+    const input = el('input', { type: 'number', value: String(pct(value)), min: '1', max: '300', step: '1' });
+    input.setAttribute('aria-label', `${label}, en % de la FTP`);
+    input.dataset.key = `${key}-in`;
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      const ok = input.value.trim() !== '' && v > 0 && v <= 300;
+      input.classList.toggle('invalid', !ok);
+      if (!ok) return;
+      liveEdit(() => set(v / 100));
+    });
+    const step = (d: number) => {
+      const b = el('button', { type: 'button', textContent: d > 0 ? '+' : '−' });
+      b.setAttribute('aria-label', `${label} ${d > 0 ? 'plus' : 'moins'} 5 %`);
+      b.dataset.key = `${key}-${d > 0 ? 'up' : 'down'}`;
+      b.addEventListener('click', () => {
+        // Part de ce qui est affiché : une valeur tapée juste avant n'a pas encore redessiné le champ.
+        const typed = Number(input.value) / 100;
+        const base = input.value.trim() !== '' && typed > 0 ? typed : value;
+        commitSet(set, Math.min(3, Math.max(0.05, Math.round((base + d) * 100) / 100)));
+      });
+      return b;
+    };
+    // La vraie valeur, à côté du pourcentage : elle suit la frappe (voir refreshInspectorText).
+    const watts = el('span', { className: 'watts', textContent: `${Math.round(value * ftp())} W` });
+    watts.dataset.power = key;
+    return el('div', { className: 'stepper' }, step(-POWER_STEP), input, el('span', { textContent: '%' }), step(POWER_STEP), watts);
+  }
+
+  /** Les setters écrivent dans le bloc sélectionné du brouillon : on le copie d'abord, l'historique garde l'original. */
+  function commitSet(set: (v: number) => void, v: number) {
+    if (!draft || draft.readOnly) return;
+    history.record(draft.blocks);
+    typing = false;
+    draft.blocks = structuredClone(draft.blocks);
+    set(v);
+    render();
+  }
+
+  function durationField(label: string, value: number, set: (v: number) => void, key: string) {
+    const input = el('input', { type: 'text', value: formatDuration(value), inputMode: 'numeric', placeholder: 'mm:ss' });
+    input.setAttribute('aria-label', label);
+    input.dataset.key = key;
+    input.addEventListener('input', () => {
+      const v = parseDuration(input.value);
+      input.classList.toggle('invalid', v === undefined || v < 1);
+      if (v === undefined || v < 1) return;
+      liveEdit(() => set(v));
+    });
+    return el('label', { className: 'dur' }, label.split(' ')[0]!.toLowerCase(), input);
+  }
+
+  function countStepper(value: number, set: (v: number) => void) {
+    const input = el('input', { type: 'number', value: String(value), min: '1', step: '1' });
+    input.setAttribute('aria-label', 'Répétitions');
+    input.dataset.key = 'rep-in';
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      const ok = Number.isInteger(v) && v >= 1 && v <= 50;
+      input.classList.toggle('invalid', !ok);
+      if (ok) liveEdit(() => set(v));
+    });
+    const step = (d: number) => {
+      const b = el('button', { type: 'button', textContent: d > 0 ? '+' : '−' });
+      b.setAttribute('aria-label', d > 0 ? 'Une répétition de plus' : 'Une répétition de moins');
+      b.dataset.key = `rep-${d > 0 ? 'up' : 'down'}`;
+      b.addEventListener('click', () => updateSelected((x) => (x.type === 'intervals' ? { ...x, repeat: Math.max(1, Math.min(50, x.repeat + d)) } : x)));
+      return b;
+    };
+    return el('div', { className: 'stepper' }, step(-1), input, step(1));
+  }
+
+  /** Frappe dans un champ : on modifie le brouillon en place et on redessine tout sauf la ligne de réglages. */
+  function liveEdit(apply: () => void) {
+    if (!draft || draft.readOnly) return;
+    if (!typing) {
+      history.record(draft.blocks);
+      typing = true;
+    }
+    apply();
+    render(true);
+  }
+
+  /** Légende « Effort · Seuil » ; la zone est omise quand elle répète le nom (« Récupération · Récupération »). */
+  const legendText = (name: string, zone?: string) => (zone && zone !== name ? `${name} · ${zone}` : name);
+
+  function fieldset(name: string, zone: string | undefined, main: boolean, ...children: Node[]) {
+    const f = el('fieldset', { className: main ? 'main' : '' }, el('legend', { textContent: legendText(name, zone) }), ...children);
+    f.dataset.legend = name;
+    return f;
+  }
+
+  /** Actions du bloc sélectionné : cadence, déplacer, dupliquer, séparer, enregistrer comme bloc, supprimer. */
+  function blockActions(b: EditorBlock, keyed: boolean): HTMLElement {
+    const actions = el('div', { className: 'actions' });
+    if (b.type !== 'free') {
+      const c = b.cadenceRpm;
+      actions.append(button(c ? `${c} rpm…` : 'Cadence…', openCadence, 'secondary'));
+      actions.lastElementChild!.setAttribute('title', 'Cadence cible du bloc (facultative)');
+      actions.lastElementChild!.classList.add('act-cadence');
+    }
+    actions.append(
+      button('← Avant', () => moveSelected(-1), 'secondary'),
+      button('Après →', () => moveSelected(1), 'secondary'),
+      button('Dupliquer', () => commit((bs) => [...bs.slice(0, selected + 1), structuredClone(b), ...bs.slice(selected + 1)], selected + 1), 'secondary'),
+    );
+    if (b.type === 'intervals') {
+      const split = button('Séparer', () => commit((bs) => [...bs.slice(0, selected), ...splitIntervals(b), ...bs.slice(selected + 1)]), 'secondary');
+      split.title = 'Séparer les répétitions en blocs individuels';
+      actions.append(split);
+    }
+    const keep = button('Enregistrer comme bloc', () => saveAsBlock(b), 'secondary');
+    keep.title = 'Le ranger dans « Mes blocs », sur l’étagère';
+    actions.append(keep, button('Supprimer', deleteSelected, 'secondary danger'));
+    if (keyed) actions.querySelectorAll('button').forEach((x, i) => (x.dataset.key = `act-${i}`));
+    const [before, after] = [...actions.querySelectorAll('button')].filter((x) => /Avant|Après/.test(x.textContent ?? ''));
+    if (before) setBlocked(before, selected === 0 ? 'C’est déjà le premier bloc.' : undefined);
+    if (after) setBlocked(after, selected === draft!.blocks.length - 1 ? 'C’est déjà le dernier bloc.' : undefined);
+    // Sur téléphone, ces actions vivent dans le menu « ⋯ » : une action faite, il se referme.
+    actions.addEventListener('click', () => setPanel());
+    return actions;
+  }
+
+  function renderInspector() {
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined;
+    const b = draft!.blocks[selected];
+    if (!b) {
+      inspector.replaceChildren(el('p', { className: 'note', textContent: 'Aucun bloc : ajoute-en depuis l’étagère.' }));
+      $('ed-bactions').replaceChildren();
+      return;
+    }
+    const f = ftp();
+    const cur = () => draft!.blocks[selected]!;
+    const set = <K extends string>(k: K) => (v: number) => ((cur() as unknown as Record<K, number>)[k] = v);
+    const z = (p: number) => zoneName(zoneOf(p));
+
+    const actions = blockActions(b, true);
+
+    const line = el('div', { className: 'ed-line' });
+    switch (b.type) {
+      case 'intervals': {
+        const schema = el(
+          'div',
+          { className: 'rep-schema' },
+          el('span', { textContent: 'Une répétition' }),
+          el('div', { className: 'bars' }),
+          el('span', { textContent: `${formatDuration(b.onS)} + ${formatDuration(b.offS)}, × ${b.repeat}` }),
+        );
+        const bars = schema.querySelector('.bars')!;
+        for (const [s, p] of [[b.onS, b.onPower], [b.offS, b.offPower]] as const) {
+          const bar = el('span');
+          bar.style.flex = String(s);
+          bar.style.height = `${Math.min(100, (p / Math.max(b.onPower, b.offPower)) * 100)}%`;
+          bar.style.background = `var(--${zoneOf(p)})`;
+          bars.append(bar);
+        }
+        line.append(
+          schema,
+          fieldset('Répétitions', undefined, false, countStepper(b.repeat, set('repeat'))),
+          fieldset('Effort', z(b.onPower), true, powerStepper('Effort', b.onPower, set('onPower'), 'on'), durationField('Durée de l’effort', b.onS, set('onS'), 'on-dur')),
+          fieldset('Récupération', z(b.offPower), false, powerStepper('Récupération', b.offPower, set('offPower'), 'off'), durationField('Durée de la récupération', b.offS, set('offS'), 'off-dur')),
+        );
+        break;
+      }
+      case 'steady':
+        line.append(fieldset('Puissance', z(b.power), true, powerStepper('Puissance', b.power, set('power'), 'p'), durationField('Durée du palier', b.durationS, set('durationS'), 'dur')));
+        break;
+      case 'warmup':
+      case 'cooldown':
+      case 'ramp':
+        line.append(
+          fieldset('Début', z(b.from), true, powerStepper('Début', b.from, set('from'), 'from'), durationField('Durée du bloc', b.durationS, set('durationS'), 'dur')),
+          fieldset('Fin', z(b.to), false, powerStepper('Fin', b.to, set('to'), 'to')),
+        );
+        break;
+      case 'free':
+        line.append(fieldset('Libre', 'sans consigne', true, durationField('Durée du bloc', b.durationS, set('durationS'), 'dur')));
+        break;
+    }
+
+    const sentence = el('p', { className: 'sentence', textContent: describeBlock(b, f) });
+    if (b.type === 'intervals') sentence.title = `Les ${b.repeat} répétitions sont modifiées ensemble`;
+    // Sur téléphone, l'inspecteur est une feuille (bouton ⋯ sous le profil) : titre et bouton Fermer en tête.
+    const close = el('button', { type: 'button', className: 'sheet-x', textContent: 'Fermer' });
+    close.dataset.openPanel = '';
+    const head = el('div', { className: 'sheet-head' }, el('strong', { textContent: `${BLOCK_LABEL[b.type]} · bloc ${selected + 1} sur ${draft!.blocks.length}` }), close);
+    // Sur téléphone, l'inspecteur n'est plus qu'un menu d'actions : une action faite, il se referme.
+    inspector.replaceChildren(head, sentence, el('div', { className: 'ed-body' }, line, actions));
+    $('ed-bactions').replaceChildren(blockActions(b, false)); // le même menu, dans le « ⋯ » de l'en-tête (téléphone)
+    if (active) inspector.querySelector<HTMLElement>(`[data-key="${active}"]`)?.focus();
+  }
+
+  /** Pendant la frappe : la phrase et les zones des légendes suivent, sans reconstruire les champs. */
+  function refreshInspectorText() {
+    const b = draft!.blocks[selected];
+    if (!b) return;
+    const sentence = inspector.querySelector('.sentence');
+    if (sentence) sentence.textContent = describeBlock(b, ftp());
+    const z = (p: number) => zoneName(zoneOf(p));
+    const legends: Record<string, string | undefined> = {
+      Effort: b.type === 'intervals' ? z(b.onPower) : undefined,
+      Récupération: b.type === 'intervals' ? z(b.offPower) : undefined,
+      Puissance: b.type === 'steady' ? z(b.power) : undefined,
+      Début: 'from' in b ? z(b.from) : undefined,
+      Fin: 'to' in b ? z(b.to) : undefined,
+    };
+    const power: Record<string, number | undefined> = {
+      on: b.type === 'intervals' ? b.onPower : undefined,
+      off: b.type === 'intervals' ? b.offPower : undefined,
+      p: b.type === 'steady' ? b.power : undefined,
+      from: 'from' in b ? b.from : undefined,
+      to: 'to' in b ? b.to : undefined,
+    };
+    inspector.querySelectorAll<HTMLElement>('.watts[data-power]').forEach((w) => {
+      const v = power[w.dataset.power!];
+      if (v !== undefined) w.textContent = `${Math.round(v * ftp())} W`;
+    });
+    inspector.querySelectorAll<HTMLFieldSetElement>('fieldset[data-legend]').forEach((fs) => {
+      const zone = legends[fs.dataset.legend!];
+      if (zone) fs.querySelector('legend')!.textContent = legendText(fs.dataset.legend!, zone);
+    });
+  }
+
+  function moveSelected(d: number) {
+    const j = selected + d;
+    if (!draft || j < 0 || j >= draft.blocks.length) return;
+    commit((bs) => {
+      const c = [...bs];
+      [c[selected], c[j]] = [c[j]!, c[selected]!];
+      return c;
+    }, j);
+  }
+
+  function deleteSelected() {
+    if (!draft?.blocks.length) return;
+    commit((bs) => bs.filter((_, i) => i !== selected), selected);
+  }
+
+  // --- Temps par zone ---
+
+  /** Une ligne : barre de répartition, puis le temps passé dans chaque zone. Le détail (écarts, lecture) est en info-bulle. */
+  function renderZones(z: ZoneTimes) {
+    const total = Object.values(z).reduce((a, b) => a + b, 0) || 1;
+    const ids = [...ZONES.map((x) => x.id), 'free'] as Zone[];
+    const color = (id: Zone) => (id === 'free' ? 'var(--muted)' : `var(--${id})`);
+    const bar = el('div', { className: 'zone-bar' });
+    bar.setAttribute('aria-hidden', 'true');
+    for (const id of ids) {
+      if (!z[id]) continue;
+      const s = el('span');
+      s.style.width = `${(z[id] / total) * 100}%`;
+      s.style.background = color(id);
+      bar.append(s);
+    }
+    const items = ids
+      .filter((id) => z[id] || baseZones?.[id])
+      .sort((a, b) => z[b] - z[a])
+      .map((id) => {
+        const swatch = el('i');
+        swatch.style.background = color(id);
+        const was = baseZones && baseZones[id] !== z[id] ? ` (avant : ${formatDuration(baseZones[id])})` : '';
+        return el('li', { title: `${zoneName(id)}${was}` }, swatch, `${zoneName(id)} `, el('strong', { textContent: formatDuration(z[id]) }));
+      });
+    const parts = [el('span', { className: 'k', textContent: 'Zones' }), bar, el('ul', {}, ...items)];
+    for (const id of ['ed-zones', 'ed-zones-m']) {
+      $(id).title = zoneReading(z, formatDuration);
+      $(id).replaceChildren(...parts.map((n) => n.cloneNode(true)));
+    }
+  }
+
+  // --- Info-bulle et sélection sur le profil ---
+
+  function timeAt(e: MouseEvent): number {
+    const r = plot.getBoundingClientRect();
+    const total = workout().steps.reduce((t, s) => t + s.durationS, 0);
+    return Math.max(0, Math.min(total - 0.001, ((e.clientX - r.left) / r.width) * total));
+  }
+
+  plot.addEventListener('mousemove', (e) => {
+    if (!draft?.blocks.length) return;
+    const t = timeAt(e);
+    const bi = blockIndexAt(draft.blocks, t);
+    const b = draft.blocks[bi]!;
+    const range = blockRanges(draft.blocks)[bi]!;
+    const w = workout();
+    let acc = 0;
+    let stepLeft = 0;
+    let watts: number | undefined;
+    for (const s of w.steps) {
+      if (t < acc + s.durationS) {
+        watts = targetWatts(s, t - acc, ftp());
+        stepLeft = acc + s.durationS - t;
+        break;
+      }
+      acc += s.durationS;
+    }
+    let what: string = BLOCK_LABEL[b.type];
+    if (b.type === 'intervals') {
+      const inRep = t - range.start;
+      const rep = Math.floor(inRep / (b.onS + b.offS)) + 1;
+      what = `${inRep % (b.onS + b.offS) < b.onS ? 'effort' : 'récupération'} ${rep} sur ${b.repeat}`;
+    }
+    const f = ftp();
+    tip.replaceChildren(
+      el('strong', { textContent: formatDuration(Math.floor(t)) }),
+      ` · ${what}`,
+      el('br'),
+      watts === undefined ? 'sans consigne' : `${watts} W · ${Math.round((watts / f) * 100)} % · ${zoneName(zoneOf(watts / f))}`,
+      el('br'),
+      el('span', { className: 'muted', textContent: `encore ${formatDuration(Math.ceil(stepLeft))} dans ce palier` }),
+    );
+    tip.hidden = false;
+    const r = plot.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    tip.style.left = x > r.width * 0.6 ? '' : `${x + 12}px`;
+    tip.style.right = x > r.width * 0.6 ? `${r.width - x + 12}px` : '';
+  });
+  plot.addEventListener('mouseleave', () => (tip.hidden = true));
+  plot.addEventListener('click', (e) => {
+    if (draft?.blocks.length) select(blockIndexAt(draft.blocks, timeAt(e)));
+  });
+
+  // --- Saisie d'une valeur exacte, au toucher (téléphone) ---
+
+  /** Ce que la saisie règle : une puissance (% et W), une durée, une cadence, ou les répétitions. */
+  interface EditSpec {
+    title: string;
+    power?: PowerField;
+    /** Seconde puissance réglée dans la même saisie (début et fin d'une montée, sur un bloc trop étroit pour deux capsules). */
+    power2?: PowerField;
+    dur?: 'on' | 'off' | 'block';
+    cad?: 'on' | 'off';
+    reps?: boolean;
+  }
+  const pop = $<HTMLFormElement>('ed-pop');
+  const popIn = (id: string) => $<HTMLInputElement>(id);
+  let editSpec: EditSpec | undefined;
+
+  function openEdit(spec: EditSpec) {
+    const b = draft?.blocks[selected] as unknown as Record<string, number | undefined> | undefined;
+    if (!draft || draft.readOnly || !b) return;
+    editSpec = spec;
+    $('pop-title').textContent = spec.title;
+    $('pop-g-power').hidden = !spec.power;
+    $('pop-g-power2').hidden = !spec.power2;
+    $('pop-l-power').textContent = spec.power2 ? 'Début' : 'Puissance';
+    $('pop-g-dur').hidden = !spec.dur;
+    $('pop-g-cad').hidden = !spec.cad;
+    $('pop-g-rep').hidden = !spec.reps;
+    if (spec.power) {
+      const v = b[spec.power] ?? 0;
+      popIn('pop-pct').value = String(pct(v));
+      popIn('pop-w').value = String(Math.round(v * ftp()));
+    }
+    if (spec.power2) {
+      const v = b[spec.power2] ?? 0;
+      popIn('pop-pct2').value = String(pct(v));
+      popIn('pop-w2').value = String(Math.round(v * ftp()));
+    }
+    if (spec.dur) popIn('pop-dur').value = formatDuration((spec.dur === 'on' ? b.onS : spec.dur === 'off' ? b.offS : b.durationS) ?? 0);
+    if (spec.cad) popIn('pop-cad').value = String((spec.cad === 'on' ? b.cadenceRpm : b.restCadenceRpm) ?? '');
+    if (spec.reps) popIn('pop-rep').value = String(b.repeat ?? 1);
+    for (const i of pop.querySelectorAll('input')) i.classList.remove('invalid');
+    setPanel('edit');
+    const first = pop.querySelector<HTMLInputElement>('.pop-g:not([hidden]) input');
+    first?.focus();
+    first?.select();
+  }
+
+  // Pourcentage et watts se suivent : on tape l'un ou l'autre.
+  popIn('pop-pct').addEventListener('input', () => {
+    const v = Number(popIn('pop-pct').value);
+    if (v > 0) popIn('pop-w').value = String(Math.round((v * ftp()) / 100));
+  });
+  popIn('pop-w').addEventListener('input', () => {
+    const v = Number(popIn('pop-w').value);
+    if (v > 0) popIn('pop-pct').value = String(Math.round((v * 100) / ftp()));
+  });
+  popIn('pop-pct2').addEventListener('input', () => {
+    const v = Number(popIn('pop-pct2').value);
+    if (v > 0) popIn('pop-w2').value = String(Math.round((v * ftp()) / 100));
+  });
+  popIn('pop-w2').addEventListener('input', () => {
+    const v = Number(popIn('pop-w2').value);
+    if (v > 0) popIn('pop-pct2').value = String(Math.round((v * 100) / ftp()));
+  });
+  pop.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const spec = editSpec;
+    if (!spec || !draft) return;
+    let ok = true;
+    const check = (input: HTMLInputElement, valid: boolean) => {
+      input.classList.toggle('invalid', !valid);
+      if (!valid) ok = false;
+    };
+    const out: { pct?: number; pct2?: number; dur?: number; cad?: number | null; reps?: number } = {};
+    if (spec.power) {
+      const t = popIn('pop-pct').value.trim();
+      const v = Number(t);
+      check(popIn('pop-pct'), t !== '' && v > 0 && v <= 300);
+      out.pct = v;
+    }
+    if (spec.power2) {
+      const t = popIn('pop-pct2').value.trim();
+      const v = Number(t);
+      check(popIn('pop-pct2'), t !== '' && v > 0 && v <= 300);
+      out.pct2 = v;
+    }
+    if (spec.dur) {
+      const v = parseDuration(popIn('pop-dur').value);
+      check(popIn('pop-dur'), v !== undefined && v >= 1);
+      out.dur = v;
+    }
+    if (spec.cad) {
+      const t = popIn('pop-cad').value.trim();
+      const v = Math.round(Number(t));
+      check(popIn('pop-cad'), t === '' || (v >= 30 && v <= 200));
+      out.cad = t === '' ? null : v;
+    }
+    if (spec.reps) {
+      const v = Number(popIn('pop-rep').value);
+      check(popIn('pop-rep'), Number.isInteger(v) && v >= 1 && v <= 50);
+      out.reps = v;
+    }
+    if (!ok) return;
+    // Une seule entrée d'historique pour toute la saisie.
+    updateSelected((b) => {
+      const c = { ...b } as unknown as Record<string, number | undefined>;
+      if (spec.power && out.pct !== undefined) c[spec.power] = clampPower(out.pct / 100);
+      if (spec.power2 && out.pct2 !== undefined) c[spec.power2] = clampPower(out.pct2 / 100);
+      if (spec.dur && out.dur !== undefined) c[spec.dur === 'on' ? 'onS' : spec.dur === 'off' ? 'offS' : 'durationS'] = out.dur;
+      if (spec.cad) {
+        const key = spec.cad === 'on' ? 'cadenceRpm' : 'restCadenceRpm';
+        if (out.cad) c[key] = out.cad;
+        else delete c[key];
+      }
+      if (spec.reps && out.reps !== undefined) c.repeat = out.reps;
+      return c as unknown as EditorBlock;
+    });
+    setPanel();
+  });
+
+  // --- Commandes posées sur le bloc sélectionné (téléphone en paysage) ---
+
+  type PowerField = 'onPower' | 'offPower' | 'power' | 'from' | 'to';
+  const clampPower = (v: number) => Math.min(3, Math.max(0.05, Math.round(v * 100) / 100));
+
+  /** Ajuste d'un pas la puissance d'un champ du bloc sélectionné (même historique que l'inspecteur). */
+  function bump(field: PowerField, d: number) {
+    const b = draft?.blocks[selected] as unknown as Record<string, number> | undefined;
+    const current = b?.[field];
+    if (!draft || draft.readOnly || typeof current !== 'number') return;
+    commitSet((v) => {
+      (draft!.blocks[selected] as unknown as Record<string, number>)[field] = v;
+    }, clampPower(current + d));
+  }
+
+  /**
+   * Les commandes du bloc sélectionné sont dessinées sur le profil : un pas + / − par puissance (en % et en watts),
+   * une pastille de durée, un badge de répétitions. Les répétitions étant liées, on règle un seul motif.
+   * Seulement sur téléphone en paysage : ailleurs, l'inspecteur sous le profil porte les mêmes réglages.
+   */
+  function renderOverlay() {
+    overlay.replaceChildren();
+    if (!draft || draft.readOnly || !PHONE.matches) return;
+    const b = draft.blocks[selected];
+    const W = plot.clientWidth;
+    const H = plot.clientHeight;
+    if (!b || !W || !H) return;
+    const f = ftp();
+    const w = workout();
+    const peak = profilePeakW(w, f);
+    const total = w.steps.reduce((t, s) => t + s.durationS, 0) || 1;
+    const r = blockRanges(draft.blocks)[selected]!;
+    const px = (s: number) => (s / total) * W;
+    const topOf = (frac: number) => (1 - (frac * f) / peak) * H;
+    const put = (node: HTMLElement, cx: number, top: number, half: number) => {
+      node.style.left = `${Math.max(half, Math.min(W - half, cx))}px`;
+      node.style.top = `${Math.max(2, top)}px`;
+      overlay.append(node);
+    };
+    const step = (txt: string, label: string, run: () => void) => {
+      const x = el('button', { type: 'button', textContent: txt });
+      x.setAttribute('aria-label', label);
+      x.addEventListener('click', run);
+      return x;
+    };
+    /** Pastille de durée : au-dessus de la barre s'il y a la place, sinon en haut du profil ; les capsules passent alors dessous. */
+    const CHIP_ROOM = 34;
+    const capMin = (barTop: number) => (barTop >= CHIP_ROOM ? 0 : 32);
+    /** Valeur touchable : ouvre la saisie d'un chiffre exact. */
+    const val = (what: string, spec: EditSpec, ...children: HTMLElement[]) => {
+      const v = el('button', { type: 'button', className: 'ov-val' }, ...children);
+      v.setAttribute('aria-label', `${what} : saisir une valeur`);
+      v.addEventListener('click', () => openEdit(spec));
+      return v;
+    };
+    const cap = (field: PowerField, frac: number, cx: number, label: string, small: boolean, minTop: number, spec: EditSpec) => {
+      const node = el(
+        'div',
+        { className: `ov-cap${small ? ' sm' : ''}` },
+        step('+', `${label} plus 5 %`, () => bump(field, POWER_STEP)),
+        val(label, spec, el('strong', { textContent: `${pct(frac)} %` }), el('small', { textContent: `${Math.round(frac * f)} W` })),
+        step('−', `${label} moins 5 %`, () => bump(field, -POWER_STEP)),
+      );
+      put(node, cx, Math.min(Math.max(topOf(frac) + 3, minTop), H - (small ? 74 : 84)), 16);
+    };
+    /** Durée du bloc (l'effort pour des intervalles). */
+    const chip = (cx: number, seconds: number, barTop: number, spec: EditSpec) => {
+      const node = el(
+        'div',
+        { className: 'ov-chip' },
+        step('−', 'Durée moins 15 s', () => updateSelected((x) => nudgeDuration(x, -DURATION_STEP_S))),
+        val('Durée', spec, el('strong', { textContent: formatDuration(seconds) })),
+        step('+', 'Durée plus 15 s', () => updateSelected((x) => nudgeDuration(x, DURATION_STEP_S))),
+      );
+      put(node, cx, barTop >= CHIP_ROOM ? barTop - 30 : 2, 52);
+    };
+    const x0 = px(r.start);
+    switch (b.type) {
+      case 'intervals': {
+        const onW = px(b.onS);
+        const barTop = topOf(b.onPower);
+        cap('onPower', b.onPower, x0 + onW / 2, 'Effort', false, capMin(barTop), { title: 'Effort', power: 'onPower', dur: 'on', cad: 'on' });
+        cap('offPower', b.offPower, x0 + onW + px(b.offS) / 2, 'Récupération', true, 0, { title: 'Récupération', power: 'offPower', dur: 'off', cad: 'off' });
+        chip(x0 + onW / 2, b.onS, barTop, { title: 'Durée de l’effort', dur: 'on' });
+        const reps = el(
+          'div',
+          { className: 'ov-chip ov-reps' },
+          step('−', 'Une répétition de moins', () => updateSelected((x) => (x.type === 'intervals' ? { ...x, repeat: Math.max(1, x.repeat - 1) } : x))),
+          val('Répétitions', { title: 'Répétitions', reps: true }, el('strong', { textContent: `× ${b.repeat}` })),
+          step('+', 'Une répétition de plus', () => updateSelected((x) => (x.type === 'intervals' ? { ...x, repeat: Math.min(50, x.repeat + 1) } : x))),
+        );
+        put(reps, px(r.end) - 48, 4, 44);
+        break;
+      }
+      case 'steady':
+        cap('power', b.power, x0 + px(b.durationS) / 2, 'Puissance', false, capMin(topOf(b.power)), { title: 'Puissance', power: 'power', dur: 'block', cad: 'on' });
+        chip(x0 + px(b.durationS) / 2, b.durationS, topOf(b.power), { title: 'Durée', dur: 'block' });
+        break;
+      case 'warmup':
+      case 'cooldown':
+      case 'ramp': {
+        const bw = px(b.durationS);
+        const barTop = Math.min(topOf(b.from), topOf(b.to));
+        if (bw >= 52) {
+          cap('from', b.from, x0 + bw * 0.22, 'Début', true, capMin(barTop), { title: 'Début', power: 'from', dur: 'block', cad: 'on' });
+          cap('to', b.to, x0 + bw * 0.78, 'Fin', true, capMin(barTop), { title: 'Fin', power: 'to', dur: 'block', cad: 'on' });
+        } else {
+          // Trop étroit pour deux capsules : une seule (la fin), dont la saisie règle aussi le début.
+          cap('to', b.to, x0 + bw / 2, 'Fin', true, capMin(barTop), { title: 'Début et fin', power: 'from', power2: 'to', dur: 'block', cad: 'on' });
+        }
+        chip(x0 + bw / 2, b.durationS, barTop, { title: 'Durée', dur: 'block' });
+        break;
+      }
+      case 'free':
+        chip(x0 + px(b.durationS) / 2, b.durationS, 0, { title: 'Durée', dur: 'block' });
+        break;
+    }
+  }
+  overlay.addEventListener('click', (e) => e.stopPropagation());
+  new ResizeObserver(() => renderOverlay()).observe(plot);
+  PHONE.addEventListener('change', () => {
+    setPanel();
+    renderOverlay();
+  });
+
+  // --- Clavier ---
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sea.dataset.panel && editor.offsetParent !== null) setPanel();
+    if (!draft || editor.offsetParent === null || isTyping(e.target)) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+      return;
+    }
+    if (ctrl && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      redo();
+      return;
+    }
+    // Annuler et rétablir valent partout ; flèches et Suppr n'agissent sur les blocs que hors bibliothèque, étagère et navigation.
+    if (ctrl || e.altKey || isElsewhere(e.target)) return;
+    switch (e.key) {
+      case 'ArrowUp':
+      case 'ArrowDown':
+        e.preventDefault();
+        updateSelected((b) => nudgePower(b, e.key === 'ArrowUp' ? POWER_STEP : -POWER_STEP));
+        break;
+      case 'ArrowLeft':
+      case 'ArrowRight': {
+        e.preventDefault();
+        const d = e.key === 'ArrowRight' ? 1 : -1;
+        if (e.shiftKey) updateSelected((b) => nudgeDuration(b, d * DURATION_STEP_S));
+        else select(selected + d);
+        break;
+      }
+      case 'Delete':
+      case 'Backspace':
+        e.preventDefault();
+        deleteSelected();
+        break;
+    }
+  });
+
+  // --- Cadence cible (option, hors de la ligne de réglages) ---
+
+  function openCadence() {
+    const b = draft?.blocks[selected];
+    if (!b || b.type === 'free') return;
+    $('ed-cad-on-label').textContent = b.type === 'intervals' ? 'Effort' : 'Cadence';
+    $<HTMLInputElement>('ed-cad-on').value = b.cadenceRpm ? String(b.cadenceRpm) : '';
+    $('ed-cad-off-row').hidden = b.type !== 'intervals';
+    $<HTMLInputElement>('ed-cad-off').value = b.type === 'intervals' && b.restCadenceRpm ? String(b.restCadenceRpm) : '';
+    cadenceDialog.showModal();
+  }
+
+  const readRpm = (id: string) => {
+    const v = Math.round(Number($<HTMLInputElement>(id).value));
+    return v >= 30 && v <= 200 ? v : undefined;
+  };
+  const withCadence = (b: EditorBlock, on?: number, off?: number): EditorBlock => {
+    if (b.type === 'free') return b;
+    const c = { ...b } as EditorBlock & { cadenceRpm?: number; restCadenceRpm?: number };
+    if (on) c.cadenceRpm = on;
+    else delete c.cadenceRpm;
+    if (c.type === 'intervals') {
+      if (off) c.restCadenceRpm = off;
+      else delete c.restCadenceRpm;
+    }
+    return c;
+  };
+  $('ed-cad-apply').addEventListener('click', () => {
+    updateSelected((b) => withCadence(b, readRpm('ed-cad-on'), readRpm('ed-cad-off')));
+    cadenceDialog.close();
+  });
+  $('ed-cad-clear').addEventListener('click', () => {
+    updateSelected((b) => withCadence(b));
+    cadenceDialog.close();
+  });
+
+  for (const d of [cadenceDialog]) {
+    d.querySelector('[data-close]')?.addEventListener('click', () => d.close());
+  }
+
+  // --- Branchements ---
+
+  nameIn.addEventListener('input', () => {
+    if (!draft || draft.readOnly) return;
+    draft.name = nameIn.value;
+    $('ed-dirty').hidden = !isDirty();
+    // Un brouillon est montré dans la bibliothèque sous son nom : on le tient à jour sans reconstruire la liste.
+    const row = document.querySelector('.sea-lib [data-key="draft"] strong');
+    if (row) row.textContent = draft.name || 'Séance sans nom';
+  });
+  descIn.addEventListener('input', () => {
+    if (!draft || draft.readOnly) return;
+    draft.description = descIn.value;
+    $('ed-dirty').hidden = !isDirty();
+  });
+  // Fin d'une frappe : la prochaine saisie ouvrira une nouvelle entrée d'historique, et les champs reprennent leur forme normale.
+  inspector.addEventListener('focusout', () => {
+    if (!typing) return;
+    typing = false;
+    setTimeout(() => {
+      if (!inspector.contains(document.activeElement)) render();
+    });
+  });
+  inspector.addEventListener('submit', (e) => e.preventDefault());
+
+  $('ed-undo').addEventListener('click', undo);
+  $('ed-redo').addEventListener('click', redo);
+  $('ed-del').addEventListener('click', deleteSelected); // téléphone : sans passer par le menu « ⋯ » (annulable)
+  $('ed-undo2').addEventListener('click', undo);
+  $('ed-redo2').addEventListener('click', redo);
+  // Boutons de panneau (téléphone) : un second tap referme ; le voile referme aussi.
+  sea.addEventListener('click', (e) => {
+    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-open-panel]');
+    if (!t) return;
+    const next = t.dataset.openPanel ?? '';
+    setPanel(next && sea.dataset.panel === next ? '' : next);
+  });
+  $('lib-new').addEventListener('click', () =>
+    open({ name: 'Nouvelle séance', description: '', blocks: [defaultBlock('warmup'), defaultBlock('intervals'), defaultBlock('cooldown')] }, true),
+  );
+  $('lib-search').addEventListener('input', renderLibrary);
+  const importIn = $<HTMLInputElement>('lib-import');
+  $('lib-import-btn').addEventListener('click', () => importIn.click());
+  importIn.addEventListener('change', async () => {
+    const f = importIn.files?.[0];
+    if (f) openFromWorkoutFile(f.name, await f.text());
+    importIn.value = '';
+  });
+  $('ed-save').addEventListener('click', () => {
+    setPanel();
+    void save();
+  });
+  $('ed-copy').addEventListener('click', () => {
+    setPanel();
+    duplicateModel();
+  });
+  $('ed-ride').addEventListener('click', () => {
+    if (!draft) return;
+    if (draft.readOnly) return o.onRide(`sample:${draft.sampleId}`);
+    const id = save();
+    if (id) o.onRide(`lib:${id}`);
+  });
+  $('ed-export').addEventListener('click', () => {
+    setPanel();
+    if (draft) download(`${slug(draft.name)}.zwo`, toZwo(draft.name, draft.description, draft.blocks));
+  });
+  addEventListener('beforeunload', (e) => {
+    if (isDirty()) e.preventDefault();
+  });
+
+  renderLibrary();
+  renderShelf();
+  placeBar();
+
+  return {
+    /** À appeler à chaque arrivée sur l'écran : ouvre la séance choisie dans l'application. */
+    sync,
+    /** À appeler quand la connexion du trainer ou la séance en cours change : « Rouler » en dépend. */
+    refreshRide: () => renderRide(),
+    /** À appeler quand la FTP change : les watts affichés en dépendent. */
+    refresh() {
+      if (draft?.readOnly) {
+        // Les modèles en watts (.erg, .mrc) sont relus en % de la FTP : on les rouvre avec la nouvelle valeur.
+        const key = keyOf(draft);
+        const keep = selected;
+        draft = undefined;
+        if (key && openKey(key)) select(keep);
+      } else {
+        renderLibrary();
+        if (draft) render();
+      }
+      renderShelf();
+    },
+    /**
+     * Séances ou blocs changés depuis un autre appareil (synchronisation du compte). Une séance ouverte sans
+     * modification suit la nouvelle version, ou laisse la place si elle a été supprimée ; un brouillon modifié reste
+     * tel quel : l'enregistrer en fera la version la plus récente.
+     */
+    libraryChanged() {
+      if (draft?.id && !isDirty()) {
+        const w = o.library.get(draft.id);
+        if (!w) {
+          draft = undefined;
+          baseline = '';
+          openFallback(false);
+        } else {
+          const next: Draft = { id: w.id, name: w.name, description: w.description ?? '', blocks: structuredClone(w.blocks) };
+          if (JSON.stringify(next) !== baseline) {
+            const keep = selected;
+            open(next);
+            if (next.blocks.length) select(Math.min(keep, next.blocks.length - 1));
+          }
+        }
+      }
+      renderLibrary();
+      renderShelf();
+    },
+  };
+}
