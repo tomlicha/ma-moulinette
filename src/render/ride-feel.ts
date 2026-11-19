@@ -58,13 +58,13 @@ export const STAND_GRADE_OFF = 5;
 /** Plage de cadence de la danseuse, en tr/min : on se lève en tirant sur un gros braquet, pas en moulinant. */
 export const STAND_CADENCE_MIN = 25;
 export const STAND_CADENCE_MAX = 75;
-export const STAND_CADENCE_OFF = 85;
+export const STAND_CADENCE_OFF = 65;
 /** Durée pendant laquelle les conditions doivent tenir avant de changer de position, en s. */
 export const STAND_HOLD_S = 2;
 
 /** Puissance lissée à partir de laquelle on se lève pour sprinter, et en dessous de laquelle on se rassoit, en part du FTP. */
 export const STAND_SPRINT_ON = 1.4;
-export const STAND_SPRINT_OFF = 1.1;
+export const STAND_SPRINT_OFF = 1.4;
 /** Délai pour se lever sur un pic de puissance : un sprint est bref, il ne faut pas le manquer. */
 export const STAND_SPRINT_HOLD_S = 0.5;
 /** Lissage de la puissance, en s : un pic de quelques coups de pédale compte, le bruit de mesure non. */
