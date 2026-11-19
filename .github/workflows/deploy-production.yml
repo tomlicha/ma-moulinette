@@ -57,11 +57,11 @@ jobs:
           fi
 
       # Toujours main, même si le workflow est lancé à la main depuis une autre branche.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.heure.outputs.go == 'true'
         with:
           ref: main
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.heure.outputs.go == 'true'
         with:
           node-version: 22
