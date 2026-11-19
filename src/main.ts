@@ -9,7 +9,7 @@ import { webBluetoothAvailable } from './infra/sensors/ble/gatt-device';
 import { browserUa, noBluetoothHint, noBluetoothStatus } from './infra/sensors/ble/bluetooth-support';
 // Vue 3D chargée à la demande (`buildView`) : three.js n'est pas dans le JS du lancement.
 import { chooseQuality } from './render/core/quality';
-import { setupGears } from './ui/ride/gears';
+import { GearsView } from './ui/ride/gears-view';
 import { RideExport } from './app/ride-export';
 import { browserExportPlatform, ExportButtons } from './ui/ride/export-buttons';
 import { setupTelemetry } from './infra/telemetry/wiring';
@@ -32,6 +32,7 @@ import { WorkoutSession } from './app/workout-session';
 import { DeviceManager } from './app/device-manager';
 import { AutoStart } from './app/auto-start';
 import { ManualControl } from './app/manual-control';
+import { VirtualGearbox } from './app/virtual-gearbox';
 import { RiderSettingsSync } from './app/rider-settings-sync';
 import { WorkoutCatalog } from './app/workout-catalog';
 import { SensorReadings } from './app/sensor-readings';
@@ -122,7 +123,7 @@ const rideSession = new RideSession({
   readings,
   grade,
   trainer: trainerCtl,
-  gearing: () => gears.state(),
+  gearing: () => gearbox.state(),
   riders: () => world.riders(),
 });
 /** La vue 3D : construite en tâche de fond dès l'ouverture, refaite après une perte du GPU. L'affichage s'y abonne plus bas. */
@@ -499,24 +500,34 @@ const router = setupRouter((v) => {
   if (v === 'seances') editor.sync();
 });
 
-const gears = setupGears({
-  prefs,
-  toggle: $<HTMLInputElement>('cog-toggle'),
-  ringRow: $('cog-ring-row'),
-  ring: $<HTMLInputElement>('cog-ring'),
-  shifter: $('ride-gears'),
-  up: $<HTMLButtonElement>('gear-up'),
-  down: $<HTMLButtonElement>('gear-down'),
-  out: $('gear-out'),
-  keysActive: () => router.current() === 'sortie' && !document.querySelector('dialog[open]'),
-  onChange: (s, why) => {
-    // Le changement doit se sentir tout de suite : la prochaine mise à jour de la sortie renvoie la pente sans attendre.
-    grade.setVirtualGears(s.enabled);
-    if (why === 'shift') log(`vitesse ${s.gear} (braquet ${s.virtualRatio.toFixed(2)})`);
-    else log(s.enabled ? `Zwift Cog : vitesses virtuelles actives, braquet réel ${s.realRatio.toFixed(2)}` : 'Zwift Cog : vitesses virtuelles coupées');
+/** Les vitesses virtuelles du Zwift Cog : la règle et la mémoire dans app/virtual-gearbox.ts, les boutons et le clavier dans GearsView. */
+const gearbox = new VirtualGearbox(prefs);
+const gearsView = new GearsView(
+  {
+    toggle: $<HTMLInputElement>('cog-toggle'),
+    ringRow: $('cog-ring-row'),
+    ring: $<HTMLInputElement>('cog-ring'),
+    shifter: $('ride-gears'),
+    up: $<HTMLButtonElement>('gear-up'),
+    down: $<HTMLButtonElement>('gear-down'),
+    out: $('gear-out'),
   },
+  {
+    setEnabled: (enabled) => gearbox.setEnabled(enabled),
+    setChainring: (teeth) => gearbox.setChainring(teeth),
+    shift: (by) => gearbox.shift(by),
+    keysActive: () => gearbox.state().enabled && router.current() === 'sortie' && !document.querySelector('dialog[open]'),
+  },
+);
+gearbox.on('changed', (s, why) => {
+  gearsView.render(s, gearbox.chainring);
+  // Le changement doit se sentir tout de suite : la prochaine mise à jour de la sortie renvoie la pente sans attendre.
+  grade.setVirtualGears(s.enabled);
+  if (why === 'shift') log(`vitesse ${s.gear} (braquet ${s.virtualRatio.toFixed(2)})`);
+  else log(s.enabled ? `Zwift Cog : vitesses virtuelles actives, braquet réel ${s.realRatio.toFixed(2)}` : 'Zwift Cog : vitesses virtuelles coupées');
 });
-if (gears.state().enabled) grade.setVirtualGears(true);
+gearsView.render(gearbox.state(), gearbox.chainring);
+if (gearbox.state().enabled) grade.setVirtualGears(true);
 
 /** Même radar sur l'écran Appareils (grand) et sur l'accueil (réduit) : rôle de l'appareil et nom réel dans chaque bulle. */
 const riderProfile = setupRiderProfile({
