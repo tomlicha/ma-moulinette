@@ -105,22 +105,6 @@ export function upcoming(
   return { items, rest: steps.length - j };
 }
 
-/** Dénivelé positif cumulé à partir des altitudes successives de la sortie. */
-export class ClimbCounter {
-  private last: number | undefined;
-  total = 0;
-
-  add(altitudeM: number) {
-    if (this.last !== undefined && altitudeM > this.last) this.total += altitudeM - this.last;
-    this.last = altitudeM;
-  }
-
-  reset() {
-    this.last = undefined;
-    this.total = 0;
-  }
-}
-
 /** Montée minimale pour qu'un haut compte comme un sommet, et descente qui le confirme, en m. */
 const SUMMIT_MIN_RISE_M = 8;
 const SUMMIT_DROP_M = 2;

@@ -14,7 +14,6 @@ import { Background } from './shared/util/background';
 import { chooseQuality } from './render/core/quality';
 import { setupGears } from './ui/ride/gears';
 import { DEFAULT_RIDER } from './domain/sim/physics';
-import { Ride } from './domain/sim/ride';
 import { setupExport } from './infra/export/wiring';
 import { setupTelemetry } from './infra/telemetry/wiring';
 import { COL_DES_ERABLES } from './domain/course/courses/col-des-erables';
@@ -33,6 +32,7 @@ import { setBlocked, setupBlockedHints, type BlockReason } from './ui/shared/blo
 import { setupRouter } from './ui/shared/router';
 import { normalizeFtp, normalizeMass } from './domain/sim/rider-limits';
 import { GradeController } from './app/grade-controller';
+import { RideSession } from './app/ride-session';
 import { SensorReadings } from './app/sensor-readings';
 import { SettingsStore } from './app/settings-store';
 import { TrainerController } from './app/trainer-controller';
@@ -54,10 +54,7 @@ import { setupAccount } from './ui/account/account-chip';
 import { WorldClient } from './infra/net/world-client';
 import { crowdLine, RiderTags } from './ui/ride/rider-tags';
 import { RidePanel } from './ui/ride/ride-panel';
-import { draftFrom } from './domain/sim/draft';
 import { controlModes } from './ui/ride/radar-model';
-import { ClimbCounter } from './ui/ride/hud-model';
-import type { RideSnapshot } from './domain/sim/ride';
 import { blocksToWorkout } from './domain/workout/blocks';
 import { BlockLibrary } from './domain/workout/block-library';
 import { WorkoutLibrary } from './domain/workout/library';
@@ -139,12 +136,15 @@ const grade = new GradeController();
 const trainerCtl = new TrainerController({ hub, grade, log });
 /** Le trajet de la page : la simulation, la vue 3D et le HUD le partagent ; il repart du village à chaque sortie. */
 const journey = new Journey(COL_DES_ERABLES);
-let ride: Ride | undefined;
-let rideTimer: ReturnType<typeof setInterval> | undefined;
-let lastTick = 0;
-/** Dénivelé positif de la sortie, pour le HUD. */
-const climb = new ClimbCounter();
-let lastRide: RideSnapshot | undefined;
+/** La sortie virtuelle : son cycle de vie et son pas de 100 ms. Le reste de la page s'abonne à ses événements. */
+const rideSession = new RideSession({
+  journey,
+  readings,
+  grade,
+  trainer: trainerCtl,
+  gearing: () => gears.state(),
+  riders: () => world.riders(),
+});
 let lastWoState: WorkoutState | undefined;
 let view: RideView | undefined;
 /** Construction du monde 3D, en tâche de fond dès l'ouverture : elle ne presse que si l'on ouvre la sortie avant la fin. */
@@ -171,7 +171,7 @@ const telemetry = setupTelemetry({
       capabilities: dev?.capabilities,
       trainerIdentity: dev instanceof WebBluetoothTrainer ? dev.identity : undefined,
       heartRateState: roleState.hr,
-      rideRunning: !!ride,
+      rideRunning: rideSession.active,
     };
   },
 });
@@ -211,20 +211,20 @@ function setState(s: ConnectionState, detail?: string) {
       ? needTrainer('Connecte d’abord ton home trainer pour lui imposer une pente.')
       : !trainerCtl.capabilities?.simulation
         ? noControl('mode SIM')
-        : ride
+        : rideSession.active
           ? 'Pendant la sortie virtuelle, la pente vient du parcours. Arrête la sortie pour régler la pente à la main.'
           : undefined,
   );
   // La puissance seule suffit à rouler : la pente n'est envoyée que si le trainer sait la simuler.
-  const needPowerToRide = connected || ride ? undefined : needTrainer('La sortie avance avec la puissance de ton home trainer : connecte-le d’abord.');
+  const needPowerToRide = connected || rideSession.active ? undefined : needTrainer('La sortie avance avec la puissance de ton home trainer : connecte-le d’abord.');
   setBlocked(rideBtn, needPowerToRide);
   setBlocked(homeRideBtn, needPowerToRide);
   refreshWorkoutButtons();
-  if (s === 'connected') resumeRide();
+  if (s === 'connected') rideSession.resume();
   else {
     // Trainer perdu (écran en veille, montre qui prend le relais…) : la sortie est mise en pause, pas détruite, et
     // l'adaptateur retente la connexion tout seul (essais rapprochés, puis attente de son signal).
-    pauseRide();
+    rideSession.pause();
     trainerCtl.setErgActive(false);
   }
   const dev = trainerCtl.device;
@@ -269,14 +269,14 @@ hub.on('raw', (src, data) => {
  */
 let autoStart = false;
 /** Ne s'arme que si rien ne tourne : revenir sur l'écran en pleine sortie ne doit pas lancer une séance. */
-const armAutoStart = () => (autoStart = !ride && !runner);
+const armAutoStart = () => (autoStart = !rideSession.active && !runner);
 function maybeAutoStart(m: { powerW?: number; cadenceRpm?: number }) {
   if (!autoStart || runner || router.current() !== 'sortie') return;
   if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
   if (workout && !workoutStartBlock()) {
     log('premier coup de pédale : démarrage de la séance');
     startWorkout();
-  } else if (!ride && trainerCtl.connected) {
+  } else if (!rideSession.active && trainerCtl.connected) {
     log('premier coup de pédale : démarrage de la sortie');
     startRide();
   }
@@ -289,61 +289,6 @@ hub.on('measurement', (m) => {
 
 const fmtTime = (s: number) => formatDuration(Math.floor(s));
 
-/** Part de la traînée de l'air épargnée en ce moment par l'aspiration derrière un autre coureur (0 : seul). */
-let currentDraft = 0;
-
-/** Aspiration derrière les coureurs que la salle montre : recalculé à chaque pas, avec la position du coureur local. */
-function updateDraft(distanceM: number) {
-  const others = world.riders();
-  if (!ride || others.length === 0) {
-    currentDraft = 0;
-    ride?.setDraft(0);
-    return;
-  }
-  const me = journey.pointAt(distanceM);
-  const leaders = others.map((r) => ({ x: r.point.x, z: r.point.z, heading: r.point.heading, speedMs: r.speedMs, riding: r.riding }));
-  currentDraft = draftFrom({ x: me.x, z: me.z, heading: me.heading }, leaders).reduction;
-  ride.setDraft(currentDraft);
-}
-
-function tickRide() {
-  if (!ride) return;
-  const now = performance.now();
-  const power = readings.powerW();
-  updateDraft(lastRide?.distanceM ?? 0);
-  const s = ride.advance((now - lastTick) / 1000, power);
-  exporter.onRide(s);
-  lastTick = now;
-  lastRide = s;
-  climb.add(s.altitudeM);
-  view?.setState({
-    distanceM: s.distanceM,
-    speedKmh: s.speedKmh,
-    cadenceRpm: readings.cadenceRpm(),
-    powerW: power,
-    ftpW: readFtp(),
-  });
-  world.update({
-    pos: journey.locate(s.distanceM),
-    speedMs: s.speedKmh / 3.6,
-    powerW: power,
-    cadenceRpm: readings.cadenceRpm(),
-    riding: true,
-  });
-
-  const command = grade.update({
-    nowMs: now,
-    courseGradePct: s.gradePct,
-    speedMs: s.speedKmh / 3.6,
-    cadenceRpm: readings.liveCadenceRpm(),
-    rider: ride.rider,
-    gearing: gears.state(),
-    trainerAppliesGears: !!trainerCtl.capabilities?.virtualGears,
-    canSimulate: trainerCtl.canSimulate,
-  });
-  if (command) trainerCtl.sendCourseGrade(command);
-}
-
 // Écran allumé tant qu'on est sur l'application, quel que soit l'écran : pendant une séance ERG, on ne touche pas l'écran.
 const keepAwake = createKeepAwake({
   native: isNativeShell() ? Moulinette : undefined,
@@ -355,60 +300,47 @@ void keepAwake.set(true);
 
 function startRide() {
   autoStart = false;
-  const massKg = Number(massInput.value) || DEFAULT_RIDER.massKg;
-  journey.setCourse(coursePicker.selected()); // la sortie repart du départ du parcours choisi, sans choix de carrefour en mémoire
-  ride = new Ride(journey, { ...DEFAULT_RIDER, massKg });
-  lastRide = ride.snapshot();
-  climb.reset();
-  grade.reset();
-  lastTick = performance.now();
-  rideTimer = setInterval(tickRide, 100);
+  rideSession.start(Number(massInput.value) || DEFAULT_RIDER.massKg, coursePicker.selected());
+}
+
+function stopRide(resetTrainer = true) {
+  rideSession.stop(resetTrainer);
+}
+
+/** Le cycliste à l'arrêt (sortie en pause ou terminée) : la vue et la salle le voient immobile à sa place. */
+function showRiderStill(distanceM: number) {
+  view?.setState({ distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
+  world.update({ pos: journey.locate(distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
+}
+
+rideSession.on('started', (massKg) => {
   rideBtn.textContent = 'Arrêter la sortie';
   massInput.readOnly = true;
   massInput.title = 'La masse se règle avant de démarrer la sortie.';
   setState(trainerCtl.state, trainerCtl.name);
   log(`sortie virtuelle démarrée (${massKg} kg)`);
-}
-
-/** Sortie en pause faute de trainer : position et vitesse gardées, reprises à la reconnexion. */
-let ridePaused = false;
-
-function pauseRide() {
-  if (!ride || ridePaused) return;
-  ridePaused = true;
-  clearInterval(rideTimer);
-  view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
-  world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
+});
+rideSession.on('tick', ({ snapshot: s, powerW, cadenceRpm }) => {
+  exporter.onRide(s);
+  view?.setState({ distanceM: s.distanceM, speedKmh: s.speedKmh, cadenceRpm, powerW, ftpW: readFtp() });
+  world.update({ pos: journey.locate(s.distanceM), speedMs: s.speedKmh / 3.6, powerW, cadenceRpm, riding: true });
+});
+rideSession.on('paused', (distanceM) => {
+  showRiderStill(distanceM);
   log('trainer perdu : sortie en pause, elle reprend à la reconnexion');
-}
-
-function resumeRide() {
-  if (!ride || !ridePaused) return;
-  ridePaused = false;
-  grade.reset(); // le trainer reconnecté repart de zéro : on lui renvoie la pente
-  lastTick = performance.now();
-  rideTimer = setInterval(tickRide, 100);
-  log('trainer reconnecté : sortie reprise');
-}
-
-function stopRide(resetTrainer = true) {
-  if (!ride) return;
-  clearInterval(rideTimer);
-  ridePaused = false;
-  trainerCtl.setErgActive(false);
-  view?.setState({ distanceM: ride.snapshot().distanceM, speedKmh: 0, cadenceRpm: 0, powerW: 0, ftpW: 0 });
-  world.update({ pos: journey.locate(ride.snapshot().distanceM), speedMs: 0, powerW: 0, cadenceRpm: 0, riding: false }, true);
-  ride = undefined;
+});
+rideSession.on('resumed', () => log('trainer reconnecté : sortie reprise'));
+rideSession.on('stopped', (distanceM) => {
+  showRiderStill(distanceM);
   rideBtn.textContent = 'Démarrer la sortie';
   massInput.readOnly = false;
   massInput.title = '';
   log('sortie virtuelle arrêtée');
-  if (resetTrainer) trainerCtl.resetToFlat();
   setState(trainerCtl.state, trainerCtl.name);
-}
+});
 
 rideBtn.addEventListener('click', () => {
-  if (!ride) return startRide();
+  if (!rideSession.active) return startRide();
   stopRide();
   // Arrêt volontaire, hors séance : la sortie est figée et son récapitulatif s'affiche (docs/design/recap.md).
   if (runner) return;
@@ -463,7 +395,7 @@ ergBtn.addEventListener('click', async () => {
       woErgOptOut = true;
       log('ERG désengagé : la séance continue sans imposer de consigne');
     }
-    if (ride) {
+    if (rideSession.active) {
       log("ERG désengagé : pente du parcours reprise");
     } else {
       // Hors sortie, le trainer ne quitte l'ERG qu'avec une consigne de pente.
@@ -539,7 +471,7 @@ const coursePicker = setupCoursePicker({
     $('home-desc').textContent = course.description;
     homeBackground.show(COL_DES_ERABLES.courses.indexOf(course));
     courseMap.show(course);
-    if (!ride) {
+    if (!rideSession.active) {
       journey.setCourse(course.id);
       if (courseUiReady) hud.refreshRoute();
     }
@@ -696,12 +628,13 @@ function chooseWorkout(value: string) {
 function renderWorkout(s: WorkoutState | undefined) {
   lastWoState = s;
   // Porte du palier suivant, dans la scène 3D (docs/design/hud.md) : seulement en séance, sortie en cours.
-  view?.setGate(runner && s && ride && lastRide ? nextIntervalGate(s, runner.ftpW, lastRide.speedKmh, woPaused) : undefined);
+  const live = rideSession.snapshot;
+  view?.setGate(runner && s && live ? nextIntervalGate(s, runner.ftpW, live.speedKmh, woPaused) : undefined);
 }
 
 /** Relâche l'ERG pris par la séance : hors sortie virtuelle, le trainer ne le quitte qu'avec une consigne de pente. */
 function releaseErg(reason: string) {
-  trainerCtl.releaseErg(reason, { rideActive: !!ride, gradePct: Number(gradeInput.value) });
+  trainerCtl.releaseErg(reason, { rideActive: rideSession.active, gradePct: Number(gradeInput.value) });
 }
 
 function tickWorkout() {
@@ -751,7 +684,7 @@ function startWorkout() {
   if (!workout) return;
   autoStart = false;
   // La séance se roule sur le parcours : sans sortie en cours, le cycliste resterait immobile dans la vue.
-  if (!ride && trainerCtl.connected) startRide();
+  if (!rideSession.active && trainerCtl.connected) startRide();
   runner = new WorkoutRunner(workout, readFtp());
   woPaused = false;
   woErgOptOut = false;
@@ -785,7 +718,7 @@ homeWoStart.addEventListener('click', () => {
 });
 // « Rouler » : une sortie déjà en cours se reprend ; sinon on choisit le parcours, puis « Partir » lance la sortie.
 homeRideBtn.addEventListener('click', () => {
-  if (ride) {
+  if (rideSession.active) {
     router.go('sortie');
     return;
   }
@@ -878,7 +811,7 @@ const recap = setupRecap($<HTMLDialogElement>('recap'), {
   // Un envoi programmé est déjà parti avec la sortie figée ; sinon, l'export suivant couvrira toute la sortie.
   onContinue: () => {
     exporter.releaseFrozen();
-    if (!ride && trainerCtl.connected) startRide();
+    if (!rideSession.active && trainerCtl.connected) startRide();
   },
   onFinish: () => {
     stopRide();
@@ -1097,7 +1030,7 @@ function offerRecap(done?: { workout: Workout; ftpW: number }) {
     startMs: rec.startMs,
     defaultName: exporter.defaultName(),
     strava: exporter.strava(),
-    rideRunning: !!ride,
+    rideRunning: rideSession.active,
   });
   log(`récapitulatif : ${Math.round(rec.timerS)} s, Strava ${exporter.strava()}`);
 }
@@ -1117,28 +1050,29 @@ const quality = chooseQuality(params.get('quality'), matchMedia('(pointer: coars
 const hud = new RideHud($('hud'), journey, { flat: quality === 'low' });
 function renderHud() {
   if (router.current() !== 'sortie') return;
+  const live = rideSession.snapshot; // la sortie en cours ; `undefined` hors sortie
   hud.update({
     powerW: readings.averagePowerW(),
     heartRateBpm: readings.heartRateBpm(),
     cadenceRpm: readings.liveCadenceRpm(),
     // Pendant la sortie, la vitesse virtuelle (celle qui fait avancer la vue) ; sinon celle mesurée par le trainer.
-    speedKmh: ride && lastRide ? lastRide.speedKmh : readings.speedKmh(),
+    speedKmh: live ? live.speedKmh : readings.speedKmh(),
     ftpW: runner?.ftpW ?? readFtp(),
-    ride: ride && lastRide ? { snapshot: lastRide, climbM: climb.total } : undefined,
+    ride: live ? { snapshot: live, climbM: rideSession.climbM } : undefined,
     workout: runner && lastWoState ? { workout: runner.workout, state: lastWoState, ftpW: runner.ftpW, intensity: runner.intensity } : undefined,
     message: runner ? lastWoState?.message : undefined,
-    control: trainerCtl.ergActive ? 'erg' : ride && trainerCtl.capabilities?.simulation ? 'sim' : undefined,
+    control: trainerCtl.ergActive ? 'erg' : live && trainerCtl.capabilities?.simulation ? 'sim' : undefined,
     trainerConnected: roleState.trainer === 'connected',
     heartRateConnected: roleState.hr === 'connected',
-    ...(ride && lastRide ? { junction: journey.pendingJunction(lastRide.distanceM) } : {}),
+    ...(live ? { junction: journey.pendingJunction(live.distanceM) } : {}),
   });
   // Encart : la carte suit le coureur ; elle passe seule au premier plan 250 m avant un carrefour (docs/design/sortie.md).
-  const at = ride && lastRide ? lastRide.distanceM : 0;
+  const at = live ? live.distanceM : 0;
   ridePanel.update({
     distanceM: at,
-    pending: ride && lastRide ? journey.pendingJunction(at) : undefined,
+    pending: live ? journey.pendingJunction(at) : undefined,
     // Sur la piste d'un vélodrome : la touche de sortie remplace le panneau « Carrefour » de chaque tour.
-    trackExit: ride && lastRide && journey.onTrack(at) ? { armed: journey.trackExitArmed, inM: journey.trackExitInM(at) } : undefined,
+    trackExit: live && journey.onTrack(at) ? { armed: journey.trackExitArmed, inM: journey.trackExitInM(at) } : undefined,
   });
 }
 setInterval(renderHud, 250);
@@ -1152,13 +1086,14 @@ document.addEventListener('keydown', (e) => {
   if (t instanceof HTMLElement && t.closest('input, select, textarea, [contenteditable]')) return;
   const by = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
   // Sur la piste : flèche droite, sortir à la prochaine porte ; flèche gauche, rester sur la piste.
-  if (by && ride && lastRide && journey.onTrack(lastRide.distanceM)) {
+  const live = rideSession.snapshot;
+  if (by && live && journey.onTrack(live.distanceM)) {
     e.preventDefault();
     journey.setTrackExit(by > 0);
     renderHud();
     return;
   }
-  const p = by && ride && lastRide ? journey.pendingJunction(lastRide.distanceM) : undefined;
+  const p = by && live ? journey.pendingJunction(live.distanceM) : undefined;
   if (!by || !p) return;
   e.preventDefault();
   if (journey.choose(Math.min(p.options.length - 1, Math.max(0, p.selected + by)))) renderHud();
@@ -1197,7 +1132,7 @@ async function buildView() {
   v.onLost = onGpuLost;
   v.setOthers(() => world.riders());
   v.onTags = (tags) => riderTags.set(tags);
-  v.onNearby = (n) => ridePanel.setNearby(n, ride ? currentDraft : 0);
+  v.onNearby = (n) => ridePanel.setNearby(n, rideSession.active ? rideSession.draft : 0);
   v.onStats = (s) => {
     $('view-stats').textContent =
       `${s.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · ${s.fps.toFixed(0)} i/s · ` +

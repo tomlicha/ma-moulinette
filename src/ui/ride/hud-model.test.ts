@@ -4,7 +4,6 @@ import { Journey } from '../../domain/sim/journey';
 import { DEMO_ROUTE, Route } from '../../domain/course/route';
 import type { StepKind, WorkoutStep } from '../../domain/workout/model';
 import {
-  ClimbCounter,
   findSeries,
   fmt1,
   junctionLabel,
@@ -17,17 +16,6 @@ import {
   upcoming,
   zoneLabel,
 } from './hud-model';
-
-describe('ClimbCounter', () => {
-  it('ne cumule que les montées', () => {
-    const c = new ClimbCounter();
-    for (const a of [100, 105, 103, 110, 90]) c.add(a);
-    expect(c.total).toBe(12);
-    c.reset();
-    c.add(50);
-    expect(c.total).toBe(0);
-  });
-});
 
 describe('sommets', () => {
   it('compte jusqu’au prochain sommet, tour suivant compris', () => {
