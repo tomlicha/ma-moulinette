@@ -260,6 +260,26 @@ describe('EditorSession', () => {
       expect(session.draft!.blocks).toHaveLength(3);
     });
 
+    it('déplace un bloc et le sélectionne, en une seule entrée d\'historique', () => {
+      const { session } = setup();
+      session.open(draft());
+      const [a, b, c] = session.draft!.blocks;
+      session.moveBlock(0, 2);
+      expect(session.draft!.blocks).toEqual([b, c, a]);
+      expect(session.selected).toBe(2);
+      session.undo();
+      expect(session.draft!.blocks).toEqual([a, b, c]);
+    });
+
+    it('déplacer un bloc à sa propre place ne change rien', () => {
+      const { session, events } = setup();
+      session.open(draft());
+      events.length = 0;
+      session.moveBlock(1, 1);
+      expect(events).toEqual([]);
+      expect(session.history.canUndo).toBe(false);
+    });
+
     it('annule et rétablit, sans rien faire quand il n\'y a rien à annuler ou rétablir', () => {
       const { session, events } = setup();
       session.open(draft());

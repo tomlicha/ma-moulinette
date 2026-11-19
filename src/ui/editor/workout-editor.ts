@@ -11,18 +11,19 @@ import {
 } from '../../domain/workout/blocks';
 import { blockIndexAt, blockRanges, blockShort, describeBlock, nudgeDuration, nudgePower, splitIntervals } from '../../domain/workout/block-ops';
 import { EditorSession, type EditorDraft } from '../../app/editor-session';
-import type { BlockLibrary, SavedBlock } from '../../domain/workout/block-library';
+import type { BlockLibrary } from '../../domain/workout/block-library';
 import type { SavedWorkout, WorkoutLibrary } from '../../domain/workout/library';
 import { targetWatts, type Workout } from '../../domain/workout/model';
 import { profilePeakW, profileShapes, zoneOf, type Zone } from '../../domain/workout/profile';
-import { BLOCK_PRESETS, ZONE_PRESETS, blankPresets, PRESET_CATEGORIES, summarizeBlocks, type PresetCategory } from '../../domain/workout/presets';
 import { SAMPLE_WORKOUTS } from '../../domain/workout/samples';
 import { effortSeconds, intensityWord, timeInZones, ZONES, zoneName, zoneReading, type ZoneTimes } from '../../domain/workout/zones';
 import { setBlocked, type BlockReason } from '../shared/blocked';
 import './seances.css';
 import { formatDuration, parseDuration } from '../shared/duration';
+import { BlockMover } from './block-mover';
+import { BlockShelf } from './block-shelf';
+import { download, el, fmtLong, fold, isElsewhere, isTyping, miniProfile as miniProfileSvg, pct, slug, svg } from './dom';
 
-const SVG = 'http://www.w3.org/2000/svg';
 const W = 1000;
 const H = 120;
 const POWER_STEP = 0.05;
@@ -47,38 +48,6 @@ export interface EditorOptions {
   /** Pourquoi on ne peut pas rouler maintenant (pas de trainer, séance déjà en cours), sinon `undefined`. */
   rideBlock: () => string | BlockReason | undefined;
 }
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<HTMLElementTagNameMap[K]> = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  Object.assign(e, props);
-  e.append(...children);
-  return e;
-}
-
-function svg(tag: string, attrs: Record<string, string | number>): SVGElement {
-  const e = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  return e;
-}
-
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/xml' }));
-  el('a', { href: url, download: name }).click();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
-}
-
-const slug = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'seance';
-
-const pct = (fraction: number) => Math.round(fraction * 100);
-const fmtLong = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}` : formatDuration(s));
-const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('input, textarea, select, dialog[open]');
-/** Bibliothèque et navigation ont leurs propres touches : les flèches et Suppr n'y touchent pas aux blocs. */
-const isElsewhere = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('.sea-lib, .home-top, .ed-shelf');
 
 /**
  * Écran « Séances » : bibliothèque (mes séances, modèles, import) et éditeur à profil direct, sur le même écran
@@ -120,7 +89,6 @@ export function setupWorkoutEditor(o: EditorOptions) {
 
   /** Clé d'une séance ouverte : `lib:<id>` (enregistrée) ou `sample:<id>` (modèle) ; rien pour un brouillon. */
   const keyOf = (d: Draft | undefined = session.draft) => session.keyOf(d);
-  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
   /** Message dans la bibliothèque (le journal est masqué sur cet écran) : import refusé, enregistrement impossible. */
   function say(msg?: string) {
@@ -144,11 +112,7 @@ export function setupWorkoutEditor(o: EditorOptions) {
   const sampleWorkout = (id: string) => session.sampleWorkout(id);
 
   /** Aperçu du profil d'une séance (mêmes couleurs de zones que l'éditeur), pour sa ligne dans la bibliothèque. */
-  function miniProfile(w: Workout, cls = 'lib-mini') {
-    const root = svg('svg', { class: cls, viewBox: '0 0 100 40', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
-    for (const s of profileShapes(w, ftp(), 100, 40)) root.append(svg('path', { d: s.d, class: s.zone }));
-    return root;
-  }
+  const miniProfile = (w: Workout, cls = 'lib-mini') => miniProfileSvg(w, ftp(), cls);
 
   function libRow(key: string, w: Workout, meta: string, pressed: boolean, onPick?: () => void, onRemove?: () => void) {
     const main = el(
@@ -218,7 +182,6 @@ export function setupWorkoutEditor(o: EditorOptions) {
   const open = (d: Draft, unsaved = false) => session.open(d, unsaved);
   const commit = (change: (blocks: EditorBlock[]) => EditorBlock[], nextSelected?: number) => session.commit(change, nextSelected);
   const updateSelected = (f: (b: EditorBlock) => EditorBlock) => session.updateSelected(f);
-  const addBlocks = (blocks: EditorBlock[], at: number) => session.addBlocks(blocks, at);
   const select = (i: number) => session.select(i);
   const undo = () => session.undo();
   const redo = () => session.redo();
@@ -427,188 +390,11 @@ export function setupWorkoutEditor(o: EditorOptions) {
     $('bb-handle').hidden = blocks.length < 2;
   }
 
-  // --- Étagère de blocs préfaits (docs/design/seances.md, piste S) ---
+  // --- Étagère de blocs préfaits : onglets, cartes, « Mes blocs », glisser sur le profil (block-shelf.ts) ---
 
-  type ShelfTab = 'all' | PresetCategory | 'zones' | 'blank' | 'mine';
-  interface ShelfItem {
-    id: string;
-    name: string;
-    blocks: EditorBlock[];
-    mine?: SavedBlock;
-  }
-  let shelfTab: ShelfTab = 'all';
-  let shelfItemsNow: ShelfItem[] = [];
-  const shelfTabsEl = $('sh-tabs');
-  const shelfCardsEl = $('sh-cards');
-
-  function shelfItems(): ShelfItem[] {
-    if (shelfTab === 'blank') return blankPresets();
-    if (shelfTab === 'zones') return ZONE_PRESETS;
-    if (shelfTab === 'mine') return o.blocks.list().map((b) => ({ id: b.id, name: b.name, blocks: b.blocks, mine: b }));
-    return BLOCK_PRESETS.filter((p) => shelfTab === 'all' || p.category === shelfTab);
-  }
-
-  /** Reconstruit les onglets et les cartes : à l'ouverture d'une séance, au changement d'onglet, de « Mes blocs » ou de FTP. */
-  function renderShelf() {
-    const ro = !!session.draft?.readOnly;
-    const tab = (id: ShelfTab, label: string, zone?: string) => {
-      const b = el('button', { type: 'button', className: 'sh-tab' });
-      if (zone) {
-        const dot = el('i');
-        dot.style.background = `var(--${zone})`;
-        b.append(dot);
-      }
-      b.append(label);
-      b.setAttribute('aria-pressed', String(shelfTab === id));
-      b.addEventListener('click', () => {
-        shelfTab = id;
-        shelfCardsEl.scrollLeft = 0;
-        renderShelf();
-      });
-      return b;
-    };
-    shelfTabsEl.replaceChildren(tab('all', 'Tous'), tab('zones', 'Par zone'), ...PRESET_CATEGORIES.map((c) => tab(c.id, c.name, c.zone)), tab('blank', 'Vierges'), tab('mine', '★ Mes blocs'));
-
-    shelfItemsNow = shelfItems();
-    const cards = shelfItemsNow.map((item, i) => {
-      const sum = summarizeBlocks(item.blocks);
-      const meta = `${fmtLong(sum.durationS)}${sum.power !== undefined ? ` · ${pct(sum.power)} %` : ''}`;
-      const card = el(
-        'button',
-        { type: 'button', className: 'sh-card' },
-        el('span', { className: 'sh-grip' }),
-        miniProfile(blocksToWorkout('x', undefined, item.blocks), 'sh-mini'),
-        el('span', { className: 'sh-text' }, el('strong', { textContent: item.name }), el('small', { textContent: meta })),
-      );
-      card.dataset.i = String(i);
-      card.title = `${item.name} : toucher pour l’ajouter après le bloc sélectionné, ou glisser sur le profil`;
-      if (ro) setBlocked(card, 'Un modèle est en lecture seule : duplique-le pour le modifier.');
-      else
-        card.addEventListener('click', () => {
-          if (justDraggedCard || !session.draft) return;
-          addBlocks(item.blocks, session.draft.blocks.length ? session.selected + 1 : 0);
-        });
-      const wrap = el('div', { className: 'sh-item' }, card);
-      if (item.mine) {
-        const mine = item.mine;
-        const del = el('button', { type: 'button', className: 'sh-del', textContent: '✕', title: 'Retirer de Mes blocs' });
-        del.setAttribute('aria-label', `Retirer « ${mine.name} » de Mes blocs`);
-        del.addEventListener('click', () => {
-          if (!confirm(`Retirer le bloc « ${mine.name} » de Mes blocs ?`)) return;
-          o.blocks.remove(mine.id);
-          renderShelf();
-        });
-        wrap.append(del);
-      }
-      return wrap;
-    });
-    shelfCardsEl.replaceChildren(
-      ...(cards.length ? cards : [el('p', { className: 'sh-empty', textContent: 'Aucun bloc ici : « Enregistrer comme bloc », dans le menu du bloc, le range sur l’étagère.' })]),
-    );
-  }
-
-  /** Range le bloc sélectionné dans « Mes blocs » et ouvre cet onglet. */
-  function saveAsBlock(b: EditorBlock) {
-    const name = prompt('Nom du bloc', `${BLOCK_LABEL[b.type]} ${blockShort(b)}`);
-    if (name === null) return;
-    try {
-      o.blocks.save(name, [b]);
-      o.log(`bloc enregistré : ${name.trim() || 'Bloc sans nom'}`);
-      shelfTab = 'mine';
-      shelfCardsEl.scrollLeft = 0;
-      renderShelf();
-    } catch (e) {
-      say(`enregistrement du bloc impossible (stockage du navigateur plein ou bloqué) : ${e instanceof Error ? e.message : e}`);
-    }
-  }
-
-  // Glisser une carte sur le profil : un cadre en pointillés la suit, un repère montre où elle tombera ; la lâcher ailleurs annule.
-  interface CardDrag {
-    blocks: EditorBlock[];
-    startX: number;
-    startY: number;
-    pointerId: number;
-    mouse: boolean;
-    active: boolean;
-    inside: boolean;
-    at: number;
-    el: HTMLElement;
-    ghostW: number;
-    width: number;
-    ranges: { start: number; end: number }[];
-    total: number;
-    ghost?: HTMLElement;
-    line?: HTMLElement;
-  }
-  let cardDrag: CardDrag | undefined;
-  let justDraggedCard = false;
-
-  shelfCardsEl.addEventListener('pointerdown', (e) => {
-    const card = (e.target as HTMLElement).closest<HTMLElement>('.sh-card');
-    if (!card || !session.draft || session.draft.readOnly || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    const item = shelfItemsNow[Number(card.dataset.i)];
-    if (!item) return;
-    const total = workout().steps.reduce((t, st) => t + st.durationS, 0) || 1;
-    const width = plot.clientWidth;
-    cardDrag = {
-      blocks: item.blocks,
-      startX: e.clientX,
-      startY: e.clientY,
-      pointerId: e.pointerId,
-      mouse: e.pointerType === 'mouse',
-      active: false,
-      inside: false,
-      at: session.draft.blocks.length,
-      el: card,
-      ghostW: Math.max(28, Math.min(width * 0.5, (summarizeBlocks(item.blocks).durationS / total) * width)),
-      width,
-      ranges: blockRanges(session.draft.blocks),
-      total,
-    };
-  });
-  shelfCardsEl.addEventListener('pointermove', (e) => {
-    const d = cardDrag;
-    if (!d || e.pointerId !== d.pointerId) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
-    if (!d.active) {
-      // Au doigt, un geste horizontal fait défiler l'étagère : on ne saisit la carte qu'en la tirant vers le haut.
-      const start = d.mouse ? Math.hypot(dx, dy) > 6 : dy < -8 && Math.abs(dy) > Math.abs(dx);
-      if (!start) return;
-      d.active = true;
-      d.el.setPointerCapture?.(e.pointerId);
-      d.ghost = el('div', { className: 'dd-ghost' });
-      d.line = el('div', { className: 'dd-line' });
-      d.ghost.style.width = `${d.ghostW}px`;
-      plot.append(d.ghost, d.line);
-      overlay.style.visibility = 'hidden';
-    }
-    const r = plot.getBoundingClientRect();
-    d.inside = e.clientY >= r.top - 24 && e.clientY <= r.bottom + 24 && e.clientX >= r.left - 12 && e.clientX <= r.right + 12;
-    d.ghost!.hidden = d.line!.hidden = !d.inside;
-    const px = (sec: number) => (sec / d.total) * d.width;
-    const x = Math.max(0, Math.min(d.width, e.clientX - r.left));
-    d.ghost!.style.left = `${Math.max(0, Math.min(d.width - d.ghostW, x - d.ghostW / 2))}px`;
-    // Place visée : autant de blocs que de milieux déjà franchis.
-    d.at = d.ranges.filter((b) => px((b.start + b.end) / 2) < x).length;
-    const edge = d.ranges.length ? (d.at < d.ranges.length ? px(d.ranges[d.at]!.start) : px(d.ranges[d.ranges.length - 1]!.end)) : 0;
-    d.line!.style.left = `${edge}px`;
-  });
-  const endCardDrag = (e: PointerEvent) => {
-    const d = cardDrag;
-    if (!d || e.pointerId !== d.pointerId) return;
-    cardDrag = undefined;
-    d.el.releasePointerCapture?.(e.pointerId);
-    overlay.style.visibility = '';
-    d.ghost?.remove();
-    d.line?.remove();
-    if (!d.active) return; // un simple appui : le clic ajoute après le bloc sélectionné
-    justDraggedCard = true;
-    setTimeout(() => (justDraggedCard = false));
-    if (e.type === 'pointerup' && d.inside) addBlocks(d.blocks, d.at);
-  };
-  shelfCardsEl.addEventListener('pointerup', endCardDrag);
-  shelfCardsEl.addEventListener('pointercancel', endCardDrag);
+  const shelf = new BlockShelf({ session, blocks: o.blocks, ftp, log: o.log, say, plot, overlay });
+  const renderShelf = () => shelf.render();
+  const saveAsBlock = (b: EditorBlock) => shelf.saveAsBlock(b);
 
   /**
    * Téléphone : la barre du bloc sélectionné monte dans l'en-tête, à côté du titre, et l'étagère occupe le bas.
@@ -621,88 +407,9 @@ export function setupWorkoutEditor(o: EditorOptions) {
   }
   PHONE.addEventListener('change', placeBar);
 
-  // --- Déplacer un bloc : on tient la poignée de la barre et on la fait glisser sur le profil ---
+  // --- Déplacer un bloc : on tient la poignée de la barre et on la fait glisser sur le profil (block-mover.ts) ---
 
-  interface BlockDrag {
-    from: number;
-    to: number;
-    startX: number;
-    pointerId: number;
-    active: boolean;
-    width: number;
-    ranges: { start: number; end: number }[];
-    total: number;
-    ghost?: HTMLElement;
-    line?: HTMLElement;
-  }
-  let drag: BlockDrag | undefined;
-  const handleEl = $('bb-handle');
-  const DRAG_THRESHOLD_PX = 4;
-
-  /** Place le bloc `from` à l'indice `to` et le sélectionne : une seule entrée d'historique. */
-  function moveBlock(from: number, to: number) {
-    if (from === to) return;
-    commit((bs) => {
-      const c = [...bs];
-      const [m] = c.splice(from, 1);
-      c.splice(to, 0, m!);
-      return c;
-    }, to);
-  }
-
-  handleEl.addEventListener('pointerdown', (e) => {
-    if (!session.draft || session.draft.readOnly || session.draft.blocks.length < 2 || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    e.preventDefault();
-    const w = workout();
-    drag = {
-      from: session.selected,
-      to: session.selected,
-      startX: e.clientX,
-      pointerId: e.pointerId,
-      active: false,
-      width: plot.clientWidth,
-      ranges: blockRanges(session.draft.blocks),
-      total: w.steps.reduce((t, s) => t + s.durationS, 0) || 1,
-    };
-    handleEl.setPointerCapture?.(e.pointerId);
-  });
-  handleEl.addEventListener('pointermove', (e) => {
-    const d = drag;
-    if (!d || e.pointerId !== d.pointerId) return;
-    const dx = e.clientX - d.startX;
-    if (!d.active) {
-      if (Math.abs(dx) < DRAG_THRESHOLD_PX) return;
-      d.active = true;
-      handleEl.classList.add('dragging');
-      d.ghost = el('div', { className: 'dd-ghost' });
-      d.line = el('div', { className: 'dd-line' });
-      plot.append(d.ghost, d.line);
-      overlay.style.visibility = 'hidden'; // les capsules du bloc reviennent au dépôt
-    }
-    const px = (s: number) => (s / d.total) * d.width;
-    const me = d.ranges[d.from]!;
-    const left = Math.max(0, Math.min(d.width - (px(me.end) - px(me.start)), px(me.start) + dx));
-    d.ghost!.style.left = `${left}px`;
-    d.ghost!.style.width = `${px(me.end) - px(me.start)}px`;
-    // Place visée : autant de blocs que de milieux franchis par le centre du bloc tenu.
-    const centre = left + (px(me.end) - px(me.start)) / 2;
-    const others = d.ranges.filter((_, i) => i !== d.from);
-    d.to = others.filter((r) => px((r.start + r.end) / 2) < centre).length;
-    d.line!.style.left = `${d.to < others.length ? px(others[d.to]!.start) : px(others[others.length - 1]!.end)}px`;
-  });
-  const endDrag = (e: PointerEvent) => {
-    const d = drag;
-    if (!d || e.pointerId !== d.pointerId) return;
-    drag = undefined;
-    handleEl.releasePointerCapture?.(e.pointerId);
-    handleEl.classList.remove('dragging');
-    overlay.style.visibility = '';
-    d.ghost?.remove();
-    d.line?.remove();
-    if (d.active && e.type === 'pointerup') moveBlock(d.from, d.to);
-  };
-  handleEl.addEventListener('pointerup', endDrag);
-  handleEl.addEventListener('pointercancel', endDrag);
+  new BlockMover({ session, handle: $('bb-handle'), plot, overlay });
   $('bb-prev').addEventListener('click', () => select(session.selected - 1));
   $('bb-next').addEventListener('click', () => select(session.selected + 1));
 
