@@ -3,7 +3,7 @@
 Référence permanente de l'écran **Récapitulatif**, ouvert à la fin d'une séance ou d'une sortie, avec l'envoi à Strava. Toute évolution part de ce fichier et le met à jour. L'écran est une boîte de dialogue posée sur l'écran Sortie ([sortie.md](sortie.md)).
 
 - Code : [`src/ui/recap/recap.ts`](../../src/ui/recap/recap.ts) (affichage, compte à rebours, états de l'envoi), [`src/ui/recap/recap.css`](../../src/ui/recap/recap.css) (style), [`src/ui/recap/recap-model.ts`](../../src/ui/recap/recap-model.ts) (calculs purs, testés), [`src/ui/recap/recap-demo.ts`](../../src/ui/recap/recap-demo.ts) (aperçu sans rouler).
-- Branchement : `offerRecap()` dans [`src/main.ts`](../../src/main.ts) ; envoi et FIT par [`src/infra/export/wiring.ts`](../../src/infra/export/wiring.ts).
+- Branchement : `offerRecap()` dans [`src/main.ts`](../../src/main.ts) ; envoi et FIT par [`src/app/ride-export.ts`](../../src/app/ride-export.ts).
 - Maquettes (claude.ai) : canevas [Direction graphique](https://claude.ai/artifact/XsuzQxwA5WEKoyn8Jxu4nP), rangées « Récapitulatif de fin de sortie » (propositions R1 à R3) et « Récap retenu » (sombre, clair, envoyée).
 - Aperçu en développement : `?recap` (séance, Strava connecté), `?recap=libre`, `?recap=connexion`, `?recap=echec`, `?recap=aucun`. L'envoi y est simulé.
 
@@ -25,7 +25,7 @@ Référence permanente de l'écran **Récapitulatif**, ouvert à la fin d'une s�
 - **Séance menée au bout du dernier palier** : la sortie est figée à cet instant (l'export s'y arrête), la sortie virtuelle continue derrière.
 - **Sortie arrêtée à la main** (« Arrêter la sortie » du menu), hors séance : la sortie est figée à l'arrêt.
 - Jamais sous **60 s** d'enregistrement, ni après un arrêt subi (trainer perdu), ni hors de l'écran Sortie. Une séance arrêtée avant la fin n'en ouvre pas : la sortie continue, son arrêt ouvrira le récapitulatif.
-- **Reprise** : un arrêt (une seconde sans puissance ni cadence) puis **5 s de pédalage d'affilée** ferment le récapitulatif comme « Continuer » (un envoi programmé part tout de suite). Le pédalage qui continue sans arrêt après la fin, en moulinant, ne compte pas : sans cela l'écran disparaîtrait avant d'être lu. Règle : `RideRecorder.resumedAfter`, `RESUME_S` dans `wiring.ts`.
+- **Reprise** : un arrêt (une seconde sans puissance ni cadence) puis **5 s de pédalage d'affilée** ferment le récapitulatif comme « Continuer » (un envoi programmé part tout de suite). Le pédalage qui continue sans arrêt après la fin, en moulinant, ne compte pas : sans cela l'écran disparaîtrait avant d'être lu. Règle : `RideRecorder.resumedAfter`, `RESUME_S` dans `app/ride-export.ts`.
 - La sortie figée reste celle de l'export jusqu'à ce que le cycliste continue (« Continuer » ou reprise). Si elle n'est pas déjà partie, l'export suivant couvre alors toute la sortie, séance comprise.
 
 ## Grand écran (R1)

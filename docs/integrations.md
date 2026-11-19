@@ -23,7 +23,7 @@ intervals.icu a été abandonné (décision du 12 novembre 2026) et son relais r
 | Enregistrement 1 Hz (puissance, cadence, FC, vitesse, distance, altitude), pauses | [`src/infra/export/recorder.ts`](../src/infra/export/recorder.ts) | Fait, testé |
 | Encodage FIT Activity (SDK Garmin), un seul tour, sport `cycling`, sous-sport `virtualActivity` | [`src/infra/export/fit-activity.ts`](../src/infra/export/fit-activity.ts) | Fait ; fichier relu avec le décodeur Garmin ; jamais ouvert dans Strava ni Garmin Connect |
 | Relais Strava : OAuth, jetons de chaque coureur dans D1 (Worker), dépôt et attente du traitement | [`src/infra/export/strava/`](../src/infra/export/strava/) | Codé, testé avec un faux `fetch` ; jamais lancé contre Strava |
-| Branchement des boutons, sortie gardée en mémoire pour réessayer | [`src/infra/export/wiring.ts`](../src/infra/export/wiring.ts) | Fait ; **la sortie est perdue si l'onglet se ferme** |
+| Branchement des boutons, sortie gardée en mémoire pour réessayer | [`src/app/ride-export.ts`](../src/app/ride-export.ts) | Fait ; **la sortie est perdue si l'onglet se ferme** |
 | Lecture .zwo, .erg, .mrc ; écriture .zwo | [`src/domain/workout/`](../src/domain/workout/) | Fait, testé |
 | Bibliothèque de séances | [`src/domain/workout/library.ts`](../src/domain/workout/library.ts) | `localStorage`, un seul appareil |
 | Worker Cloudflare + D1 | [`worker/`](../worker/) | Récepteur de journaux seulement ; jamais déployé |
@@ -289,7 +289,7 @@ La passerelle Strava est montée par le Worker (`worker/app.ts`, `src/server/use
 |---|---|---|
 | Un **tour par étape de séance** (`LAP` avec `wktStepIndex`, puissance moyenne, cible) | TrainingPeaks et Garmin découpent l'analyse par tour ; aujourd'hui un seul tour couvre toute la sortie | L'enregistreur reçoit `markLap(nowMs, stepIndex)` du déroulement de séance |
 | Messages **`WORKOUT` et `WORKOUT_STEP`** de la séance suivie | Rapprochement « prévu / réalisé » | Encodeur FIT |
-| **Nom de la séance** et du parcours dans le nom d'activité | Lisibilité chez la plateforme | `rideName()` de `wiring.ts` |
+| **Nom de la séance** et du parcours dans le nom d'activité | Lisibilité chez la plateforme | `defaultName()` de `app/ride-export.ts` |
 | **Identifiant fabricant FIT** propre à la place de `development` | Affichage du nom de l'application chez Garmin et Strava ; acceptation par Garmin Connect à vérifier | Demande d'identifiant à Garmin (programme FIT) |
 | `DEVICE_INFO` du trainer et du capteur de puissance | Étiquetage de la source de puissance (exigence d'intégrité de l'analyse) | Encodeur FIT, à partir de `trainer-profiles.ts` |
 

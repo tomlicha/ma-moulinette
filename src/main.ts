@@ -11,7 +11,8 @@ import { browserUa, noBluetoothHint, noBluetoothStatus } from './infra/sensors/b
 import { chooseQuality } from './render/core/quality';
 import { setupGears } from './ui/ride/gears';
 import { DEFAULT_RIDER } from './domain/sim/physics';
-import { setupExport } from './infra/export/wiring';
+import { RideExport } from './app/ride-export';
+import { browserExportPlatform, ExportButtons } from './ui/ride/export-buttons';
 import { setupTelemetry } from './infra/telemetry/wiring';
 import { COL_DES_ERABLES } from './domain/course/courses/col-des-erables';
 import { Journey } from './domain/sim/journey';
@@ -604,7 +605,7 @@ workoutSession.on('changed', refreshWorkoutButtons);
 workoutSession.on('intensity', showIntensity);
 workoutSession.on('started', (name) => exporter.onWorkoutStarted(name));
 workoutSession.on('stepped', (targetW, stepIndex) => exporter.onWorkoutState(targetW, stepIndex));
-workoutSession.on('completing', () => exporter.onWorkoutFinished()); // l'export s'arrêtera à la fin du dernier palier (infra/export/wiring.ts)
+workoutSession.on('completing', () => exporter.onWorkoutFinished()); // l'export s'arrêtera à la fin du dernier palier (app/ride-export.ts)
 workoutSession.on('ended', ({ completed }) => {
   if (completed) offerRecap(completed);
 });
@@ -863,19 +864,16 @@ $('go-ride').addEventListener('click', () => router.go('accueil'));
 
 $('copy-log').addEventListener('click', () => void navigator.clipboard.writeText(logEl.textContent ?? ''));
 
-const exporter = setupExport({
-  hub,
-  button: $<HTMLButtonElement>('export-fit'),
-  stravaButton: $<HTMLButtonElement>('export-strava'),
-  routeName: journey.name,
-  log,
-  // Arrêt puis 5 s de pédalage après la fin : le récapitulatif s'efface de lui-même (docs/design/recap.md).
-  onResumed: () => {
-    if (!recap.open) return;
-    log('pédalage repris : récapitulatif fermé');
-    recap.dismissByPedaling();
-  },
+/** L'export de la sortie : enregistrement, fichier FIT, envoi à Strava. */
+const exporter = new RideExport({ hub, routeName: journey.name, log, platform: browserExportPlatform });
+// Arrêt puis 5 s de pédalage après la fin : le récapitulatif s'efface de lui-même (docs/design/recap.md).
+exporter.on('resumed', () => {
+  if (!recap.open) return;
+  log('pédalage repris : récapitulatif fermé');
+  recap.dismissByPedaling();
 });
+new ExportButtons(exporter, $<HTMLButtonElement>('export-fit'), $<HTMLButtonElement>('export-strava'));
+exporter.start();
 
 /** En dessous, pas de récapitulatif : un démarrage pour rien ou un essai. */
 const RECAP_MIN_S = 60;
