@@ -16,7 +16,8 @@ const read = (dir, name) => {
   const file = path.join(dir, `${name}.json`);
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
 };
-const neutral = (text) => text.replace(/\d+(\.\d+)?/g, '#');
+// Les chiffres du journal, et les adresses `blob:` (le portrait du coureur en change à chaque exécution).
+const neutral = (text) => text.replace(/blob:[^"')\s]+/g, 'blob:URL').replace(/\d+(\.\d+)?/g, '#');
 const counts = (lines) => lines.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map());
 
 let diffs = 0;
