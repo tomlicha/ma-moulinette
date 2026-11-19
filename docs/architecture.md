@@ -38,8 +38,8 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 
 ```
 src/
-├─ main.ts            racine de composition (encore volumineuse : voir « Reste à faire »)
-├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession
+├─ main.ts            racine de composition : crée et relie les morceaux (~750 lignes), avec quelques règles de coordination
+├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart
 ├─ domain/
 │  ├─ sim/            physique, Ride, Journey, aspiration, vitesses virtuelles, lissage de la pente
 │  ├─ course/         réseau routier, parcours, vélodrome, données des parcours (courses/)
@@ -53,7 +53,7 @@ src/
 │  ├─ storage/        KeyValueStore, reprise des anciennes clés
 │  └─ native/         coquille iOS (Capacitor)
 ├─ render/            three.js : core/ (moteur, ambiance, matériaux), world/ (décor, terrain, route), riders/ (coureurs, avatar)
-├─ ui/                un dossier par écran : home/, ride/, devices/, editor/ (orchestrateur + inspector, chart, summary, shelf, mover, phone-controls, library, cadence, dom), recap/, account/ ; shared/ (routeur, aide au blocage…)
+├─ ui/                un dossier par écran : home/, ride/, devices/, editor/ (orchestrateur + inspector, chart, summary, shelf, mover, phone-controls, library, cadence, dom) ; chaque écran a ses vues : home/home-view, ride/{ride-controls, workout-controls, hud-presenter, ride-loading, crowd, rider-inputs}, devices/{devices-view, log-view}, recap/, account/ ; shared/ (routeur, aide au blocage…)
 ├─ shared/
 │  ├─ protocol/       ce que le serveur et la page se disent : codes de fermeture, utilisateur, en-tête anti-CSRF
 │  └─ util/           journal, erreurs, travail en tâche de fond, émetteur d'événements, type du stockage de clés
@@ -75,6 +75,10 @@ Les classes de `app/` ont chacune une seule raison de changer :
 | `RideViewLoader` | le cycle de vie de la vue 3D : une construction à la fois, reprise après perte du GPU, renoncement après trop de pertes | le DOM, l'écran de chargement, le canevas |
 | `RideExport` | l'export de la sortie : enregistrement, sortie figée, fichier FIT, envoi à Strava | les boutons, les fenêtres du navigateur (ports `ExportPlatform` et `StravaPort`) |
 | `EditorSession` | l'état de l'éditeur de séance : séance ouverte, sélection, historique, enregistrement, bibliothèque | le DOM, les questions au coureur (`confirmDiscard` injecté) |
+| `ManualControl` | les gestes à la main sur le trainer : engager ou relâcher l'ERG, changer sa cible, imposer une pente, selon ce qui tourne | l'écran : les boutons sont dans `RideControlsView` |
+| `WorkoutCatalog` | les séances que l'on peut choisir (les nôtres, les modèles) et celle que désigne un choix | la liste affichée, le choix retenu |
+| `RiderSettingsSync` | la FTP et la masse vues par la synchronisation du compte : ce que l'appareil en sait, ce qu'il fait de ce qui vient d'ailleurs | les champs eux-mêmes (port `RiderInputsPort`) |
+| `AutoStart` | le démarrage au premier coup de pédale (sortie libre ou séance choisie), armé à l'arrivée sur l'écran Sortie | l'écran, le démarrage lui-même (il le demande) |
 | `WorkoutSession` | la séance choisie et son déroulement ; la consigne ERG qu'elle impose | la sortie (l'appelant démarre l'une avec l'autre), l'export, le récapitulatif |
 
 Ces classes se parlent par **événements typés** (`shared/util/typed-emitter.ts`) : `RideSession` publie `started`, `tick`, `paused`, `resumed`, `stopped` ; `TrainerController` publie `state` et `erg` ; `WorkoutSession` publie `state`, `changed`, `started`, `stepped`, `completing`, `ended` ; `DeviceManager` publie `changed`, `heartRateState`, `recall`, `launchSettled` ; `RideViewLoader` publie `progress`, `ready`, `lost`, `retrying`, `unavailable` ; `RideExport` publie `changed`, `resumed` ; `EditorSession` publie `opened`, `changed`, `focused`. Les écouteurs sont appelés dans l'ordre d'abonnement, de façon synchrone : l'ordre des effets reste lisible. `main.ts` y branche la vue 3D, la salle, l'export, le récapitulatif et les boutons.
@@ -93,9 +97,14 @@ Aucune : `npm run lint` ne remonte plus d'import qui monte d'une couche (13 au 1
 
 Quelques liens restent à surveiller, permis par la règle mais discutables : `server/accounts.ts` importe les types de Strava de `infra/export/strava/api.ts`, et `render` est importé par `app/ride-view-loader.ts` (types seulement).
 
+## Valider une refonte
+
+Les scénarios de `tools/e2e/` (voir son README) pilotent l'application dans Chromium, avec le trainer simulé, et comparent deux séries de traces : états des boutons, journal, DOM complet des écrans Séances, Appareils et Accueil. C'est ainsi qu'ont été validés tous les découpages ci-dessus : `npm run e2e -- --out .e2e/avant` sur le code d'avant, `.e2e/apres` sur le code d'après, puis `npm run e2e:compare -- .e2e/avant .e2e/apres` ; « identique » veut dire que le comportement n'a pas changé.
+
 ## Reste à faire
 
-`main.ts` fait encore ~1100 lignes : il ne garde plus de logique de sortie, de séance, d'appareils ni de vue 3D, mais encore tout le DOM (boutons, champs, écrans) et le câblage. Découpage prévu :
+`main.ts` n'écoute plus un seul bouton ni ne remplit un seul champ lui-même, mais il fait encore ~750 lignes : la création des morceaux, leur câblage par événements, une vingtaine de `$('…')` qui ne servent qu'à passer leurs éléments aux anciens `setupX()` (voir plus bas), et quelques règles de coordination qui touchent plusieurs morceaux à la fois (`setState` : l'état du trainer se répercute sur les vues, la sortie, l'export ; `startRide`, `toggleRide`, `chooseWorkout`, `startWorkout`, `offerRecap`, `ftpChanged`). Pistes :
 
-1. Les `setupX()` de `ui/` et les morceaux de DOM de `main.ts` (écran Appareils, boutons de la séance, bouton de sortie, écran de chargement) transformés en classes `View` qui possèdent leur DOM (plus de `$('…')` dans `main.ts`).
-2. `ui/editor/workout-editor.ts` (410 lignes, contre 1600) n'est plus que l'orchestrateur de l'écran : il crée les morceaux, relie la session à l'affichage (`render`), et garde la barre du bloc, le clavier et les boutons de l'en-tête. Le reste a son fichier : `EditorSession` (état), `block-inspector`, `cadence-dialog`, `profile-chart` (profil, info-bulle, sélection), `workout-summary`, `block-shelf`, `block-mover`, `phone-controls`, `library-view`.
+1. Les `setupX()` historiques de `ui/` (menu de la sortie, récapitulatif, routeur, vitesses virtuelles, fiche du coureur, compte, coque de l'application) en classes `View` qui possèdent leur DOM, comme celles de cette refonte.
+2. Un coordinateur d'application (`app/`) pour les règles qui touchent plusieurs morceaux, à mesure qu'elles se précisent ; `AutoStart` en est le premier exemple.
+3. Le scénario `app` du `tools/e2e` ne couvre pas le Bluetooth réel, ni la connexion à un compte, ni un envoi réel à Strava : à compléter avec des essais sur le matériel.
