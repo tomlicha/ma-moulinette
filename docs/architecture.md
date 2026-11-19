@@ -39,7 +39,7 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 ```
 src/
 ├─ main.ts            racine de composition : crée et relie les morceaux (~750 lignes), avec quelques règles de coordination
-├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart
+├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart, VirtualGearbox, RecapSender
 ├─ domain/
 │  ├─ sim/            physique, Ride, Journey, aspiration, vitesses virtuelles, lissage de la pente
 │  ├─ course/         réseau routier, parcours, vélodrome, données des parcours (courses/)
@@ -78,6 +78,8 @@ Les classes de `app/` ont chacune une seule raison de changer :
 | `ManualControl` | les gestes à la main sur le trainer : engager ou relâcher l'ERG, changer sa cible, imposer une pente, selon ce qui tourne | l'écran : les boutons sont dans `RideControlsView` |
 | `WorkoutCatalog` | les séances que l'on peut choisir (les nôtres, les modèles) et celle que désigne un choix | la liste affichée, le choix retenu |
 | `RiderSettingsSync` | la FTP et la masse vues par la synchronisation du compte : ce que l'appareil en sait, ce qu'il fait de ce qui vient d'ailleurs | les champs eux-mêmes (port `RiderInputsPort`) |
+| `VirtualGearbox` | les vitesses virtuelles du Zwift Cog : Cog monté ou non, plateau, vitesse, butées, mémorisation | les boutons et le clavier (`GearsView`), le calcul des braquets (`domain/sim/virtual-gears.ts`) |
+| `RecapSender` | l'envoi du récapitulatif à Strava : compte à rebours, envoi automatique, suspension par un geste, essais après refus | l'écran du récapitulatif (`ui/recap/recap.ts`), l'envoi lui-même (`RideExport`) |
 | `AutoStart` | le démarrage au premier coup de pédale (sortie libre ou séance choisie), armé à l'arrivée sur l'écran Sortie | l'écran, le démarrage lui-même (il le demande) |
 | `WorkoutSession` | la séance choisie et son déroulement ; la consigne ERG qu'elle impose | la sortie (l'appelant démarre l'une avec l'autre), l'export, le récapitulatif |
 
@@ -103,8 +105,7 @@ Les scénarios de `tools/e2e/` (voir son README) pilotent l'application dans Chr
 
 ## Reste à faire
 
-`main.ts` n'écoute plus un seul bouton ni ne remplit un seul champ lui-même, mais il fait encore ~750 lignes : la création des morceaux, leur câblage par événements, une vingtaine de `$('…')` qui ne servent qu'à passer leurs éléments aux anciens `setupX()` (voir plus bas), et quelques règles de coordination qui touchent plusieurs morceaux à la fois (`setState` : l'état du trainer se répercute sur les vues, la sortie, l'export ; `startRide`, `toggleRide`, `chooseWorkout`, `startWorkout`, `offerRecap`, `ftpChanged`). Pistes :
+`main.ts` n'écoute plus un seul bouton ni ne remplit un seul champ lui-même. Il fait encore ~750 lignes : la création des morceaux, leur câblage par événements, et les règles qui touchent plusieurs morceaux à la fois (`setState` : l'état du trainer se répercute sur les vues, la sortie, l'export ; `startRide`, `toggleRide`, `chooseWorkout`, `startWorkout`, `offerRecap`, `ftpChanged`). C'est le rôle d'une racine de composition ; un « coordinateur » qui reprendrait ce câblage ne ferait que le déplacer. À extraire seulement quand une règle de cette colonne gagne un test propre, comme `AutoStart`.
 
-1. Les `setupX()` historiques de `ui/` (menu de la sortie, récapitulatif, routeur, vitesses virtuelles, fiche du coureur, compte, coque de l'application) en classes `View` qui possèdent leur DOM, comme celles de cette refonte.
-2. Un coordinateur d'application (`app/`) pour les règles qui touchent plusieurs morceaux, à mesure qu'elles se précisent ; `AutoStart` en est le premier exemple.
-3. Le scénario `app` du `tools/e2e` ne couvre pas le Bluetooth réel, ni la connexion à un compte, ni un envoi réel à Strava : à compléter avec des essais sur le matériel.
+1. Les `setupX()` de `ui/` qui restent (menu de la sortie, routeur, fiche du coureur, compte, coque de l'application, roulette) sont des fonctions de DOM sans règle métier à isoler : les passer en classes `View` serait cosmétique. Le compte (`ui/account/account-chip.ts`) mélange le réseau et l'affichage : à scinder si on y touche (nom affiché, connexion Strava).
+2. Le scénario `app` du `tools/e2e` ne couvre pas le Bluetooth réel, ni la connexion à un compte, ni un envoi réel à Strava : à compléter avec des essais sur le matériel.
