@@ -239,6 +239,17 @@ export class EditorSession extends TypedEmitter<{
     this.commit((bs) => [...bs.slice(0, at), ...structuredClone(blocks), ...bs.slice(at)], at);
   }
 
+  /** Place le bloc `from` à l'indice `to` et le sélectionne : une seule entrée d'historique. */
+  moveBlock(from: number, to: number): void {
+    if (from === to) return;
+    this.commit((bs) => {
+      const c = [...bs];
+      const [m] = c.splice(from, 1);
+      c.splice(to, 0, m!);
+      return c;
+    }, to);
+  }
+
   select(i: number): void {
     const d = this.draft;
     if (!d?.blocks.length) return;
