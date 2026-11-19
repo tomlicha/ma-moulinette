@@ -3,11 +3,13 @@
 // n'y comptent pas. Échoue si un budget est dépassé : relever le chiffre ici doit être une décision, pas un oubli.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 const BUDGET_KIB = { js: 100, css: 30 };
 
-const dist = new URL('../../dist/', import.meta.url).pathname;
+// fileURLToPath, pas `.pathname` : sous Windows, `.pathname` donne « /C:/… », que `join` double en « C:\C:\… ».
+const dist = fileURLToPath(new URL('../../dist/', import.meta.url));
 const html = readFileSync(join(dist, 'index.html'), 'utf8');
 const refs = { js: new Set(), css: new Set() };
 for (const m of html.matchAll(/<script[^>]*\bsrc="\/([^"]+\.js)"/g)) refs.js.add(m[1]);
