@@ -16,7 +16,8 @@
 import type { RoadNetwork } from '../../domain/course/network';
 import type { NetPosition } from '../../domain/course/track';
 
-export const PROTOCOL_VERSION = 1;
+/** 2 : la séance de groupe prend l'allure du créateur (`groupCreate` porte sa FTP et sa masse) ; un ancien client est invité à recharger. */
+export const PROTOCOL_VERSION = 2;
 
 /**
  * Gestion d'intérêt : au-delà de `INTEREST_K + 1` coureurs, la salle n'envoie à chacun que ses `INTEREST_K` plus proches
@@ -129,6 +130,12 @@ export class StateCodec {
       if (state) out.push({ slot: v.getUint16(at, true), state });
     }
     return out;
+  }
+
+  /** Lit les 18 octets d'état d'un coureur gardés par le serveur (`bodyOf`) ; `undefined` s'ils sont illisibles. */
+  decodeBody(body: Uint8Array): RiderState | undefined {
+    if (body.byteLength !== BODY_BYTES) return undefined;
+    return this.readBody(new DataView(body.buffer, body.byteOffset, body.byteLength), 0);
   }
 
   /** Recopie les 18 octets d'état d'un message `STATE`, sans le relire : ce que fait le serveur pour relayer. */

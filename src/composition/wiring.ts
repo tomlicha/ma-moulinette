@@ -3,7 +3,11 @@ import type { BlockLibrary } from '../domain/workout/block-library';
 import type { BlockReason } from '../ui/shared/blocked';
 import type { ConnectionState } from '../infra/sensors/types';
 import type { DeviceManager } from '../app/device-manager';
+import type { CrowdView } from '../ui/ride/crowd-view';
+import type { GroupSession } from '../app/group-session';
 import type { DevicesView } from '../ui/devices/devices-view';
+import type { FollowSession } from '../app/follow-session';
+import type { NetPosition } from '../domain/course/track';
 import type { GradeController } from '../app/grade-controller';
 import type { HomeView } from '../ui/home/home-view';
 import type { Journey } from '../domain/sim/journey';
@@ -49,12 +53,17 @@ export interface Wiring {
   autoStart: AutoStart;
   blockLibrary: BlockLibrary;
   chooseWorkout: (value: string) => void;
+  crowd: CrowdView;
   devices: DeviceManager;
   devicesView: DevicesView;
   editor: LazyWorkoutEditor;
   exporter: RideExport;
+  follow: FollowSession;
+  /** Un message passager dans le panneau du suivi du HUD. */
+  followNotice: (text: string) => void;
   ftpChanged: () => void;
   grade: GradeController;
+  group: GroupSession;
   home: HomeView;
   homeWorkouts: HomeWorkoutsView;
   hub: SensorHub;
@@ -89,6 +98,8 @@ export interface Wiring {
   setState: (s: ConnectionState, detail?: string) => void;
   settings: SettingsStore;
   startRide: () => void;
+  /** Démarre la sortie derrière un coureur qu'on rejoint : ses kilomètres se comptent depuis ce point. */
+  startRideBehind: (pos: NetPosition) => void;
   stopRide: (resetTrainer?: boolean) => void;
   syncJournal: SyncJournal;
   /** Ce que la synchronisation avec le compte porte : FTP et masse, séances, blocs, puis ce que les modules suivants y ajoutent (avant la première synchronisation, qui attend le réseau). */

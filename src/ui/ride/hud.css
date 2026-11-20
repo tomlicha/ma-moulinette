@@ -107,6 +107,24 @@ html[data-notch='right'] .hud.compact { left: 0; }
 .hud-left { left: calc(var(--hud-m) - var(--hud-ox, 0px)); top: calc(var(--hud-m) - var(--hud-oy, 0px)); width: 250px; padding: 14px 16px; gap: 6px; transform-origin: 0 0; }
 .hud-center { left: 340px; top: calc(var(--hud-m) - var(--hud-oy, 0px)); width: 600px; padding: 14px 20px; gap: 10px; transform-origin: 50% 0; }
 .hud-bottom { left: 64px; top: calc(630px - var(--hud-m) + var(--hud-oy, 0px)); width: 1152px; height: 90px; padding: 10px 20px; justify-content: center; transform-origin: 50% 100%; }
+/*
+ * Suivi (docs/design/groupe.md) : sous le panneau de gauche (sortie libre : le suivi n'existe pas en séance, où ce panneau est
+ * plus haut). Qui on suit et l'écart, qui nous suit avec « Refuser », messages passagers. On y touche : pointer-events.
+ */
+.hud-follow { left: calc(var(--hud-m) - var(--hud-ox, 0px)); top: calc(244px + var(--hud-m) - var(--hud-oy, 0px)); width: 250px; padding: 10px 12px; gap: 6px; transform-origin: 0 0; pointer-events: auto; font-size: 17px; line-height: 1.25; }
+.hud-follow[hidden], .hud-follow [hidden] { display: none; }
+.rf-status { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.rf-status .rf-text { white-space: normal; font-weight: 600; }
+.rf-row { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.rf-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rf-followers { display: flex; flex-direction: column; gap: 2px; }
+.rf-more, .rf-notice { margin: 0; color: var(--hud-muted); }
+.rf-btn {
+  flex: none; min-height: 52px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--hud-edge);
+  background: var(--hud-tint); color: var(--hud-fg); font: 600 17px/1 inherit; font-family: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rf-btn:focus-visible { outline: 2px solid var(--hud-fg); outline-offset: 1px; }
 /* Message de la séance (consigne écrite dans le fichier), sous le panneau central. */
 .hud-message { left: 340px; top: calc(178px + var(--hud-m) - var(--hud-oy, 0px)); width: 600px; padding: 12px 20px; transform-origin: 50% 0; background: var(--hud-msg-bg); color: var(--hud-msg-fg); border: 2px solid var(--hud-msg-edge); font-size: 24px; font-weight: 700; text-align: center; }
 
@@ -285,7 +303,9 @@ html[data-notch='right'] .hud.compact { left: 0; }
   position: absolute; top: -13px; right: 14px; padding: 0 10px; border-radius: 999px; background: var(--hud-panel-flat); border: 1px solid var(--hud-edge);
   font-size: 16px; line-height: 22px; white-space: nowrap;
 }
-.hud.compact .hud-junction-head > :not([data-role='dist']) { display: none; }
+.hud.compact .hud-junction-head > :not([data-role='dist']):not([data-group]) { display: none; } /* séance de groupe : qui choisit, reste dit */
+.hud.compact .hud-junction-head[data-group] { right: auto; left: 14px; } /* à gauche : à droite, l'encart la cacherait */
+.hud.compact .hud-junction-hint[data-group] { margin-left: 0; font-size: 15px; font-weight: 600; color: var(--hud-fg); }
 .hud.compact .hud-junction-opts { gap: 6px; }
 .hud.compact .hud-junction-opt { min-height: 59px; padding: 3px 8px; column-gap: 6px; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; }
 .hud.compact .hud-junction-opt .arrow { grid-row: 1; grid-column: 1; font-size: 24px; }

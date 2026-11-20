@@ -1,0 +1,17 @@
+/*
+ * La pastille « En ligne » de l'en-tête de l'accueil : combien de coureurs sont là, et ouvre « Rouler avec d'autres ». Elle reprend
+ * `.home-chip` (home.css). Dans sa propre feuille : le panneau (online.css) est chargé à la demande, pas la pastille.
+ */
+.chip-online { position: relative; gap: 8px; padding: 0 16px 0 12px; }
+.chip-online[hidden] { display: none; }
+.online-ico svg { display: block; width: 22px; height: 22px; color: var(--accent); }
+.online-count { min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
+.chip-online[data-live='true'] .online-ico svg { color: #2B8A3E; }
+
+/* iPhone en paysage : seule l'icône, ronde comme la fiche du coureur ; le nombre devient une petite pastille. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .chip-online { width: 52px; height: 52px; padding: 0; justify-content: center; border: 2px solid #fff; }
+  .online-label { display: none; }
+  .online-count { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: #fff; font: 700 12px/18px Barlow, system-ui, sans-serif; }
+  .online-count:empty { display: none; }
+}

@@ -2,6 +2,8 @@ import type { Journey } from '../domain/sim/journey';
 import { ClimbCounter } from '../domain/sim/climb-counter';
 import { draftFrom } from '../domain/sim/draft';
 import { DEFAULT_RIDER } from '../domain/sim/physics';
+import type { NetPosition } from '../domain/course/track';
+import type { RidePacing } from '../domain/group/group-pace';
 import { Ride, type RideSnapshot } from '../domain/sim/ride';
 import { TypedEmitter } from '../shared/util/typed-emitter';
 import type { GradeController, VirtualGearing } from './grade-controller';
@@ -34,6 +36,8 @@ export interface RideSessionDeps {
   gearing: () => VirtualGearing;
   /** Les autres coureurs de la salle, pour l'aspiration. */
   riders: () => readonly NearbyRider[];
+  /** Aide de rappel du suivi (part de traînée épargnée en plus), 0 hors suivi : voir `FollowSession.assist`. */
+  assist?: () => number;
   clock?: () => number;
 }
 
@@ -63,6 +67,8 @@ export class RideSession extends TypedEmitter<{
   private last?: RideSnapshot;
   private pausedFlag = false;
   private draftReduction = 0;
+  /** Rythme imposé par un groupe : la sortie avance avec lui et non avec la puissance mesurée. */
+  private pacing?: RidePacing;
   private readonly climb = new ClimbCounter();
   private readonly clock: () => number;
 
@@ -101,11 +107,16 @@ export class RideSession extends TypedEmitter<{
     return this.draftReduction;
   }
 
-  /** Démarre une sortie au départ du parcours `courseId`. Sans effet si une sortie est déjà en cours. */
-  start(massKg: number, courseId: string): void {
+  /**
+   * Démarre une sortie au départ du parcours `courseId`, ou derrière le coureur qu'on rejoint si `behind` est donné
+   * (ses kilomètres se comptent alors depuis ce point). Sans effet si une sortie est déjà en cours.
+   */
+  start(massKg: number, courseId: string, behind?: NetPosition, pacing?: RidePacing): void {
     if (this.ride) return;
+    this.pacing = pacing;
     this.deps.journey.setCourse(courseId); // repart du départ du parcours choisi, sans choix de carrefour en mémoire
-    this.ride = new Ride(this.deps.journey, { ...DEFAULT_RIDER, massKg });
+    if (behind) this.deps.journey.placeAt(behind);
+    this.ride = new Ride(this.deps.journey, pacing?.rider ?? { ...DEFAULT_RIDER, massKg });
     this.last = this.ride.snapshot();
     this.pausedFlag = false;
     this.climb.reset();
@@ -113,6 +124,31 @@ export class RideSession extends TypedEmitter<{
     this.lastTickMs = this.clock();
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.emit('started', massKg);
+  }
+
+  /** Une séance de groupe impose son rythme à la sortie. */
+  get paced(): boolean {
+    return this.pacing !== undefined;
+  }
+
+  /**
+   * Rejoue la sortie de groupe depuis le départ avec un nouveau rythme : le trajet repart du début du parcours (en gardant les
+   * choix du groupe) et la simulation rattrape le temps du groupe au pas suivant. Sert à se recaler quand on a dérivé (un choix
+   * de route raté). Sans effet hors séance de groupe.
+   */
+  repace(pacing: RidePacing): void {
+    if (!this.ride || !this.pacing) return;
+    this.deps.journey.reset();
+    this.pacing = pacing;
+    this.ride = new Ride(this.deps.journey, pacing.rider);
+    this.last = this.ride.snapshot();
+    this.climb.reset();
+    this.deps.grade.reset();
+  }
+
+  /** Rend la sortie à la puissance du coureur (il quitte le groupe) : elle continue de là où elle est. */
+  releasePacing(): void {
+    this.pacing = undefined;
   }
 
   /** Trainer perdu : la sortie s'arrête de compter sans disparaître. */
@@ -142,6 +178,7 @@ export class RideSession extends TypedEmitter<{
     this.deps.trainer.setErgActive(false);
     const distanceM = ride.snapshot().distanceM;
     this.ride = undefined;
+    this.pacing = undefined;
     this.emit('stopped', distanceM);
     if (resetTrainer) this.deps.trainer.resetToFlat();
   }
@@ -153,8 +190,17 @@ export class RideSession extends TypedEmitter<{
     const { readings, grade, trainer } = this.deps;
     const now = this.clock();
     const powerW = readings.powerW();
-    this.updateDraft(ride);
-    const snapshot = ride.advance((now - this.lastTickMs) / 1000, powerW);
+    let snapshot: RideSnapshot;
+    if (this.pacing) {
+      // Séance de groupe : tout le groupe est au même endroit au même instant, sans aspiration entre coureurs superposés.
+      this.draftReduction = 0;
+      ride.setDraft(0);
+      this.pacing.advance(ride);
+      snapshot = ride.snapshot();
+    } else {
+      this.updateDraft(ride);
+      snapshot = ride.advance((now - this.lastTickMs) / 1000, powerW);
+    }
     this.lastTickMs = now;
     this.last = snapshot;
     this.climb.add(snapshot.altitudeM);
@@ -183,7 +229,9 @@ export class RideSession extends TypedEmitter<{
     }
     const me = this.deps.journey.pointAt(this.last?.distanceM ?? 0);
     const leaders = others.map((r) => ({ x: r.point.x, z: r.point.z, heading: r.point.heading, speedMs: r.speedMs, riding: r.riding }));
-    this.draftReduction = draftFrom({ x: me.x, z: me.z, heading: me.heading }, leaders).reduction;
+    const real = draftFrom({ x: me.x, z: me.z, heading: me.heading }, leaders).reduction;
+    // L'aide du suivi ne s'ajoute pas à la vraie aspiration : la meilleure des deux compte, comme entre deux meneurs.
+    this.draftReduction = Math.max(real, this.deps.assist?.() ?? 0);
     ride.setDraft(this.draftReduction);
   }
 }

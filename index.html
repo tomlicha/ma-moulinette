@@ -187,6 +187,10 @@
               <button id="home-news-chip" class="home-chip chip-news" type="button" aria-haspopup="dialog" aria-label="Nouveautés">
                 <span class="news-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16v4M17 18h4"/></svg></span><span class="news-label">Nouveautés</span><i class="news-dot" aria-hidden="true"></i>
               </button>
+              <!-- Rouler avec d'autres (docs/design/groupe.md) : le nombre de coureurs en ligne ; ouvre le panneau de ui/online/. Cachée hors ligne. -->
+              <button id="home-online-chip" class="home-chip chip-online" type="button" aria-haspopup="dialog" aria-label="Rouler avec d’autres" hidden>
+                <span class="online-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M17 14.4c2.3 0 4 1.7 4 4.1"/></svg></span><span class="online-label">En ligne</span><span class="online-count"></span>
+              </button>
               <a id="home-devices-chip" class="home-chip chip-devices" href="#appareils" aria-label="Appareils">
                 <span class="dev-pill" data-dev-role="trainer"><i></i>Trainer</span><span class="dev-pill" data-dev-role="hr"><i></i>Cardio</span>
               </a>
@@ -274,6 +278,8 @@
           <!-- Nouveautés depuis la dernière visite : la carte (N1) et le journal (N3), remplis par ui/whatsnew/ (docs/design/nouveautes.md). -->
           <dialog id="whatsnew-card"></dialog>
           <dialog id="whatsnew-journal"></dialog>
+          <!-- Rouler avec d'autres : coureurs en ligne, séances de groupe, salle d'attente (ui/online/, docs/design/groupe.md). -->
+          <dialog id="online-panel"></dialog>
         </div>
       </section>
 
@@ -356,6 +362,11 @@
                 <h3 id="rm-ride-t">Sortie</h3>
                 <p class="note">Parcours « Colline », 6 km en boucle. La puissance mesurée fait avancer le modèle physique ; la pente du parcours est envoyée au trainer en mode SIM.</p>
                 <div class="row"><button id="ride-toggle" type="button" disabled>Démarrer la sortie</button></div>
+              </section>
+
+              <section class="rm-sec" aria-labelledby="rm-grp-t">
+                <h3 id="rm-grp-t">Rouler avec d’autres</h3>
+                <label class="rm-switch"><span>Les autres peuvent me rejoindre <small>depuis l’encart des coureurs proches, quand je roule</small></span><input id="joinable-toggle" type="checkbox" role="switch" checked /></label>
               </section>
 
               <section class="rm-sec" aria-labelledby="rm-cog-t">

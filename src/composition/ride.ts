@@ -1,3 +1,4 @@
+import type { NetPosition } from '../domain/course/track';
 import { COL_DES_ERABLES } from '../domain/course/courses/col-des-erables';
 import { GearsView } from '../ui/ride/gears-view';
 import { Journey } from '../domain/sim/journey';
@@ -10,6 +11,7 @@ import type { Wiring } from './wiring';
 
 export function composeRide(w: Wiring): void {
   w.startRide = startRide;
+  w.startRideBehind = startRideBehind;
   w.stopRide = stopRide;
 
   /** Le trajet de la page : la simulation, la vue 3D et le HUD le partagent ; il repart du village à chaque sortie. */
@@ -24,6 +26,7 @@ export function composeRide(w: Wiring): void {
     trainer: w.trainerCtl,
     gearing: () => gearbox.state(),
     riders: () => w.world.riders(),
+    assist: () => w.follow.assist,
   });
   w.rideSession = rideSession;
 
@@ -51,6 +54,11 @@ export function composeRide(w: Wiring): void {
   function startRide() {
     w.autoStart.disarm();
     rideSession.start(w.riderInputs.rideMassKg, w.home.selectedCourseId());
+  }
+
+  function startRideBehind(pos: NetPosition) {
+    w.autoStart.disarm();
+    rideSession.start(w.riderInputs.rideMassKg, w.home.selectedCourseId(), pos);
   }
 
   function stopRide(resetTrainer = true) {

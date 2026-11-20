@@ -92,6 +92,7 @@ export function composeAccount(w: Wiring): void {
 
   /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
   const crowdView = new CrowdView(w.riderTags, w.ridePanel);
+  w.crowd = crowdView;
 
   const showCrowd = () => crowdView.render(world.status, world.population);
 

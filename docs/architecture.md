@@ -39,10 +39,11 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 ```
 src/
 ├─ main.ts            quatre lignes : appelle composeApp()
-├─ composition/       la racine de composition, un module par ensemble : platform, rider, trainer, devices, ride, workout, hud, recap, screens, account, whatsnew, launch ; wiring.ts (ce qu'ils se passent), index.ts (l'ordre)
-├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart, VirtualGearbox, RecapSender, AccountSession, WhatsNew, WhatsNewMarks
+├─ composition/       la racine de composition, un module par ensemble : platform, rider, trainer, devices, ride, workout, hud, recap, screens, account, group, online, whatsnew, launch ; wiring.ts (ce qu'ils se passent), index.ts (l'ordre)
+├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart, VirtualGearbox, RecapSender, AccountSession, FollowSession, GroupSession, WhatsNew, WhatsNewMarks
 ├─ domain/
 │  ├─ sim/            physique, Ride, Journey, aspiration, vitesses virtuelles, lissage de la pente
+│  ├─ group/          règles du suivi (écart, aide, décrochage) et point de groupe (allure commune d'une séance de groupe)
 │  ├─ whatsnew/       catalogue des nouveautés et sélection de ce qu'on présente
 │  ├─ course/         réseau routier, parcours, vélodrome, données des parcours (courses/)
 │  └─ workout/        modèle de séance, lecture .zwo/.erg/.mrc, runner, zones, blocs, bibliothèques
@@ -83,6 +84,8 @@ Les classes de `app/` ont chacune une seule raison de changer :
 | `VirtualGearbox` | les vitesses virtuelles du Zwift Cog : Cog monté ou non, plateau, vitesse, butées, mémorisation | les boutons et le clavier (`GearsView`), le calcul des braquets (`domain/sim/virtual-gears.ts`) |
 | `RecapSender` | l'envoi du récapitulatif à Strava : compte à rebours, envoi automatique, suspension par un geste, essais après refus | l'écran du récapitulatif (`ui/recap/recap.ts`), l'envoi lui-même (`RideExport`) |
 | `AccountSession` | le compte du joueur : qui est connecté, connexion Strava (page web, app Android, session système), connexion de développement, nom affiché, déconnexion | la pastille et ses boîtes (`ui/account/account-chip.ts`), les appels au serveur (`infra/net/account.ts`) |
+| `FollowSession` | le suivi en cours (qui on suit, écart, aide de rappel), qui nous suit, les demandes à la salle | l'écran (`ui/ride/follow-view.ts`), la physique (la sortie lit `assist`), le serveur |
+| `GroupSession` | le groupe où l'on est (séance, parcours, départ, membres), l'horloge commune, quand c'est l'heure de partir, la liste des coureurs en ligne | la sortie et la séance (la composition les lance sur `go`), la salle (port `GroupWorld`) |
 | `WhatsNew` | les nouveautés depuis la dernière visite : ce que la carte présente, le non-lu, les gestes qui acquittent, les repères d'un appareil neuf | l'écran (`ui/whatsnew/`), le stockage et la synchronisation des repères (`WhatsNewMarks`), quand ouvrir la carte (composition) |
 | `WhatsNewMarks` | les repères de lecture des nouveautés : stockage local, synchronisation avec le compte (le plus grand gagne, renvoi s'il dépasse celui du compte) | le catalogue, les écrans |
 | `AutoStart` | le démarrage au premier coup de pédale (sortie libre ou séance choisie), armé à l'arrivée sur l'écran Sortie | l'écran, le démarrage lui-même (il le demande) |
@@ -112,7 +115,7 @@ Les scénarios de `tools/e2e/` (voir son README) pilotent l'application dans Chr
 
 `src/composition/` est le seul endroit qui connaît toutes les couches : il crée les objets et les branche. Elle est au-dessus de `ui` et `render`, et personne ne l'importe (règle ESLint) ; `main.ts` ne fait qu'appeler `composeApp()`.
 
-- Chaque module (`platform`, `rider`, `trainer`, `devices`, `ride`, `workout`, `hud`, `recap`, `screens`, `account`, `whatsnew`, `launch`) est une fonction `composeX(w)` qui crée ses objets, les range dans `w` (le `Wiring`, typé dans `wiring.ts`) quand un autre module en a besoin, et lit ceux des autres.
+- Chaque module (`platform`, `rider`, `trainer`, `devices`, `ride`, `workout`, `hud`, `recap`, `screens`, `account`, `group`, `online`, `whatsnew`, `launch`) est une fonction `composeX(w)` qui crée ses objets, les range dans `w` (le `Wiring`, typé dans `wiring.ts`) quand un autre module en a besoin, et lit ceux des autres.
 - **L'ordre d'`index.ts` compte** : un module ne lit *tout de suite* (à la création d'un objet, hors fonction ou écouteur) que ce que les modules précédents ont rangé. Le reste se lit à l'usage, dans une fonction ou un écouteur : `w.router.go(…)`, `w.world.riders()`. Le routeur (`screens`) vient presque en dernier : il applique l'écran courant dès sa création, donc tout ce que son écouteur touche doit exister.
 - Un objet qu'un seul module utilise reste une variable locale de ce module ; un objet partagé va dans `Wiring`.
 - Les règles qui touchent plusieurs morceaux (`setState` : l'état du trainer se répercute sur les vues, la sortie, l'export ; `startRide`, `toggleRide`, `chooseWorkout`, `startWorkout`, `offerRecap`, `ftpChanged`) sont des fonctions de leur module de composition. Elles passent dans une classe de `app/` quand l'une gagne un test propre, comme `AutoStart`.

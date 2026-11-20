@@ -5,6 +5,7 @@
  * Le Worker (`worker/app.ts`) a déjà vérifié la session et la version : il passe le coureur dans les en-têtes.
  */
 import { COL_DES_ERABLES } from '../src/domain/course/courses/col-des-erables.ts';
+import type { GroupSnapshot, GroupStore } from '../src/server/groups.ts';
 import { Room, TICK_MS, type Connection, type Member } from '../src/server/room.ts';
 
 /** Ce que ce module utilise des WebSocket de Cloudflare : de quoi le tester sans leurs types. */
@@ -15,27 +16,63 @@ export interface CfWebSocket {
   deserializeAttachment(): unknown;
 }
 
+/** Le stockage du Durable Object, pour ce que ce module en utilise. */
+export interface DurableObjectStorageLike {
+  list<T>(options: { prefix: string }): Promise<Map<string, T>>;
+  get<T>(key: string): Promise<T | undefined>;
+  put(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean>;
+}
+
 export interface DurableObjectStateLike {
   acceptWebSocket(ws: CfWebSocket): void;
   getWebSockets(): CfWebSocket[];
+  storage: DurableObjectStorageLike;
+  /** Rien d'autre ne s'exécute dans l'objet tant que ceci n'est pas fini : de quoi relire le stockage avant le premier message. */
+  blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>;
 }
+
+/** Clés du stockage : un groupe par clé, et le prochain numéro de groupe. */
+export const GROUP_PREFIX = 'group:';
+export const GROUP_NEXT_KEY = 'groups:next';
 
 declare const WebSocketPair: { new (): { 0: CfWebSocket; 1: CfWebSocket } };
 
 const connectionOf = (ws: CfWebSocket): Connection => ({
   send: (data) => ws.send(data),
   close: (code, reason) => ws.close(code, reason),
+  save: (member) => ws.serializeAttachment(member),
 });
 
 export class WorldRoom {
-  private readonly room = new Room(COL_DES_ERABLES);
+  private readonly room: Room;
   private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(private readonly ctx: DurableObjectStateLike) {
+    // Les groupes sont rangés à chaque changement : sans cela, un redémarrage de l'objet les oublierait alors que les coureurs
+    // restent connectés. Les écritures ne sont pas attendues (le stockage les regroupe) ; une écriture ratée n'arrête personne.
+    const ignore = () => undefined;
+    const store: GroupStore = {
+      save: (g, next) => {
+        void ctx.storage.put(GROUP_PREFIX + g.id, g).catch(ignore);
+        void ctx.storage.put(GROUP_NEXT_KEY, next).catch(ignore);
+      },
+      remove: (id, next) => {
+        void ctx.storage.delete(GROUP_PREFIX + id).catch(ignore);
+        void ctx.storage.put(GROUP_NEXT_KEY, next).catch(ignore);
+      },
+    };
+    this.room = new Room(COL_DES_ERABLES, undefined, { groupStore: store });
     for (const ws of ctx.getWebSockets()) {
       const m = ws.deserializeAttachment() as Member | null;
       if (m) this.room.restore(m, connectionOf(ws));
     }
+    // Les groupes, relus avant tout message : l'objet est bloqué jusque-là.
+    void ctx.blockConcurrencyWhile(async () => {
+      const stored = await ctx.storage.list<GroupSnapshot>({ prefix: GROUP_PREFIX });
+      const next = (await ctx.storage.get<number>(GROUP_NEXT_KEY)) ?? 1;
+      this.room.restoreGroups([...stored.values()], next);
+    });
   }
 
   async fetch(req: Request): Promise<Response> {

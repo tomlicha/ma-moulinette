@@ -19,7 +19,7 @@ export interface HomeViewActions {
 }
 
 /** La scène de fond qui ressemble à chaque parcours (par le nom de la scène). */
-const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'Rive du lac', 'arc-en-ciel': 'Route arc-en-ciel' };
+const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'Rive du lac', 'arc-en-ciel': 'Route arc-en-ciel', velodrome: 'Vélodrome de Roubaix' };
 
 /**
  * L'accueil (docs/design/accueil-refonte.md) : le monde du parcours retenu (nom, description, scène), la ligne « Ta sortie »

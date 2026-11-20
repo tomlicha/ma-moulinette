@@ -46,6 +46,7 @@ export const ICON: Record<EntryIcon, string> = {
   home: `<svg ${ICON_OPEN}><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>`,
   pause: `<svg ${ICON_OPEN}><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`,
   layers: `<svg ${ICON_OPEN}><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>`,
+  people: `<svg ${ICON_OPEN}><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M17 14.4c2.3 0 4 1.7 4 4.1"/></svg>`,
 };
 
 const ICON_BOLD = ICON_OPEN.replace('stroke-width="1.8"', 'stroke-width="2"');

@@ -301,3 +301,57 @@ describe('Journey : suivre un parcours', () => {
     expect(new Journey(T).course).toBeUndefined();
   });
 });
+
+describe('Journey.placeAt : repartir de la position d’un autre coureur', () => {
+  it("place le départ 10 m derrière lui, la distance 0 étant ce point", () => {
+    const j = new Journey(T);
+    const placed = j.placeAt({ edgeId: 'sj', forward: true, s: 400 })!;
+    expect(placed.s).toBeCloseTo(390, 3);
+    expect(j.locate(0).s).toBeCloseTo(390, 3);
+    expect(j.locate(100).s).toBeCloseTo(490, 3);
+    // le carrefour est à 1000 − 390 = 610 m de là
+    expect(j.committedEndM).toBeCloseTo(610, 3);
+    expect(j.pendingJunction(610 - 200)!.distanceM).toBeCloseTo(200, 3);
+  });
+
+  it("garde le sens de marche d'une route prise à l'envers", () => {
+    const j = new Journey(T);
+    // 'sj' fait 1000 m ; le coureur à s = 300 la descend vers le nœud de départ : 700 m déjà faits, 10 m derrière → 690
+    const placed = j.placeAt({ edgeId: 'sj', forward: false, s: 300 })!;
+    expect(placed.forward).toBe(false);
+    expect(placed.s).toBeCloseTo(310, 3);
+    expect(j.locate(0).s).toBeCloseTo(310, 3);
+    expect(j.locate(100).s).toBeCloseTo(210, 3);
+  });
+
+  it("ne recule pas avant le début de la route", () => {
+    const j = new Journey(T);
+    expect(j.placeAt({ edgeId: 'sj', forward: true, s: 4 })!.s).toBe(0);
+    expect(j.committedEndM).toBeCloseTo(1000, 3);
+  });
+
+  it("une route inconnue ne change rien", () => {
+    const j = new Journey(T);
+    expect(j.placeAt({ edgeId: 'absente', forward: true, s: 10 })).toBeUndefined();
+    expect(j.locate(0).edgeId).toBe('sj');
+  });
+
+  it("suit ensuite le trajet : un carrefour se valide comme d'habitude, et une sortie repart du départ après `reset`", () => {
+    const j = new Journey(T);
+    j.placeAt({ edgeId: 'sj', forward: true, s: 400 });
+    j.update(600); // 10 m avant le verrou du carrefour
+    expect(j.locate(700).edgeId).not.toBe('sj');
+    j.reset();
+    expect(j.locate(0)).toMatchObject({ edgeId: 'sj', s: 0 });
+  });
+
+  it("la simulation avance depuis ce point, sans compter les mètres d'avant", () => {
+    const j = new Journey(T);
+    j.placeAt({ edgeId: 'sj', forward: true, s: 400 });
+    const ride = new Ride(j);
+    for (let i = 0; i < 100; i++) ride.advance(0.1, 200);
+    const d = ride.snapshot().distanceM;
+    expect(d).toBeGreaterThan(20);
+    expect(j.locate(d).s).toBeCloseTo(390 + d, 3);
+  });
+});

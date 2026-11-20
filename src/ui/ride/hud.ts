@@ -156,6 +156,8 @@ const TEMPLATE = `
     </div>
   </section>
 
+  <section class="hud-p hud-follow" id="follow" aria-label="Suivi" hidden></section>
+
   <section class="hud-p hud-message" data-h="message" role="status" hidden></section>
   <section class="hud-p hud-junction" data-h="junction" role="group" aria-label="Carrefour" hidden></section>
 </div>`;
@@ -366,6 +368,7 @@ export class RideHud {
       const dist = document.createElement('span');
       dist.dataset.role = 'dist';
       const hint = Object.assign(document.createElement('span'), { className: 'hud-junction-hint', textContent: '← → pour choisir' });
+      hint.dataset.role = 'hint';
       head.append(title, dist, hint);
       const row = document.createElement('div');
       row.className = 'hud-junction-opts';
@@ -389,10 +392,17 @@ export class RideHud {
       panel.append(head, row);
     }
     panel.querySelector<HTMLElement>('[data-role="dist"]')!.textContent = `dans ${Math.max(0, Math.round(j.distanceM / 10) * 10)} m`;
-    panel.querySelectorAll<HTMLElement>('.hud-junction-opt').forEach((b) => {
+    // Séance de groupe : seul le créateur choisit, et jusqu'à un peu avant le carrefour ; les autres voient la route du groupe.
+    const open = !j.group || (j.group.decides && !j.group.closed);
+    const hintEl = panel.querySelector<HTMLElement>('[data-role="hint"]')!;
+    hintEl.toggleAttribute('data-group', !!j.group); // sur téléphone, l'indication du groupe reste dite (hud.css)
+    hintEl.parentElement?.toggleAttribute('data-group', !!j.group);
+    hintEl.textContent = !j.group ? '← → pour choisir' : j.group.decides ? (j.group.closed ? 'Choix verrouillé' : 'Tu choisis pour le groupe') : 'Le créateur du groupe choisit';
+    panel.querySelectorAll<HTMLButtonElement>('.hud-junction-opt').forEach((b) => {
       const on = Number(b.dataset.i) === j.selected;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
+      b.disabled = !open;
     });
   }
 

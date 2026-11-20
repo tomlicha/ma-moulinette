@@ -64,6 +64,8 @@ export class WorkoutSession extends TypedEmitter<{
   private ergOptOut = false;
   private sending = false;
   private holdUntilMs = 0;
+  /** Séance de groupe : le temps vient d'une horloge commune (secondes depuis le départ), pas de ce coureur. */
+  private external?: () => number;
   private readonly clock: () => number;
 
   constructor(private readonly deps: WorkoutSessionDeps) {
@@ -89,6 +91,11 @@ export class WorkoutSession extends TypedEmitter<{
     return this.pausedFlag;
   }
 
+  /** La séance suit l'horloge d'un groupe : ni pause ni palier passé à la main. */
+  get synced(): boolean {
+    return this.external !== undefined;
+  }
+
   /** Dernier état connu de la séance en cours (palier, consigne, message). */
   get state(): WorkoutState | undefined {
     return this.last;
@@ -103,10 +110,15 @@ export class WorkoutSession extends TypedEmitter<{
     return true;
   }
 
-  /** Démarre la séance choisie, avec la FTP du coureur. Sans effet sans séance choisie ou si une séance tourne déjà. */
-  start(): void {
+  /**
+   * Démarre la séance choisie, avec la FTP du coureur. Sans effet sans séance choisie ou si une séance tourne déjà.
+   * `clockS` : séance de groupe, le temps est celui du groupe (secondes depuis son départ) ; on arrive alors au bon palier,
+   * même en retard, et on ne peut ni mettre en pause ni sauter de palier.
+   */
+  start(clockS?: () => number): void {
     const workout = this.chosen;
     if (!workout || this.current) return;
+    this.external = clockS;
     const runner = new WorkoutRunner(workout, this.deps.ftpW());
     this.current = runner;
     this.pausedFlag = false;
@@ -128,7 +140,7 @@ export class WorkoutSession extends TypedEmitter<{
   }
 
   togglePause(): void {
-    if (!this.current) return;
+    if (!this.current || this.external) return;
     this.pausedFlag = !this.pausedFlag;
     this.follower.reset();
     this.deps.log(this.pausedFlag ? 'séance en pause' : 'séance reprise');
@@ -137,7 +149,7 @@ export class WorkoutSession extends TypedEmitter<{
 
   /** Passe au palier suivant. */
   skip(): void {
-    if (!this.current) return;
+    if (!this.current || this.external) return;
     const s = this.current.skip();
     this.follower.reset();
     this.deps.log(`séance : palier suivant (${STEP_LABEL[s.step.kind]})`);
@@ -181,8 +193,9 @@ export class WorkoutSession extends TypedEmitter<{
     const dt = (now - this.lastTickMs) / 1000;
     this.lastTickMs = now;
     // Sans trainer connecté, le temps de séance s'arrête : on ne compte pas un palier que personne ne pédale.
+    // En groupe, le temps est celui du groupe : il passe même sans trainer, et on retrouve le bon palier à la reconnexion.
     const running = !this.pausedFlag && trainer.connected;
-    const s = running ? runner.advance(dt) : runner.state();
+    const s = this.external ? runner.seek(this.external()) : running ? runner.advance(dt) : runner.state();
     this.last = s;
     this.emit('state', s);
     if (s.done) {
@@ -230,6 +243,7 @@ export class WorkoutSession extends TypedEmitter<{
     this.current = undefined;
     this.pausedFlag = false;
     this.ergOptOut = false;
+    this.external = undefined;
     if (this.deps.trainer.ergActive) this.deps.trainer.releaseErg(why, this.releaseOptions());
     else this.deps.log(why);
     this.last = undefined;

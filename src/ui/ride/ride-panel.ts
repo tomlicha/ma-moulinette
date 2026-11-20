@@ -41,6 +41,18 @@ export class RidePanel {
   private readonly exit = el('button', 'rn-exit');
   /** Appelée par la touche « Sortir du vélodrome » : programme ou annule la sortie. */
   onTrackExit?: () => void;
+  /** Appelée par « Suivre » sur la ligne d'un coureur proche. */
+  set onFollow(f: ((slot: number, name: string) => void) | undefined) {
+    this.list.onFollow = f;
+  }
+  /** Offre ou retire « Suivre » (pas de suivi pendant une séance). */
+  setFollowEnabled(on: boolean): void {
+    this.list.setFollowEnabled(on);
+  }
+  /** Le coureur suivi : sa ligne n'offre plus « Suivre ». */
+  setFollowed(slot: number | undefined): void {
+    this.list.setFollowed(slot);
+  }
   private nearby: NearbyRiders | undefined;
   /** Le carrefour annoncé, gardé après le verrouillage tant qu'on ne l'a pas passé. */
   private lastJunction: MapJunction | undefined;

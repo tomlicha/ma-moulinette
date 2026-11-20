@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COL_DES_ERABLES } from '../domain/course/courses/col-des-erables';
 import { Journey } from '../domain/sim/journey';
+import { DEFAULT_RIDER } from '../domain/sim/physics';
 import { GradeController } from './grade-controller';
 import { RideSession, type NearbyRider, type RideFrame, type RideTrainer } from './ride-session';
 import { SensorReadings } from './sensor-readings';
 
-function setup(over: { riders?: () => NearbyRider[]; canSimulate?: boolean } = {}) {
+function setup(over: { riders?: () => NearbyRider[]; canSimulate?: boolean; assist?: () => number } = {}) {
   const journey = new Journey(COL_DES_ERABLES);
   const readings = new SensorReadings();
   const grade = new GradeController();
@@ -23,6 +24,7 @@ function setup(over: { riders?: () => NearbyRider[]; canSimulate?: boolean } = {
     trainer,
     gearing: () => ({ enabled: false, virtualRatio: 2.4, realRatio: 2.43 }),
     riders: over.riders ?? (() => []),
+    ...(over.assist ? { assist: over.assist } : {}),
   });
   return { session, journey, readings, grade, trainer };
 }
@@ -232,6 +234,121 @@ describe('RideSession', () => {
       session.start(80, COURSE);
       vi.advanceTimersByTime(300);
       expect(session.draft).toBeGreaterThan(0.2);
+    });
+  });
+
+  describe('suivi', () => {
+    const ahead = (journey: Journey, session: RideSession, aheadM: number): NearbyRider[] => {
+      const me = journey.pointAt(session.snapshot?.distanceM ?? 0);
+      return [{ point: { x: me.x + aheadM * Math.cos(me.heading), z: me.z + aheadM * Math.sin(me.heading), heading: me.heading }, speedMs: 9, riding: true }];
+    };
+
+    it("ajoute l'aide du suivi quand aucune vraie aspiration n'existe (le meneur est à 60 m)", () => {
+      let assist = 0.15;
+      const { session, readings, journey } = setup({ riders: () => ahead(journey, session, 60), assist: () => assist });
+      readings.record({ powerW: 250 });
+      session.start(80, COURSE);
+      vi.advanceTimersByTime(300);
+      expect(session.draft).toBeCloseTo(0.15, 5);
+      assist = 0;
+      vi.advanceTimersByTime(300);
+      expect(session.draft).toBe(0);
+    });
+
+    it("garde la meilleure des deux : la vraie aspiration, plus forte, n'est pas diminuée", () => {
+      const { session, readings, journey } = setup({ riders: () => ahead(journey, session, 3), assist: () => 0.15 });
+      readings.record({ powerW: 250 });
+      session.start(80, COURSE);
+      vi.advanceTimersByTime(300);
+      expect(session.draft).toBeGreaterThan(0.2);
+    });
+
+    it('démarre derrière le coureur rejoint : la distance 0 est ce point', () => {
+      const { session, journey } = setup();
+      const edge = [...COL_DES_ERABLES.edges.values()][3]!;
+      const s = Math.min(100, edge.lengthM / 2);
+      session.start(80, COURSE, { edgeId: edge.id, forward: true, s });
+      expect(session.snapshot?.distanceM).toBe(0);
+      expect(journey.locate(0).edgeId).toBe(edge.id);
+      expect(journey.locate(0).s).toBeCloseTo(s - Math.min(10, s), 3);
+    });
+  });
+
+  describe('rythme de groupe', () => {
+    it("avance avec le rythme imposé, pas avec la puissance mesurée, et sans aspiration", () => {
+      let steps = 0;
+      const pacing = {
+        rider: { ...DEFAULT_RIDER, massKg: 75 },
+        advance: (ride: { advance: (dt: number, w: number) => unknown }) => {
+          steps++;
+          ride.advance(0.1, 200);
+        },
+      };
+      const { session, readings, journey } = setup({
+        riders: () => {
+          const me = journey.pointAt(session.snapshot?.distanceM ?? 0);
+          return [{ point: { x: me.x + 3 * Math.cos(me.heading), z: me.z + 3 * Math.sin(me.heading), heading: me.heading }, speedMs: 9, riding: true }];
+        },
+      });
+      readings.record({ powerW: 0 }); // il ne pédale pas : le groupe avance quand même
+      session.start(80, COURSE, undefined, pacing as never);
+      expect(session.paced).toBe(true);
+      expect(session.rider?.massKg).toBe(75); // la masse du coureur de référence, pas celle du coureur
+      vi.advanceTimersByTime(500);
+      expect(steps).toBeGreaterThan(0);
+      expect(session.snapshot?.distanceM).toBeGreaterThan(0);
+      expect(session.draft).toBe(0);
+    });
+
+    it("rend la sortie à la puissance du coureur, et l'arrêt oublie le rythme", () => {
+      const pacing = { rider: DEFAULT_RIDER, advance: vi.fn() };
+      const { session } = setup();
+      session.start(80, COURSE, undefined, pacing as never);
+      session.releasePacing();
+      expect(session.paced).toBe(false);
+      session.stop();
+      session.start(80, COURSE, undefined, pacing as never);
+      session.stop();
+      expect(session.paced).toBe(false);
+    });
+  });
+
+  describe('recalage du rythme de groupe', () => {
+    it("repart du début du parcours avec le nouveau rythme, et le rattrape au pas suivant", () => {
+      const first = { rider: DEFAULT_RIDER, advance: (ride: { advance: (dt: number, w: number) => unknown }) => void ride.advance(0.1, 200) };
+      const { session, readings, journey } = setup();
+      readings.record({ powerW: 0 });
+      session.start(80, COURSE, undefined, first as never);
+      vi.advanceTimersByTime(1000);
+      const before = session.snapshot!.distanceM;
+      expect(before).toBeGreaterThan(0);
+      // Le nouveau rythme rejoue d'un trait 30 s de groupe : la sortie y est tout de suite.
+      let played = false;
+      const second = {
+        rider: { ...DEFAULT_RIDER, massKg: 70 },
+        advance: (ride: { advance: (dt: number, w: number) => unknown }) => {
+          if (played) return;
+          played = true;
+          for (let i = 0; i < 300; i++) ride.advance(0.1, 250);
+        },
+      };
+      session.repace(second as never);
+      expect(session.snapshot!.distanceM).toBe(0); // le trajet repart du début
+      expect(journey.locate(0).s).toBe(0);
+      expect(session.rider?.massKg).toBe(70);
+      vi.advanceTimersByTime(200);
+      expect(session.snapshot!.distanceM).toBeGreaterThan(before);
+    });
+
+    it("ne fait rien hors séance de groupe : une sortie libre garde sa distance", () => {
+      const { session, readings } = setup();
+      readings.record({ powerW: 250 });
+      session.start(80, COURSE);
+      vi.advanceTimersByTime(1000);
+      const d = session.snapshot!.distanceM;
+      session.repace({ rider: DEFAULT_RIDER, advance: vi.fn() } as never);
+      expect(session.snapshot!.distanceM).toBe(d);
+      expect(session.paced).toBe(false);
     });
   });
 });

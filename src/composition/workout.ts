@@ -88,7 +88,7 @@ export function composeWorkout(w: Wiring): void {
   function refreshWorkoutButtons() {
     const { runner, workout } = workoutSession;
     const startReason = !workout && !runner ? 'Choisis d’abord une séance dans la liste.' : workoutStartBlock();
-    workoutControls.render({ running: !!runner, paused: workoutSession.paused, startReason });
+    workoutControls.render({ running: !!runner, paused: workoutSession.paused, startReason, locked: workoutSession.synced });
     homeWorkouts.setStartBlock(startReason);
     refreshEditorRide?.();
   }

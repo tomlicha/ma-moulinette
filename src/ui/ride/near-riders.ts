@@ -1,6 +1,9 @@
 import { formatGap, type Nearby, type NearbyRiders } from '../../render/riders/others-model';
 import { riderColor } from './ride-map';
 
+/** Icône « rattraper » du bouton de suivi : deux chevrons vers l'avant. */
+const CATCH_UP_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6l6 6-6 6M13 6l6 6-6 6"/></svg>';
+
 /** Rafraîchissement de l'encart, en ms : les écarts bougent doucement, inutile de toucher au DOM à chaque image. */
 const EVERY_MS = 250;
 
@@ -17,6 +20,9 @@ interface Row {
   el: HTMLElement;
   name: HTMLElement;
   gap: HTMLElement;
+  /** « Suivre » : absent sur la ligne du joueur. */
+  follow?: HTMLButtonElement;
+  slot?: number;
 }
 
 /**
@@ -29,6 +35,12 @@ export class NearRiders {
   private readonly rows: Row[] = [];
   private signature = '';
   private last = -Infinity;
+  /** Le coureur suivi en ce moment : il n'a plus de bouton « Suivre ». */
+  private followed: number | undefined;
+  /** Faux en séance : on n'y rattrape personne, les lignes n'offrent pas « Suivre ». */
+  private followEnabled = true;
+  /** Appelée par « Suivre » avec le numéro et le nom du coureur. */
+  onFollow?: (slot: number, name: string) => void;
 
   /** Vrai quand la liste a des lignes : sans coureur proche, l'encart n'a que la carte. */
   get hasRows(): boolean {
@@ -57,10 +69,30 @@ export class NearRiders {
         return;
       }
       if (row.name.textContent !== l.name) row.name.textContent = l.name;
+      this.markFollowed(row);
       const g = formatGap(l.gapM);
       if (row.gap.textContent !== g) row.gap.textContent = g;
     });
     this.host.hidden = false;
+  }
+
+  /** Le coureur suivi (`undefined` : personne) : sa ligne s'en souvient et n'offre plus « Suivre ». */
+  setFollowed(slot: number | undefined): void {
+    this.followed = slot;
+    for (const r of this.rows) this.markFollowed(r);
+  }
+
+  /** Offre ou retire « Suivre » sur toutes les lignes (pas de suivi pendant une séance). */
+  setFollowEnabled(on: boolean): void {
+    this.followEnabled = on;
+    for (const r of this.rows) this.markFollowed(r);
+  }
+
+  private markFollowed(row: Row): void {
+    if (!row.follow) return;
+    const on = row.slot === this.followed;
+    row.follow.hidden = on || !this.followEnabled;
+    row.el.classList.toggle('rn-followed', on);
   }
 
   clear(): void {
@@ -84,11 +116,25 @@ export class NearRiders {
       gap.className = 'rn-gap';
       if (l === 'me') {
         name.textContent = 'Toi';
-      } else {
-        dot.style.background = dotColor(l.slot);
+        el.append(dot, name, gap);
+        this.rows.push({ el, name, gap });
+        return el;
       }
-      el.append(dot, name, gap);
-      this.rows.push({ el, name, gap });
+      dot.style.background = dotColor(l.slot);
+      const follow = document.createElement('button');
+      follow.type = 'button';
+      follow.className = 'rn-follow';
+      follow.title = 'Rejoindre et suivre';
+      follow.setAttribute('aria-label', `Rejoindre et suivre ${l.name}`);
+      follow.innerHTML = CATCH_UP_ICON; // gabarit statique, aucune donnée du joueur
+      follow.addEventListener('click', (e) => {
+        e.stopPropagation(); // pas de bascule Liste / Carte
+        this.onFollow?.(l.slot, name.textContent ?? l.name);
+      });
+      el.append(dot, name, gap, follow);
+      const row: Row = { el, name, gap, follow, slot: l.slot };
+      this.rows.push(row);
+      this.markFollowed(row);
       return el;
     });
     this.list.replaceChildren(...items);
