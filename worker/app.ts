@@ -40,6 +40,10 @@ interface Env {
 
 const SIGNATURE = networkSignature(COL_DES_ERABLES);
 
+// TEMPORAIRE : connexion de test activée uniquement sur le Preview de la PR Final Surge.
+// Ne jamais élargir cette condition au domaine de production ; retirer après validation de l'intégration.
+const FINAL_SURGE_PREVIEW_HOST = 'feat-final-surge-workout-reader-ma-moulinette-ride.moulinette-ride.workers.dev';
+
 declare const WebSocketPair: { new (): { 0: CfWebSocket; 1: CfWebSocket & { accept(): void } } };
 
 /** Accepte la connexion pour la refermer aussitôt avec un code lisible : un navigateur ne voit pas le statut HTTP d'un refus. */
@@ -58,7 +62,7 @@ export default {
       clientId: env.STRAVA_CLIENT_ID,
       clientSecret: env.STRAVA_CLIENT_SECRET,
       publicOrigin: env.PUBLIC_ORIGIN || undefined,
-      devLogin: env.DEV_LOGIN === '1',
+      devLogin: env.DEV_LOGIN === '1' || url.hostname === FINAL_SURGE_PREVIEW_HOST,
     });
 
     if (url.pathname === WORLD_PATH) {
