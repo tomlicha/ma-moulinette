@@ -26,3 +26,16 @@ describe('réglages textuels (repères des nouveautés)', () => {
     expect(checkItem(item('whatsnew-read', null))).toBeDefined();
   });
 });
+
+describe('provenance des séances Final Surge', () => {
+  const source = { provider: 'final-surge', externalId: 'workout-123', scheduledAt: '2026-11-20' };
+  const workout = { name: 'Tempo', blocks: [{ type: 'steady', durationS: 300, power: 0.9 }], source };
+  it('accepte et conserve la provenance Final Surge dans une séance synchronisée', () => {
+    expect(checkItem({ kind: 'workout', id: 'workout_1', body: workout, updatedAt: 1000 })?.body).toMatchObject({ source });
+  });
+  it('refuse une provenance externe invalide', () => {
+    expect(checkItem({ kind: 'workout', id: 'workout_1', body: { ...workout, source: { provider: 'other', externalId: 'x' } }, updatedAt: 1000 })).toBeUndefined();
+    expect(checkItem({ kind: 'workout', id: 'workout_1', body: { ...workout, source: { provider: 'final-surge', externalId: '' } }, updatedAt: 1000 })).toBeUndefined();
+    expect(checkItem({ kind: 'workout', id: 'workout_1', body: { ...workout, source: { provider: 'final-surge', externalId: 'x', scheduledAt: 'yesterday' } }, updatedAt: 1000 })).toBeUndefined();
+  });
+});

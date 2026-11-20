@@ -6,7 +6,7 @@
 main:has([data-view='seances']:not([hidden])) { max-width: none; padding: 0; }
 
 .sea {
-  position: relative; box-sizing: border-box; overflow: hidden; min-height: 100vh; min-height: 100dvh; padding: 20px 32px 96px;
+  position: relative; box-sizing: border-box; overflow: hidden; min-height: 100vh; min-height: 100dvh; padding: 20px 32px 28px;
   display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 30vw, 380px); grid-template-rows: auto minmax(0, 1fr); gap: 20px;
   background: #3F86D0; color: #14171A; font-family: Barlow, system-ui, sans-serif; color-scheme: light;
   --glass: rgba(255, 255, 255, .94); --glass-line: rgb(90 60 30 / .12); --glass-muted: #4F5865;
@@ -26,6 +26,11 @@ main:has([data-view='seances']:not([hidden])) { max-width: none; padding: 0; }
 .sea > .sea-lib { position: relative; z-index: 1; }
 .sea :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .sea .home-top { grid-column: 1 / -1; }
+.sea .sea-back .nav-ico { display: block; }
+.sea .home-top { flex-wrap: wrap; row-gap: 10px; }
+.sea .home-top .account { margin-left: 0; } /* les pastilles (centrées) prennent l'espace libre, le compte reste à droite */
+.sea .account-pitch { display: none; } /* ici, le bouton seul : l'en-tête porte déjà le retour et trois pastilles */
+@media (max-width: 1200px) { .sea .home-top .account { margin-left: auto; } }
 .sea button { font-family: inherit; }
 .sea button.secondary, .sea .chip { background: var(--tint-2); color: var(--fg); border: 1px solid var(--edge); }
 .sea button.secondary:hover, .sea .chip:hover { background: var(--tint-3); }
@@ -241,9 +246,12 @@ kbd { font: inherit; font-size: .75rem; border: 1px solid var(--ctl-line); borde
   .sea .home-brand .logo-la { display: none; }
   .sea .home-brand .logo-word { font-size: 0; transform: none; }
   .sea .home-brand .logo-o { width: 26px; height: 26px; margin: 0; }
-  .sea .home-nav { position: static; transform: none; width: auto; border: 0; box-shadow: none; background: var(--glass); flex-direction: column; flex: 1; gap: 2px; padding: 3px; border-radius: 12px; align-content: flex-start; }
-  .sea .home-nav a { flex-direction: column; height: auto; padding: 6px 0 4px; font-size: 12px; gap: 1px; justify-content: center; border-radius: 9px; }
-  .sea .home-nav .nav-ico { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .sea .home-chips { flex-direction: column; align-items: center; gap: 6px; margin: 0; }
+  .sea .home-chips .home-chip, .sea .sea-back { box-sizing: border-box; width: 44px; height: 44px; padding: 0; justify-content: center; }
+  .sea .home-chips .chip-news { border-width: 1px; border-color: var(--glass-line); }
+  .sea .sea-back { align-self: center; border-radius: 50%; }
+  .sea .sea-back span { display: none; }
+  .sea .nav-ico { display: block; width: 22px; height: 22px; }
 
   /* Sans niveau d'empilement propre : ses menus et feuilles passent au-dessus du voile. */
   .sea-main { grid-column: 2; grid-row: 1; gap: 6px; justify-content: flex-start; z-index: auto; }

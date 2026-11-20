@@ -15,6 +15,7 @@
 /* Connecté : pastille à la hauteur de la marque, initiale sur l'accent, nom puis état en ligne. */
 .account-chip { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px 0 6px; border-radius: 999px; background: var(--glass); color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); backdrop-filter: blur(14px) saturate(1.2); font-weight: 400; text-align: left; }
 .account-chip:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+
 .account-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 1.15rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
 .account-who { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 .account-who b { font-size: 1rem; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -67,3 +68,12 @@
   .account-pitch { display: none; }
   .account-out { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
 }
+
+
+/* Connexion Final Surge : même carte de dialogue que le profil, champs et retours accessibles. */
+.final-surge-card { max-height: min(88vh, 760px); overflow-y: auto; }
+.final-surge-card .fs-credentials, .final-surge-card .fs-connected { display: flex; flex-direction: column; gap: 12px; }
+.final-surge-card [hidden] { display: none !important; }
+.final-surge-card .fs-errors { margin: 0; padding-left: 22px; color: #b42318; }
+.final-surge-card .fs-status { min-height: 1.4em; }
+.final-surge-card input[type='date'] { min-height: 44px; padding: 0 12px; border: 1px solid var(--btn-line); border-radius: 12px; background: #fff; color: #14171a; font: 600 1rem Barlow, system-ui, sans-serif; }

@@ -1,6 +1,6 @@
 import { blockBody, type BlockLibrary, type SavedBlock } from '../../domain/workout/block-library';
 import type { EditorBlock } from '../../domain/workout/blocks';
-import { workoutBody, type SavedWorkout, type WorkoutLibrary } from '../../domain/workout/library';
+import { workoutBody, type SavedWorkout, type WorkoutLibrary, type WorkoutSource } from '../../domain/workout/library';
 import type { SyncSource } from './client';
 import type { SyncItem } from './protocol';
 
@@ -15,8 +15,8 @@ export function workoutSource(lib: WorkoutLibrary, onChange: (ids: Set<string>) 
       for (const i of items) {
         if (i.body === null) drop.push(i.id);
         else {
-          const b = i.body as { name: string; description?: string; blocks: EditorBlock[] };
-          put.push({ id: i.id, name: b.name, description: b.description, blocks: b.blocks, updatedAt: i.updatedAt });
+          const b = i.body as { name: string; description?: string; blocks: EditorBlock[]; source?: WorkoutSource };
+          put.push({ id: i.id, name: b.name, description: b.description, blocks: b.blocks, source: b.source, updatedAt: i.updatedAt });
         }
       }
       lib.merge(put, drop);

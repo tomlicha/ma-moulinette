@@ -83,7 +83,6 @@
             <strong class="home-brand"><span class="logo" role="img" aria-label="Ma Moulinette"><span class="logo-la" aria-hidden="true">MA</span><span class="logo-word" aria-hidden="true">M<svg class="logo-o" viewBox="0 0 24 24" fill="none"><circle class="logo-teeth" cx="12" cy="12" r="11" /><circle class="logo-ring" cx="12" cy="12" r="8" /><path class="logo-spokes" d="M12 12V5.4M12 12l6.3-2M12 12l3.9 5.3M12 12l-3.9 5.3M12 12l-6.3-2" /><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" /></svg>ULINETTE</span></span></strong>
             <nav class="home-nav" aria-label="Écrans">
               <a href="#accueil" data-nav="accueil"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Accueil</span></a>
-              <a href="#sortie" data-nav="sortie"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8v8l6-4z"/></svg><span>Sortie</span></a>
               <a href="#seances" data-nav="seances"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M9 20V6M14 20V10M19 20V4"/></svg><span>Séances</span></a>
               <a href="#appareils" data-nav="appareils"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><path d="M6 6a8.5 8.5 0 0 0 0 12M18 6a8.5 8.5 0 0 1 0 12M9 9a4.5 4.5 0 0 0 0 6M15 9a4.5 4.5 0 0 1 0 6"/></svg><span>Appareils</span></a>
             </nav>
@@ -176,13 +175,11 @@
         <div class="home">
           <header class="home-top">
             <strong class="home-brand"><span class="logo" role="img" aria-label="Ma Moulinette"><span class="logo-la" aria-hidden="true">MA</span><span class="logo-word" aria-hidden="true">M<svg class="logo-o" viewBox="0 0 24 24" fill="none"><circle class="logo-teeth" cx="12" cy="12" r="11" /><circle class="logo-ring" cx="12" cy="12" r="8" /><path class="logo-spokes" d="M12 12V5.4M12 12l6.3-2M12 12l3.9 5.3M12 12l-3.9 5.3M12 12l-6.3-2" /><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" /></svg>ULINETTE</span></span></strong>
-            <nav class="home-nav" aria-label="Écrans">
-              <a href="#accueil" data-nav="accueil"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Accueil</span></a>
-              <a href="#sortie" data-nav="sortie"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8v8l6-4z"/></svg><span>Sortie</span></a>
-              <a href="#seances" data-nav="seances"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M9 20V6M14 20V10M19 20V4"/></svg><span>Séances</span></a>
-              <a href="#appareils" data-nav="appareils"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><path d="M6 6a8.5 8.5 0 0 0 0 12M18 6a8.5 8.5 0 0 1 0 12M9 9a4.5 4.5 0 0 0 0 6M15 9a4.5 4.5 0 0 1 0 6"/></svg><span>Appareils</span></a>
-            </nav>
-            <div class="home-chips">
+            <!-- Pas de menu sur l'accueil : le panneau Séances (« + Créer »), la pastille Trainer · Cardio (carte « Appareils » sur iPhone)
+                 et « Rouler » mènent aux autres écrans ; la sortie ne s'ouvre qu'en démarrant une séance. -->
+            <!-- Repère des pastilles (ui/shared/header-chips.ts) : elles se posent ici, ou dans l'en-tête de Séances. -->
+            <span data-chips-slot hidden></span>
+            <div id="home-chips" class="home-chips">
               <!-- Journal des nouveautés (docs/design/nouveautes.md) : rempli par ui/whatsnew/whats-new-chip.ts. -->
               <button id="home-news-chip" class="home-chip chip-news" type="button" aria-haspopup="dialog" aria-label="Nouveautés">
                 <span class="news-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16v4M17 18h4"/></svg></span><span class="news-label">Nouveautés</span><i class="news-dot" aria-hidden="true"></i>
@@ -459,12 +456,8 @@
 
           <header class="home-top">
             <strong class="home-brand"><span class="logo" role="img" aria-label="Ma Moulinette"><span class="logo-la" aria-hidden="true">MA</span><span class="logo-word" aria-hidden="true">M<svg class="logo-o" viewBox="0 0 24 24" fill="none"><circle class="logo-teeth" cx="12" cy="12" r="11" /><circle class="logo-ring" cx="12" cy="12" r="8" /><path class="logo-spokes" d="M12 12V5.4M12 12l6.3-2M12 12l3.9 5.3M12 12l-3.9 5.3M12 12l-6.3-2" /><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" /></svg>ULINETTE</span></span></strong>
-            <nav class="home-nav" aria-label="Écrans">
-              <a href="#accueil" data-nav="accueil"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Accueil</span></a>
-              <a href="#sortie" data-nav="sortie"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8v8l6-4z"/></svg><span>Sortie</span></a>
-              <a href="#seances" data-nav="seances"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M9 20V6M14 20V10M19 20V4"/></svg><span>Séances</span></a>
-              <a href="#appareils" data-nav="appareils"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><path d="M6 6a8.5 8.5 0 0 0 0 12M18 6a8.5 8.5 0 0 1 0 12M9 9a4.5 4.5 0 0 0 0 6M15 9a4.5 4.5 0 0 1 0 6"/></svg><span>Appareils</span></a>
-            </nav>
+            <a class="home-chip sea-back" href="#accueil" aria-label="Retour à l'accueil"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Accueil</span></a>
+            <span data-chips-slot hidden></span>
           </header>
 
           <div id="editor" class="sea-main">
@@ -617,22 +610,20 @@
             <div class="rider-fields">
               <div class="rider-field">
                 <label for="rider-mass">Masse (coureur + vélo)</label>
-                <div class="stepper">
-                  <button type="button" class="secondary" data-step="mass" data-dir="-1" aria-label="Masse moins 1 kg">−</button>
-                  <button type="button" id="rider-mass" class="stepper-value" aria-haspopup="dialog" aria-label="Masse en kilogrammes : choisir sur la roulette"></button>
-                  <span>kg</span>
-                  <button type="button" class="secondary" data-step="mass" data-dir="1" aria-label="Masse plus 1 kg">+</button>
-                </div>
+                <div class="rider-stepper">
+                    <button type="button" data-step="mass" data-dir="-1" aria-label="Masse moins 1 kg">−</button>
+                    <div class="rider-stepper-val"><input type="text" id="rider-mass" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Masse en kilogrammes" /><span>kg</span></div>
+                    <button type="button" data-step="mass" data-dir="1" aria-label="Masse plus 1 kg">+</button>
+                  </div>
                 <p id="rider-mass-note" class="note" hidden>La masse est figée pendant la sortie.</p>
               </div>
               <div class="rider-field">
                 <label for="rider-ftp">FTP</label>
-                <div class="stepper">
-                  <button type="button" class="secondary" data-step="ftp" data-dir="-1" aria-label="FTP moins 1 W">−</button>
-                  <button type="button" id="rider-ftp" class="stepper-value" aria-haspopup="dialog" aria-label="FTP en watts : choisir sur la roulette"></button>
-                  <span>W</span>
-                  <button type="button" class="secondary" data-step="ftp" data-dir="1" aria-label="FTP plus 1 W">+</button>
-                </div>
+                <div class="rider-stepper">
+                    <button type="button" data-step="ftp" data-dir="-1" aria-label="FTP moins 1 W">−</button>
+                    <div class="rider-stepper-val"><input type="text" id="rider-ftp" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="FTP en watts" /><span>W</span></div>
+                    <button type="button" data-step="ftp" data-dir="1" aria-label="FTP plus 1 W">+</button>
+                  </div>
               </div>
             </div>
             <ul id="rider-zones" class="rider-zones" aria-label="Zones de puissance"></ul>

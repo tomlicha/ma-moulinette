@@ -201,7 +201,9 @@ button.rider-chip:hover { background: #FBF6EF; }
 /* Fiche du coureur */
 .rider-dialog { border: 0; padding: 0; background: transparent; max-width: none; color: var(--fg); font-family: Barlow, system-ui, sans-serif; }
 .rider-dialog::backdrop { background: rgb(20 23 26 / .45); backdrop-filter: blur(4px); }
-.rider-card { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: var(--radius-card); background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .3); color-scheme: light; }
+.rider-card { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: var(--radius-card); background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .3);
+  /* Carte blanche : palette claire fixe, sinon le texte hérite des couleurs claires du thème sombre. */
+  color-scheme: light; color: var(--fg); --fg: #14171A; --muted: #4F5865; --card: #fff; --raised: #fff; --line: rgb(90 60 30 / .16); --btn-line: #8B8478; --accent: #C2410C; --on-accent: #fff; }
 .rider-top { display: flex; align-items: center; gap: 16px; }
 .rider-top h2 { margin: 0; font: 700 2.2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
 .rider-avatar { width: 88px; height: 88px; flex: none; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent); background: #E2E4E7; box-shadow: 0 0 0 4px rgb(194 65 12 / .12); }
@@ -211,14 +213,17 @@ button.rider-chip:hover { background: #FBF6EF; }
 .rider-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rider-field label { font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .rider-field .note { margin: 0; font-size: .8rem; }
-.stepper { display: flex; align-items: center; height: 48px; overflow: hidden; border: 1px solid var(--btn-line); border-radius: 14px; background: #fff; }
-.stepper button { width: 44px; height: 100%; flex: none; padding: 0; border: 0; border-radius: 0; background: rgb(90 60 30 / .06); color: var(--fg); font-size: 1.3rem; }
-.stepper button:hover:not(:disabled) { background: rgb(90 60 30 / .12); }
-.stepper button.stepper-value { flex: 1; width: auto; min-width: 0; padding: 0 4px 0 0; background: transparent; color: var(--fg); text-align: right; font: 700 1.25rem Barlow, system-ui, sans-serif; }
-.stepper button.stepper-value:hover:not(:disabled) { background: rgb(90 60 30 / .06); }
-.stepper button.stepper-value:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
-.stepper button:disabled { opacity: .5; cursor: not-allowed; }
-.stepper > span { padding: 0 8px 0 2px; color: var(--muted); font-size: .9rem; }
+.rider-stepper { display: flex; align-items: center; gap: 4px; height: 56px; padding: 4px; box-sizing: border-box; border-radius: 16px; background: rgb(90 60 30 / .06); }
+.rider-stepper button { width: 44px; height: 44px; flex: none; padding: 0; border: 1px solid var(--btn-line); border-radius: 50%; background: #fff; color: var(--fg); font-size: 1.4rem; line-height: 1; }
+.rider-stepper button:hover:not(:disabled) { background: #FBF6EF; }
+.rider-stepper button:disabled { opacity: .4; cursor: not-allowed; }
+/* Le chiffre est centré entre les deux boutons ; l'unité se pose à sa droite, dans la colonne latérale. */
+.rider-stepper-val { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; }
+/* Sélecteur renforcé : en thème sombre, la règle globale des champs (style.css) imposerait sinon un cadre et un fond. */
+.rider-card .rider-stepper-val input[type='text'] { grid-column: 2; width: 3.6ch; min-width: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg); text-align: center; font: 700 1.6rem/1.2 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-variant-numeric: tabular-nums; box-shadow: none; }
+.rider-stepper-val input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.rider-stepper-val input:read-only { cursor: pointer; }
+.rider-stepper-val span { grid-column: 3; padding-left: 3px; color: var(--muted); font-size: .95rem; white-space: nowrap; }
 .rider-zones { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
 .rider-zones li { display: flex; align-items: center; gap: 8px; font-size: .95rem; }
 .rider-zones li i { width: 10px; height: 10px; flex: none; border-radius: 3px; }
@@ -319,7 +324,7 @@ button.rider-chip:hover { background: #FBF6EF; }
   .rider-card { padding: 14px 18px; gap: 8px; }
   .rider-avatar { width: 56px; height: 56px; }
   .rider-top h2 { font-size: 1.6rem; }
-  .stepper { height: 40px; }
+  .rider-stepper { height: 52px; }
   .rider-zones { grid-template-columns: 1fr 1fr; gap: 3px 16px; }
   .wheel-card { --wh: 160px; padding: 12px 16px; gap: 8px; }
   .rider-zones li { font-size: .85rem; }
@@ -348,11 +353,9 @@ button.rider-chip:hover { background: #FBF6EF; }
   grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr) clamp(170px, 30dvh, 250px);
 }
 .home-top { gap: 24px; justify-content: flex-start; }
-.home .home-nav { position: static; transform: none; width: auto; flex: none; margin-inline: auto 0; }
-.home .home-nav a { padding: 0 18px; }
-.home .home-nav a[aria-current='page'] { background: #14171A; }
-.home-chips { display: flex; gap: 10px; }
-.home-chip { display: inline-flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; background: #fff; color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); font: 600 1rem Barlow, system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.home-chips { display: flex; flex: none; gap: 10px; margin-inline: auto; }
+.home .home-top .account { margin-left: 0; }
+.home-chip { display: inline-flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; background: #fff; color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); font: 600 1rem Barlow, system-ui, sans-serif; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .home-chip:hover { background: #FBF6EF; }
 .home-chip:focus-visible, .home-seance-card:focus-visible, .home-devices-card:focus-visible, .course-thumb:focus-visible, .home-wo-list :focus-visible, .home-wo-filters :focus-visible, .home-course-nav button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 .chip-devices[data-any='false'] { border: 2px dashed var(--btn-line); }
@@ -361,8 +364,8 @@ button.rider-chip:hover { background: #FBF6EF; }
 .dev-pill[data-tone='ok'] i { background: #2B8A3E; box-shadow: 0 0 0 3px rgb(43 138 62 / .2); }
 .dev-pill[data-tone='busy'] i { background: #C2257A; }
 .dev-pill[data-tone='error'] i { background: #C92A2A; }
-.chip-rider { padding: 0 18px 0 6px; }
-.chip-rider img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); background: #E2E4E7; }
+.chip-rider { padding: 0 18px 0 6px; white-space: nowrap; flex: none; }
+.chip-rider img { width: 36px; height: 36px; flex: none; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); background: #E2E4E7; }
 
 /* Le monde : la scène dans une carte arrondie ; le titre sur le ciel, « Ta sortie » en bas. */
 .home-world { position: relative; z-index: 1; grid-column: 1 / 9; grid-row: 2; min-height: 0; overflow: hidden; border-radius: var(--radius-card); background: #3F86D0; box-shadow: var(--shadow-card); }
@@ -435,7 +438,7 @@ button.wo-item-head { display: flex; align-items: center; gap: 12px; width: 100%
 @media (max-width: 900px) and (not ((pointer: coarse) and (orientation: landscape) and (max-height: 600px))) {
   .home { height: auto; min-height: 100dvh; padding: 14px 16px 24px; grid-template-columns: 1fr; grid-template-rows: auto; }
   .home-top { flex-wrap: wrap; gap: 10px; }
-  .home .home-nav { order: 3; flex: 1 0 100%; margin: 0; }
+  .home .home-top .account { margin-left: auto; }
   .home-world, .home-courses, .home-seances { grid-column: 1; grid-row: auto; }
   .home-world { min-height: 380px; }
   .home-courses { height: 460px; }
@@ -451,11 +454,7 @@ button.wo-item-head { display: flex; align-items: center; gap: 12px; width: 100%
   .home { display: block; height: 100dvh; padding: 10px 12px 20px; background: #3F86D0; }
   .home-top { position: relative; justify-content: space-between; gap: 10px; }
   .home-brand { background: none; border: 0; box-shadow: none; backdrop-filter: none; padding: 0 0 0 4px; }
-  .home .home-nav { order: 0; margin: 0 0 0 auto; padding: 4px; }
-  .home .home-nav a { width: 44px; height: 44px; padding: 0; flex: none; }
-  .home .home-nav a span { display: none; }
-  .home .home-nav .nav-ico { display: block; width: 22px; height: 22px; }
-  .home .home-nav a[aria-current='page'] { background: var(--accent); }
+  .home-chips { margin-inline: auto 0; }
   .chip-devices, .chip-rider span, .home-top .account { display: none; }
   .chip-rider { width: 52px; height: 52px; padding: 0; justify-content: center; border: 2px solid #fff; }
   .chip-rider img { width: 100%; height: 100%; border: 0; }
