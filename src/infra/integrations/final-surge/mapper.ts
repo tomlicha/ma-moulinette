@@ -46,14 +46,10 @@ function selectWorkoutOption(builder: RecordLike): RecordLike | undefined {
   const raw = get(builder, 'target_options', 'targetOptions', 'TargetOptions');
   const options = Array.isArray(raw) ? raw.filter(isRecord) : [];
   if (!options.length) return builder;
-  const cyclingPower = options.find((option) => {
-    const sport = (firstText(option, 'sport', 'Sport') ?? '').toLowerCase();
-    const target = (firstText(option, 'target', 'Target') ?? '').toLowerCase();
-    return ['cycling', 'bike', 'biking'].includes(sport) && /power|watt/.test(target);
-  });
-  const cycling = options.find((option) => ['cycling', 'bike', 'biking'].includes((firstText(option, 'sport', 'Sport') ?? '').toLowerCase()));
-  // Ne jamais choisir arbitrairement une séance d'un autre sport (course, natation, etc.).
-  return cyclingPower ?? cycling;
+  // Le sport est le premier critère : ne jamais choisir un autre sport parce qu'il a une cible de puissance.
+  return options.find((option) => ['cycling', 'bike', 'biking', 'cycle'].includes(
+    (firstText(option, 'sport', 'Sport') ?? '').toLowerCase(),
+  ));
 }
 function parseDurationSeconds(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value);
@@ -198,9 +194,8 @@ function expandSteps(rawSteps: unknown[], output: WorkoutStep[], warnings: strin
 
 
 /**
- * Accepte une séance explicitement cycliste dès qu'elle contient au moins un bloc
- * chronométré avec une cible de puissance explicite (watts ou %FTP).
- * Les sorties libres et les structures sans cible de puissance sont exclues.
+ * N'accepte que les séances cyclistes dont chaque étape chronométrée possède
+ * explicitement une cible de puissance ou FTP. Les valeurs ne sont pas filtrées.
  */
 export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   const builder = unwrapBuilder(builderPayload);
@@ -210,14 +205,17 @@ export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   const sport = (firstText(selected, 'sport', 'Sport') ?? '').toLowerCase();
   if (!['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
 
-  const hasPowerTarget = (items: unknown[], depth = 0): boolean => {
-    if (depth > 8) return false;
-    return items.some((item) => {
+  const hasPowerTargetOnEveryStep = (items: unknown[], depth = 0): boolean => {
+    if (depth > 8 || items.length === 0) return false;
+    return items.every((item) => {
       if (!isRecord(item)) return false;
       const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
       if (type === 'repeat' || type === 'repetition') {
+        const countRaw = get(item, 'repeats', 'repeat', 'Repeat', 'count', 'Count');
+        const count = typeof countRaw === 'number' ? Math.floor(countRaw) : Number(countRaw);
         const children = get(item, 'data', 'Data', 'steps', 'Steps');
-        return Array.isArray(children) && hasPowerTarget(children, depth + 1);
+        return Number.isInteger(count) && count >= 1 && Array.isArray(children) &&
+          hasPowerTargetOnEveryStep(children, depth + 1);
       }
       if (type !== 'step' && type !== 'workoutstep') return false;
       const durationType = (firstText(item, 'durationType', 'DurationType') ?? 'TIME').toUpperCase();
@@ -225,20 +223,11 @@ export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
       const targets = targetEntries(get(item, 'target', 'Target', 'targets', 'Targets'));
       return targets.some((target) => {
         const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase();
-        if (!['power', 'watt', 'watts'].includes(targetType)) return false;
-        const { low, high } = numericPair(target);
-        const value = midpoint(low, high);
-        if (value === undefined || value <= 0) return false;
-        const descriptor = [
-          firstText(target, 'targetType', 'TargetType'),
-          firstText(target, 'targetOption', 'TargetOption'),
-          firstText(target, 'unit', 'Unit', 'units', 'Units'),
-        ].filter(Boolean).join(' ').toLowerCase();
-        return /percent|%|ftp|threshold|fraction|watt|\\bw\\b|absolute/.test(descriptor);
+        return ['power', 'watt', 'watts', 'ftp', 'percentftp'].includes(targetType);
       });
     });
   };
-  return hasPowerTarget(readSteps(selected));
+  return hasPowerTargetOnEveryStep(readSteps(selected));
 }
 /** Convert a calendar summary and Workout Builder payload to Ma Moulinette's Workout model. */
 export function mapFinalSurgeWorkout(summary: FinalSurgeRecord, builderPayload: unknown, options: FinalSurgeMapperOptions = {}): MappedFinalSurgeWorkout {
