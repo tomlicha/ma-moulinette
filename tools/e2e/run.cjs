@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ROOT, loadPlaywright, startServer } = require('./lib.cjs');
 
-const SCENARIOS = { app: './scenarios/app.cjs', autostart: './scenarios/autostart.cjs', gears: './scenarios/gears.cjs', recap: './scenarios/recap.cjs', gpu: './scenarios/gpu.cjs', editor: './scenarios/editor.cjs' };
+const SCENARIOS = { boot: './scenarios/boot.cjs', app: './scenarios/app.cjs', autostart: './scenarios/autostart.cjs', gears: './scenarios/gears.cjs', recap: './scenarios/recap.cjs', gpu: './scenarios/gpu.cjs', editor: './scenarios/editor.cjs' };
 
 function parseArgs(argv) {
   const args = { names: [], out: path.join(ROOT, '.e2e', 'last'), url: undefined, port: 5199 };
