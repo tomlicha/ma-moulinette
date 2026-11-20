@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapFinalSurgeWorkout } from '../mapper.ts';
+import { isCyclingIntervalWorkout, mapFinalSurgeWorkout } from '../mapper.ts';
 
 const power = (value: number) => [{ targetType: 'power', targetOption: 'percentFTP', targetLow: value, targetHigh: value }];
 
@@ -103,5 +103,48 @@ describe('mapFinalSurgeWorkout', () => {
     ] }] });
     expect(result.workout.steps).toHaveLength(0);
     expect(result.workout.warnings.join(' ')).toContain('groupe de répétitions invalide');
+  });
+});
+
+describe('isCyclingIntervalWorkout', () => {
+  it('accepts a cycling workout with repeated intervals', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '10:00', target: power(60) },
+      { type: 'repeat', repeats: 4, data: [
+        { type: 'step', durationType: 'TIME', duration: '4:00', target: power(105) },
+        { type: 'step', intensity: 'REST', durationType: 'TIME', duration: '2:00', target: power(50) },
+      ] },
+    ] }] })).toBe(true);
+  });
+
+  it('rejects a continuous cycling workout', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '90:00', target: power(65) },
+    ] }] })).toBe(false);
+  });
+
+  it('rejects running and swimming interval workouts', () => {
+    for (const sport of ['running', 'swimming']) {
+      expect(isCyclingIntervalWorkout({ target_options: [{ sport, target: 'power', steps: [
+        { type: 'repeat', repeats: 5, data: [
+          { type: 'step', durationType: 'TIME', duration: '4:00', target: power(105) },
+          { type: 'step', intensity: 'REST', durationType: 'TIME', duration: '2:00', target: power(50) },
+        ] },
+      ] }] })).toBe(false);
+    }
+  });
+
+  it('accepts consecutive cycling work steps with distinct targets', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'bike', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '5:00', target: power(90) },
+      { type: 'step', durationType: 'TIME', duration: '5:00', target: power(105) },
+    ] }] })).toBe(true);
+  });
+
+  it('rejects an unknown sport rather than guessing', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'running', target: 'pace', steps: [
+      { type: 'step', durationType: 'TIME', duration: '5:00', target: power(90) },
+      { type: 'step', durationType: 'TIME', duration: '5:00', target: power(105) },
+    ] }] })).toBe(false);
   });
 });
