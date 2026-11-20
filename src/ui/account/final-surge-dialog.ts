@@ -15,12 +15,12 @@ export function setupFinalSurgeDialog(options: {
   dialog.setAttribute('aria-labelledby', 'final-surge-title');
   dialog.innerHTML = `
     <form class="rider-card name-card final-surge-card">
-      <div><span class="home-kicker">Synchronisation automatique</span><h2 id="final-surge-title">Final Surge</h2></div>
+      <div class="fs-dialog-brand"><img class="fs-logo" src="https://finalsurgelivestore.blob.core.windows.net/branding/fs.large.svg" alt="Final Surge"><span><span class="home-kicker">Synchronisation automatique</span><h2 id="final-surge-title">Final Surge</h2></span></div>
       <p class="note">Après connexion, les séances des 14 prochains jours sont importées automatiquement. Elles sont resynchronisées à chaque réouverture de l’application, sans créer de doublons.</p>
       <div class="fs-credentials">
         <label class="name-field"><span>Adresse courriel</span><input name="email" type="email" autocomplete="username" required maxlength="254"></label>
         <label class="name-field"><span>Mot de passe Final Surge</span><input name="password" type="password" autocomplete="current-password" required maxlength="1024"></label>
-        <button type="button" data-act="connect">Connecter Final Surge</button>
+        <button type="button" class="fs-connect-button" data-act="connect"><img class="fs-button-logo" src="https://finalsurgelivestore.blob.core.windows.net/branding/fs.large.svg" alt="" aria-hidden="true"><span>Connecter Final Surge</span></button>
       </div>
       <div class="fs-connected" hidden>
         <p class="note">Compte Final Surge connecté.</p>

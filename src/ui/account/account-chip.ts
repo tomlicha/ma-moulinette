@@ -2,6 +2,7 @@ import './account.css';
 import type { AccountSession } from '../../app/account-session';
 import { loginUrl, type AccountState, type User } from '../../infra/net/account';
 import type { WorldStatus } from '../../infra/net/world-client';
+import { finalSurgeStatus } from '../../infra/net/final-surge';
 
 /**
  * Compte du joueur, en haut à droite des écrans plein écran (Accueil, Appareils, Séances), en face de la marque.
@@ -146,7 +147,7 @@ export function setupAccount(o: {
       </button>
       <div class="account-menu" role="menu" hidden>
         <button type="button" role="menuitem" data-act="name">Changer de nom</button>
-        <button type="button" role="menuitem" data-act="final-surge">Connecter Final Surge</button>
+        <button type="button" role="menuitem" class="account-menu-final-surge" data-act="final-surge"><img class="fs-brand-mark" src="https://finalsurgelivestore.blob.core.windows.net/branding/fs.large.svg" alt="" aria-hidden="true"><span data-final-surge-label>Connecter Final Surge</span></button>
         <button type="button" role="menuitem" data-act="logout">Se déconnecter</button>
         <p class="account-note">Compatible with Strava</p>
       </div>`;
@@ -167,6 +168,16 @@ export function setupAccount(o: {
         chip.focus();
       }
     });
+    // Le libellé reflète l'état réel du compte Final Surge, sans bloquer l'ouverture du menu.
+    const finalSurgeAction = menu.querySelector<HTMLButtonElement>('[data-act="final-surge"]')!;
+    void finalSurgeStatus().then(({ connected }) => {
+      const label = finalSurgeAction.querySelector<HTMLElement>('[data-final-surge-label]');
+      if (!label || !finalSurgeAction.isConnected) return;
+      label.textContent = connected ? 'Final Surge connecté' : 'Connecter Final Surge';
+      finalSurgeAction.classList.toggle('is-connected', connected);
+      finalSurgeAction.setAttribute('aria-label', connected ? 'Gérer Final Surge, compte connecté' : 'Connecter Final Surge');
+    }).catch(() => { /* Le dialogue affiche l'état de service si l'API est indisponible. */ });
+
     menu.addEventListener('click', async (e) => {
       const act = (e.target as HTMLElement).closest('button')?.dataset.act;
       toggle(false);
