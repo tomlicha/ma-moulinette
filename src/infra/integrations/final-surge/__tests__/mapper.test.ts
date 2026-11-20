@@ -123,6 +123,32 @@ describe('isCyclingIntervalWorkout', () => {
     ] }] })).toBe(true);
   });
 
+  it('accepts watt targets in W without filtering their numeric values', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '10:00', target: [{ targetType: 'power', targetOption: 'absolute', unit: 'W', targetLow: 12, targetHigh: 34 }] },
+      { type: 'step', durationType: 'TIME', duration: '20:00', target: [{ targetType: 'power', targetOption: 'absolute', unit: 'W', targetLow: 0, targetHigh: 0 }] },
+    ] }] })).toBe(true);
+  });
+
+  it('rejects a cycling workout if any step, including one inside a repeat, has no power or FTP target', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '10:00', target: power(60) },
+      { type: 'repeat', repeats: 2, data: [
+        { type: 'step', durationType: 'TIME', duration: '5:00', target: power(90) },
+        { type: 'step', durationType: 'TIME', duration: '2:00', target: [] },
+      ] },
+    ] }] })).toBe(false);
+  });
+
+  it('accepts a repeated workout when every step has a power target', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'repeat', repeats: 2, data: [
+        { type: 'step', durationType: 'TIME', duration: '10:00', target: [{ targetType: 'power', unit: 'W', targetLow: 12, targetHigh: 34 }] },
+        { type: 'step', durationType: 'TIME', duration: '20:00', target: [{ targetType: 'power', unit: 'W', targetLow: 12, targetHigh: 243 }] },
+      ] },
+    ] }] })).toBe(true);
+  });
+
   it('rejects a free cycling workout without a power target', () => {
     expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
       { type: 'step', durationType: 'TIME', duration: '90:00', target: [{ targetType: 'heartRate', targetLow: 120, targetHigh: 130 }] },
