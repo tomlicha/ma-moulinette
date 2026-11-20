@@ -72,6 +72,10 @@
   .account-out { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
 }
 
+/* Accès direct temporaire au test Final Surge, indépendant de l'état du compte Ma Moulinette. */
+.final-surge-test-entry { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 1000; min-height: 46px; padding: 0 18px; border: 1px solid #d89a32; border-radius: 999px; background: #fff7e8; color: #754600; box-shadow: 0 4px 18px rgb(0 0 0 / .18); font: 700 .9rem Barlow, system-ui, sans-serif; }
+.final-surge-test-entry:hover, .final-surge-test-entry:focus-visible { background: #ffedc2; outline: 2px solid #d89a32; outline-offset: 2px; }
+
 /* Connexion Final Surge : même carte de dialogue que le profil, champs et retours accessibles. */
 .final-surge-card { max-height: min(88vh, 760px); overflow-y: auto; }
 .final-surge-card .fs-credentials, .final-surge-card .fs-connected { display: flex; flex-direction: column; gap: 12px; }
