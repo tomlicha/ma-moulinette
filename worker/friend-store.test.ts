@@ -10,7 +10,7 @@ import { createD1FriendStore } from './friend-store.ts';
 function fakeD1() {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
-  for (const m of ['0003_accounts.sql', '0006_friends.sql']) db.exec(readFileSync(new URL(`./migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of ['0003_accounts.sql', '0007_friends.sql']) db.exec(readFileSync(new URL(`./migrations/${m}`, import.meta.url), 'utf8'));
   db.exec(
     "INSERT INTO users (id, display_name, name_confirmed, created_at) VALUES ('u1', 'Tom', 1, 0), ('u2', 'Léa', 1, 0), ('u3', 'Zoé', 1, 0), ('u4', 'Nouveau', 0, 0)",
   );
