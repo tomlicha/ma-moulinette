@@ -1,0 +1,54 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { Workout } from '../domain/workout/model';
+import { importFinalSurgeWorkouts } from './final-surge-import';
+
+const workout = (name = 'Tempo'): Workout => ({
+  name, description: 'Description', warnings: [],
+  steps: [{ kind: 'steady', durationS: 300, target: { kind: 'ftp', from: 0.9, to: 0.9 } }],
+} as Workout);
+const item = (name = 'Tempo', key = 'fs-1') => ({
+  workout: workout(name), source: { provider: 'final-surge' as const, workoutKey: key, scheduledAt: '2026-11-20' },
+});
+function setup(initial: any[] = []) {
+  const records = [...initial];
+  const save = vi.fn((w: any) => {
+    const saved = { ...w, id: w.id ?? `id-${records.length + 1}`, updatedAt: Date.now() };
+    const i = records.findIndex((x) => x.id === saved.id);
+    if (i >= 0) records[i] = saved; else records.unshift(saved);
+    return saved;
+  });
+  return { records, library: { list: () => [...records], save } };
+}
+
+describe('importFinalSurgeWorkouts', () => {
+  it('crée une séance avec sa provenance', () => {
+    const s = setup();
+    expect(importFinalSurgeWorkouts({ library: s.library, workouts: [item()], ftpW: 250 })).toMatchObject({ created: 1, updated: 0 });
+    expect(s.records[0].source).toEqual({ provider: 'final-surge', externalId: 'fs-1', scheduledAt: '2026-11-20' });
+  });
+  it('met à jour le même identifiant quand la séance source change', () => {
+    const s = setup([{ id: 'local-1', name: 'Tempo', description: 'old', blocks: [], source: { provider: 'final-surge', externalId: 'fs-1' }, updatedAt: 1 }]);
+    expect(importFinalSurgeWorkouts({ library: s.library, workouts: [item('Tempo updated')], ftpW: 250 })).toMatchObject({ created: 0, updated: 1 });
+    expect(s.records).toHaveLength(1);
+    expect(s.records[0].id).toBe('local-1');
+  });
+  it('ne réécrit pas une séance inchangée', () => {
+    const s = setup();
+    importFinalSurgeWorkouts({ library: s.library, workouts: [item()], ftpW: 250 });
+    s.library.save.mockClear();
+    expect(importFinalSurgeWorkouts({ library: s.library, workouts: [item()], ftpW: 250 })).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+    expect(s.library.save).not.toHaveBeenCalled();
+  });
+  it('ignore les séances sans identifiant externe ou sans étapes', () => {
+    const s = setup();
+    const noKey = { workout: workout(), source: { provider: 'final-surge' as const } };
+    const noSteps = { workout: { ...workout(), steps: [] }, source: { provider: 'final-surge' as const, workoutKey: 'fs-2' } };
+    expect(importFinalSurgeWorkouts({ library: s.library, workouts: [noKey, noSteps], ftpW: 250 }).skipped).toBe(2);
+  });
+  it('ne touche pas aux séances locales sans provenance Final Surge', () => {
+    const local = { id: 'mine', name: 'My workout', description: '', blocks: [], updatedAt: 1 };
+    const s = setup([local]);
+    importFinalSurgeWorkouts({ library: s.library, workouts: [item()], ftpW: 250 });
+    expect(s.records.some((x) => x.id === 'mine')).toBe(true);
+  });
+});
