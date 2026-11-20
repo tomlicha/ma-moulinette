@@ -83,7 +83,7 @@ function workoutDate(workout: FinalSurgeRecord): string | undefined {
 /**
  * Read-only client for the endpoints currently used by Final Surge's own web app.
  * These endpoints are undocumented and may change without notice. Do not expose this
- * client as an official integration or collect/store users' Final Surge passwords.
+ * client as an official integration. Credential storage is handled by the server-side integration module.
  */
 export class FinalSurgeClient {
   private readonly baseUrl: string;
