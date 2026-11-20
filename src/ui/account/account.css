@@ -67,3 +67,11 @@
   .account-pitch { display: none; }
   .account-out { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
 }
+
+/* Connexion Final Surge : même carte de dialogue que le profil, champs et retours accessibles. */
+.final-surge-card { max-height: min(88vh, 760px); overflow-y: auto; }
+.final-surge-card .fs-credentials, .final-surge-card .fs-connected { display: flex; flex-direction: column; gap: 12px; }
+.final-surge-card [hidden] { display: none !important; }
+.final-surge-card .fs-errors { margin: 0; padding-left: 22px; color: #b42318; }
+.final-surge-card .fs-status { min-height: 1.4em; }
+.final-surge-card input[type='date'] { min-height: 44px; padding: 0 12px; border: 1px solid var(--btn-line); border-radius: 12px; background: #fff; color: #14171a; font: 600 1rem Barlow, system-ui, sans-serif; }
