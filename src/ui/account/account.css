@@ -16,9 +16,6 @@
 .account-chip { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px 0 6px; border-radius: 999px; background: var(--glass); color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); backdrop-filter: blur(14px) saturate(1.2); font-weight: 400; text-align: left; }
 .account-chip:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 
-/* Accès direct temporaire pour tester Final Surge sans devoir ouvrir le menu du compte. */
-.account-final-surge-test { min-height: 40px; padding: 0 14px; border: 1px dashed var(--accent); border-radius: 999px; background: #fff7e8; color: #754600; font: 700 .85rem Barlow, system-ui, sans-serif; white-space: nowrap; }
-.account-final-surge-test:hover, .account-final-surge-test:focus-visible { background: #ffedc2; outline: 2px solid var(--accent); outline-offset: 2px; }
 .account-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 1.15rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
 .account-who { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 .account-who b { font-size: 1rem; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -72,9 +69,6 @@
   .account-out { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
 }
 
-/* Accès direct temporaire au test Final Surge, indépendant de l'état du compte Ma Moulinette. */
-.final-surge-test-entry { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 1000; min-height: 46px; padding: 0 18px; border: 1px solid #d89a32; border-radius: 999px; background: #fff7e8; color: #754600; box-shadow: 0 4px 18px rgb(0 0 0 / .18); font: 700 .9rem Barlow, system-ui, sans-serif; }
-.final-surge-test-entry:hover, .final-surge-test-entry:focus-visible { background: #ffedc2; outline: 2px solid #d89a32; outline-offset: 2px; }
 
 /* Connexion Final Surge : même carte de dialogue que le profil, champs et retours accessibles. */
 .final-surge-card { max-height: min(88vh, 760px); overflow-y: auto; }
