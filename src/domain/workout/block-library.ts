@@ -1,6 +1,7 @@
 import type { KeyValueStore } from '../../shared/util/key-value-store';
 import type { ChangeJournal } from './change-journal';
 import type { EditorBlock } from './blocks';
+import { newId as randomId } from '../../shared/util/uuid';
 
 export interface SavedBlock {
   id: string;
@@ -21,7 +22,7 @@ export const blockBody = (b: SavedBlock) => ({ name: b.name, blocks: b.blocks })
 export class BlockLibrary {
   constructor(
     private readonly store: KeyValueStore,
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = randomId,
     private readonly journal?: ChangeJournal,
   ) {}
 
