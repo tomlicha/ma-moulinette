@@ -1,5 +1,4 @@
 import { connectFinalSurge, disconnectFinalSurge, finalSurgeStatus, importFinalSurgeWorkouts as fetchFinalSurgeWorkouts } from '../../infra/net/final-surge';
-import type { WorkoutLibrary } from '../../domain/workout/library';
 
 const today = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
 const addDays = (date: string, days: number) => {
