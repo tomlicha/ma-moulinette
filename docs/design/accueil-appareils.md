@@ -2,7 +2,7 @@
 
 Référence permanente des deux écrans d'entrée de l'application. Toute évolution part de ce fichier et le met à jour.
 
-- Code : [`src/ui/ride/radar.ts`](../../src/ui/ride/radar.ts) (radar), [`src/ui/ride/radar-model.ts`](../../src/ui/ride/radar-model.ts) (textes des bulles, testés), [`src/ui/devices/rider-profile.ts`](../../src/ui/devices/rider-profile.ts) (fiche du coureur), [`src/domain/workout/zones.ts`](../../src/domain/workout/zones.ts) (`zoneRangesW`, zones en watts, testées), [`src/ui/home/home.css`](../../src/ui/home/home.css) (style), balisage dans [`index.html`](../../index.html), branchement dans `renderDevices()` de [`src/main.ts`](../../src/main.ts).
+- Code : [`src/ui/ride/radar.ts`](../../src/ui/ride/radar.ts) (radar), [`src/ui/ride/radar-model.ts`](../../src/ui/ride/radar-model.ts) (textes des bulles, testés), [`src/ui/devices/rider-profile.ts`](../../src/ui/devices/rider-profile.ts) (fiche du coureur), [`src/domain/workout/zones.ts`](../../src/domain/workout/zones.ts) (`zoneRangesW`, zones en watts, testées), [`src/ui/home/home.css`](../../src/ui/home/home.css) (style), balisage dans [`index.html`](../../index.html), branchement dans `src/composition/`.
 - Maquettes (claude.ai) : [Direction graphique](https://claude.ai/artifact/XsuzQxwA5WEKoyn8Jxu4nP), propositions A, B, C puis B1, B2, B3 sous la planche de style. Retenue : **B1 · Médaillon**.
 - Refonte visuelle du 12 novembre 2026 : [trois directions de l'accueil](https://claude.ai/artifact/WGUyMUZaSszLNa58c1kqzb) (A · Verre givré, **B · Doux et chaleureux**, C · Cockpit sportif). Retenue : **B**, appliquée à tous les écrans (voir « Style »). Ce canevas est privé : seul son propriétaire l'ouvre.
 - Refonte de l'écran Appareils du 12 novembre 2026 : [trois propositions](https://claude.ai/artifact/FH2tcDEQvkHgZJU9ZrGij7) (A · Tableau, B · Radar vivant, C · Grille d'accueil). Retenue : **C avec l'idée de B** (voir « Appareils »). Canevas privé.
@@ -48,9 +48,11 @@ Une seule géométrie, **carrée** (200 × 200 dans le repère du dessin) : le m
 
 ## Accueil
 
-Écran **plein écran** : la scène occupe toute la fenêtre sous un voile crème, la barre du haut et le journal sont masqués. Par-dessus : la marque (pastille blanche) en haut à gauche, puis **une ligne de trois cartes** en bas, au-dessus de la navigation flottante : le nom du monde et le bouton **Rouler** (carte blanche), le radar (tuile sombre, cliquable vers Appareils) et la séance (choix dans la même liste que l'écran Sortie, profil par zones, **Démarrer la séance**, « Créer ou modifier »). Les trois cartes ont la même hauteur (celle de la plus haute) ; colonnes : hero souple, radar et séance de 240 à 340 px.
+Refonte du 19 novembre 2026 : voir [accueil-refonte.md](accueil-refonte.md) (maquettes, décisions, implémentation). En bref :
 
-La **navigation** est la pastille flottante commune à tous les écrans (voir « Style ») ; sur l'accueil elle compte quatre onglets, Accueil marqué comme page courante. L'écran Séances est lui aussi plein écran (voir [seances.md](seances.md)). **Téléphone en paysage** (pointeur tactile, hauteur de 600 px ou moins) : colonnes `1fr · 200 px · 190 px`, cartes resserrées, texte descriptif de la séance masqué, tout tient sans défilement (vérifié en émulation à 863 × 360). **Portrait étroit** (900 px ou moins) : les trois cartes s'empilent et la page défile.
+- **Ordinateur** : fond crème ; en-tête avec la marque, la navigation en pastille (page courante en noir) et, à droite, les pastilles Appareils (points Trainer et Cardio, bordure pointillée tant que rien n'est connecté), coureur (« 230 W · 78 kg », ouvre la fiche) et Strava. Dessous, un tableau de 12 colonnes : le **monde** (scène dans une carte, nom du parcours, barre « Ta sortie » et **Rouler**), les **parcours** en quatre vignettes, et la **colonne des séances** (filtres, Sortie libre, séance choisie dépliée avec profil, FTP et chiffres, autres séances repliées).
+- **iPhone en paysage** (tactile, 600 px de haut ou moins) : la scène nette en fond, le monde centré avec le sélecteur de parcours ‹ ›, **Rouler** en pilule ; la carte Séance (bas gauche) ouvre le panneau des séances, la pastille Appareils est en bas à droite ; la navigation est une pastille d'icônes en haut à droite, suivie du médaillon.
+- La scène suit le parcours retenu ; le radar n'est plus sur l'accueil (il reste sur Appareils).
 
 ### Fonds et logo
 

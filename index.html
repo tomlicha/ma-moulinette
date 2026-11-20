@@ -218,13 +218,11 @@
         </div>
       </section>
 
-      <!-- Écran 2 : accueil, plein écran. Point de départ de la navigation (la barre du haut est masquée ici) -->
+      <!-- Écran 2 : accueil, plein écran (docs/design/accueil-refonte.md). Ordinateur : tableau (monde, parcours en vignettes, séances) ;
+           iPhone en paysage : la scène en fond, le monde centré, la carte Séance qui ouvre un panneau. -->
       <section data-view="accueil" hidden>
         <h1 class="visually-hidden">Accueil</h1>
         <div class="home">
-            <div id="home-scenes" class="home-scenes" aria-hidden="true"></div>
-          <div class="home-shade"></div>
-
           <header class="home-top">
             <strong class="home-brand"><span class="logo" role="img" aria-label="Ma Moulinette"><span class="logo-la" aria-hidden="true">MA</span><span class="logo-word" aria-hidden="true">M<svg class="logo-o" viewBox="0 0 24 24" fill="none"><circle class="logo-teeth" cx="12" cy="12" r="11" /><circle class="logo-ring" cx="12" cy="12" r="8" /><path class="logo-spokes" d="M12 12V5.4M12 12l6.3-2M12 12l3.9 5.3M12 12l-3.9 5.3M12 12l-6.3-2" /><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" /></svg>ULINETTE</span></span></strong>
             <nav class="home-nav" aria-label="Écrans">
@@ -233,37 +231,69 @@
               <a href="#seances" data-nav="seances"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M9 20V6M14 20V10M19 20V4"/></svg><span>Séances</span></a>
               <a href="#appareils" data-nav="appareils"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><path d="M6 6a8.5 8.5 0 0 0 0 12M18 6a8.5 8.5 0 0 1 0 12M9 9a4.5 4.5 0 0 0 0 6M15 9a4.5 4.5 0 0 1 0 6"/></svg><span>Appareils</span></a>
             </nav>
+            <div class="home-chips">
+              <a id="home-devices-chip" class="home-chip chip-devices" href="#appareils" aria-label="Appareils">
+                <span class="dev-pill" data-dev-role="trainer"><i></i>Trainer</span><span class="dev-pill" data-dev-role="hr"><i></i>Cardio</span>
+              </a>
+              <button id="home-rider-open" class="home-chip chip-rider" type="button" aria-label="Ma fiche de coureur">
+                <img id="home-rider-avatar" alt="" width="36" height="36" /><span id="home-rider-summary"></span>
+              </button>
+            </div>
           </header>
 
-          <div class="home-hero-body">
-            <span class="home-kicker">Monde</span>
-            <h2 id="home-title" class="home-title"></h2>
-            <p id="home-desc"></p>
-            <button id="home-ride" class="home-ride" type="button" disabled>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" /></svg>Rouler
-            </button>
-          </div>
-
-          <dialog id="course-dialog" class="course-dialog" aria-labelledby="course-title">
-            <div class="course-card">
-              <header class="course-head">
-                <div>
-                  <span class="home-kicker">Parcours</span>
-                  <h2 id="course-title">Choisir le parcours</h2>
-                </div>
-                <button id="course-cancel" class="secondary" type="button">Annuler</button>
-              </header>
-              <div class="course-body">
-                <div id="course-options" class="course-options" role="radiogroup" aria-label="Parcours"></div>
-                <button id="course-map" class="course-map" type="button" aria-haspopup="dialog" aria-label="Agrandir la carte du parcours"></button>
-              </div>
-              <footer class="course-foot">
-                <button id="course-go" class="home-ride" type="button">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" /></svg>Partir
-                </button>
-              </footer>
+          <section class="home-world" aria-labelledby="home-title">
+            <div id="home-scenes" class="home-scenes" aria-hidden="true"></div>
+            <div class="home-shade"></div>
+            <div class="home-world-txt">
+              <span class="home-kicker">Monde · Automne</span>
+              <h2 id="home-title" class="home-title"></h2>
+              <p id="home-desc"></p>
             </div>
-          </dialog>
+            <div class="home-course-nav" role="group" aria-label="Parcours">
+              <button id="home-course-prev" type="button" aria-label="Parcours précédent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+              <div class="home-course-mid"><span id="home-course-spark" class="spark" aria-hidden="true"></span><span><span id="home-course-rank" class="home-kicker"></span><b id="home-course-summary"></b></span></div>
+              <button id="home-course-next" type="button" aria-label="Parcours suivant"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+            </div>
+            <div class="home-trip">
+              <div class="home-trip-txt">
+                <span class="home-kicker">Ta sortie</span>
+                <b id="home-trip-course"></b>
+                <span id="home-trip-workout"></span>
+              </div>
+              <button id="home-ride" class="home-ride" type="button" disabled>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" /></svg>Rouler
+              </button>
+            </div>
+          </section>
+
+          <section class="home-courses" aria-labelledby="home-courses-title">
+            <div class="home-sec-head"><h2 id="home-courses-title" class="home-kicker">Parcours</h2><button id="home-map-link" class="linklike" type="button" aria-haspopup="dialog">Voir la carte du monde</button></div>
+            <div id="course-thumbs" class="course-thumbs" role="radiogroup" aria-label="Parcours"></div>
+            <button id="course-map" type="button" hidden aria-hidden="true" tabindex="-1"></button>
+          </section>
+
+          <button id="home-seance-card" class="home-seance-card" type="button" aria-controls="home-seances" aria-expanded="false">
+            <span class="head"><span class="home-kicker">Séance</span><b id="home-seance-name"></b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
+            <span id="home-seance-body" class="body"></span>
+          </button>
+          <a class="home-devices-card" href="#appareils" aria-label="Appareils">
+            <span class="home-kicker">Appareils</span>
+            <span class="pills"><span class="dev-pill" data-dev-role="trainer"><i></i>Trainer</span><span class="dev-pill" data-dev-role="hr"><i></i>Cardio</span></span>
+          </a>
+
+          <div id="home-seances-scrim" class="home-seances-scrim"></div>
+          <aside id="home-seances" class="home-seances" aria-labelledby="home-seances-title">
+            <header class="home-seances-head">
+              <h2 id="home-seances-title" class="home-kicker">Séances</h2>
+              <a href="#seances" class="home-create">+ Créer</a>
+              <button id="home-seances-close" class="home-seances-close" type="button" aria-label="Fermer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </header>
+            <div id="home-wo-filters" class="home-wo-filters" role="group" aria-label="Famille de séances"></div>
+            <div class="home-seances-body">
+              <div id="home-wo-list" class="home-wo-list"></div>
+              <div id="home-wo-detail" class="home-wo-detailpane"></div>
+            </div>
+          </aside>
 
           <dialog id="map-dialog" class="map-dialog" aria-labelledby="map-title">
             <div class="map-card">
@@ -285,19 +315,6 @@
               </div>
             </div>
           </dialog>
-          <aside class="home-side">
-            <a class="home-radar" href="#appareils"><div id="radar-home"></div></a>
-            <section class="home-workout" aria-labelledby="home-wo-title">
-              <span class="home-kicker" id="home-wo-title">Séance</span>
-              <select id="home-wo-select" aria-label="Séance"></select>
-              <p id="home-wo-meta" class="home-workout-meta">Aucune séance choisie.</p>
-              <svg class="wo-profile" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true"><g id="home-wo-shapes"></g></svg>
-              <div class="row">
-                <button id="home-wo-start" type="button" disabled>Démarrer la séance</button>
-                <a href="#seances" class="home-wo-link">Créer ou modifier</a>
-              </div>
-            </section>
-          </aside>
         </div>
       </section>
 

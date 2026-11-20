@@ -63,25 +63,19 @@ module.exports = async function app({ browser, url }) {
         exportStravaHidden: h('export-strava'),
         route: document.getElementById('hud')?.innerText?.replace(/\s+/g, ' ').slice(0, 200) ?? null,
         // L'écran Appareils en entier (cartes, boutons, radars), sans son fond animé.
-        // L'accueil : parcours retenu, menu du parcours, bouton « Rouler » (sans son fond animé).
+        // L'accueil : parcours retenu, vignettes des parcours, bouton « Rouler » (sans son fond animé).
         homeTitle: t('home-title'),
-        courseDialogOpen: document.getElementById('course-dialog')?.open ?? null,
         home: (() => {
           const copy = document.querySelector('[data-view="accueil"]')?.cloneNode(true);
           copy?.querySelector('#home-scenes')?.remove();
           return (copy?.innerHTML ?? '').replace(/\s+/g, ' ');
         })(),
-        // La séance choisie, sur l'accueil : liste, profil dessiné, nom.
-        homeWorkout: (() => {
-          const select = document.getElementById('home-wo-select');
-          return JSON.stringify({
-            meta: document.getElementById('home-wo-meta')?.textContent,
-            shapes: document.getElementById('home-wo-shapes')?.innerHTML,
-            options: select?.innerHTML,
-            value: select?.value,
-            startBlocked: document.getElementById('home-wo-start')?.getAttribute('aria-disabled'),
-          });
-        })(),
+        // La séance choisie, sur l'accueil : liste, détail, ligne « Ta sortie ».
+        homeWorkout: JSON.stringify({
+          list: document.getElementById('home-wo-list')?.innerText,
+          trip: document.getElementById('home-trip-workout')?.textContent,
+          startBlocked: document.querySelector('.wo-start')?.getAttribute('aria-disabled') ?? null,
+        }),
         devices: (() => {
           const copy = document.querySelector('[data-view="appareils"]')?.cloneNode(true);
           copy?.querySelector('#dev-scenes')?.remove();
@@ -100,25 +94,19 @@ module.exports = async function app({ browser, url }) {
   // sortie (ou la séance) et se disputerait avec nos clics. On ne rejoint la Sortie qu'une fois la sortie lancée : c'est là que
   // s'ouvre le récapitulatif.
   await page.evaluate(() => {
-    const s = document.getElementById('home-wo-select');
-    s.value = 'sample:sweet-spot';
-    s.dispatchEvent(new Event('change'));
+    document.querySelector('[data-wo="sample:sweet-spot"]').click();
   });
   await sleep(300);
   await steps.mark('séance choisie', { woName: /sweet spot/i });
 
-  // Le menu du parcours, que « Rouler » ouvre : on en choisit un autre, puis on revient au premier.
+  // Les parcours sont des vignettes sous le monde : on en choisit un autre, puis on revient au premier.
   const firstTitle = steps.last.homeTitle;
-  await click('home-ride');
-  await steps.mark('menu du parcours ouvert', { courseDialogOpen: true });
-  await page.evaluate(() => document.querySelectorAll('.course-opt')[1]?.click());
+  await page.evaluate(() => document.querySelectorAll('.course-thumb')[1]?.click());
   await sleep(200);
   await steps.mark('autre parcours choisi', (s) => (s.homeTitle !== firstTitle ? undefined : 'le titre de l’accueil n’a pas changé'));
-  await page.evaluate(() => document.querySelectorAll('.course-opt')[0]?.click());
+  await page.evaluate(() => document.querySelectorAll('.course-thumb')[0]?.click());
   await sleep(200);
   await steps.mark('parcours rétabli', { homeTitle: firstTitle });
-  await click('course-cancel');
-  await steps.mark('menu du parcours fermé', { courseDialogOpen: false });
 
   await click('ride-toggle');
   await sleep(2500);

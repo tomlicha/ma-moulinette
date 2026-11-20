@@ -23,6 +23,7 @@ import type { SyncJournal } from '../infra/sync/journal';
 import type { TrainerController } from '../app/trainer-controller';
 import type { WebBluetoothTrainer } from '../infra/sensors/ble/web-bluetooth';
 import type { Workout } from '../domain/workout/model';
+import type { HomeWorkoutsView } from '../ui/home/home-workouts-view';
 import type { WorkoutControlsView } from '../ui/ride/workout-controls-view';
 import type { WorkoutLibrary } from '../domain/workout/library';
 import type { WorkoutSession } from '../app/workout-session';
@@ -52,6 +53,7 @@ export interface Wiring {
   ftpChanged: () => void;
   grade: GradeController;
   home: HomeView;
+  homeWorkouts: HomeWorkoutsView;
   hub: SensorHub;
   hud: RideHud;
   journey: Journey;

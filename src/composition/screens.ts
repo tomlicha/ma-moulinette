@@ -27,6 +27,7 @@ export function composeScreens(w: Wiring): void {
     resumeRide: () => router.go('sortie'),
   });
   w.home = home;
+  w.refreshWorkoutChoices(); // la ligne « Ta sortie » attendait l'accueil
 
   courseUiReady = true;
 

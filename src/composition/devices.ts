@@ -4,6 +4,7 @@ import { DevicesView } from '../ui/devices/devices-view';
 import { PROTOCOL_LABEL } from '../infra/sensors/protocols/trainer-profiles';
 import { SimulatedTrainer } from '../infra/sensors/simulator';
 import { browserUa, noBluetoothHint, noBluetoothStatus } from '../infra/sensors/ble/bluetooth-support';
+import { createDeviceChips } from '../ui/home/home-devices-chips';
 import { createRadar } from '../ui/ride/radar';
 import { isNativeShell } from '../infra/native/shell';
 import portraitFallback from '../assets/rider-portrait.jpg';
@@ -18,19 +19,20 @@ export function composeDevices(w: Wiring): void {
   const devices = new DeviceManager({ hub: w.hub, trainer: w.trainerCtl, registry: new DeviceRegistry(), log: w.log, createBleTrainer: w.newBleTrainer });
   w.devices = devices;
 
-  // Le médaillon du radar ouvre la fiche du coureur ; sur l'accueil, la tuile reste un simple lien vers les appareils.
+  // Le médaillon du radar ouvre la fiche du coureur ; sur l'accueil, des pastilles disent l'état des appareils (home-devices-chips.ts).
   const radars = [
     createRadar($('radar-devices'), 'large', { onRider: w.riderProfile.open }),
-    createRadar($('radar-home'), 'mini'),
+    createDeviceChips(),
   ];
 
-  const riderAvatar = $<HTMLImageElement>('rider-avatar');
+  const riderAvatars = [$<HTMLImageElement>('rider-avatar'), $<HTMLImageElement>('home-rider-avatar')];
+  const setAvatar = (url: string) => riderAvatars.forEach((a) => (a.src = url));
 
-  riderAvatar.src = portraitFallback;
+  setAvatar(portraitFallback);
 
   void import('../render/riders/rider-portrait')
     .then((m) => m.riderPortrait())
-    .then((url) => { riderAvatar.src = url; })
+    .then(setAvatar)
     .catch(() => {});
 
    // l'image de repli reste affichée
