@@ -135,7 +135,11 @@ export class WorkoutSession extends TypedEmitter<{
     this.deps.log(`séance démarrée : ${workout.name}, FTP ${runner.ftpW} W`);
     this.emit('started', workout.name);
     if (!this.waitingForPedaling) this.tick();
-    else this.emit('state', runner.state());
+    else {
+      // Publier aussi l'état initial dans le getter `state` pendant l'attente du premier coup de pédale.
+      this.last = runner.state();
+      this.emit('state', this.last);
+    }
   }
 
   /** Démarre le chronomètre au premier coup de pédale reçu du trainer. */
