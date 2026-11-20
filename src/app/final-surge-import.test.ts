@@ -3,7 +3,7 @@ import type { Workout } from '../domain/workout/model';
 import { importFinalSurgeWorkouts } from './final-surge-import';
 
 const workout = (name = 'Tempo'): Workout => ({
-  name, description: 'Description', warnings: [],
+  name, description: 'Description', warnings: [], messages: [],
   steps: [{ kind: 'steady', durationS: 300, target: { kind: 'ftp', from: 0.9, to: 0.9 } }],
 } as Workout);
 const item = (name = 'Tempo', key = 'fs-1') => ({
