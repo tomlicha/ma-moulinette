@@ -167,9 +167,9 @@ report.fsButtonVisible = await evaluate("(() => { const b = document.getElementB
 // Mode séance (--workout) : on lance une vraie séance, on attend le carrefour, on mesure le HUD de séance avec l'invite.
 if (process.argv.includes('--workout')) {
   await click('#connect-sim'); await sleep(800);
-  await evaluate(`(() => { const sel = document.getElementById('home-wo-select'); sel.selectedIndex = 1; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await evaluate(`document.querySelectorAll('.wo-item-head[data-wo]:not([data-wo=""])')[0].click()`);
   await sleep(600);
-  await evaluate(`document.getElementById('home-wo-start').disabled = false; document.getElementById('home-wo-start').click()`);
+  await evaluate(`document.querySelector('.wo-start').click()`);
   await sleep(1500);
   let seen = false;
   for (let i = 0; i < 24 && !seen; i++) {
@@ -195,16 +195,11 @@ if (process.argv.includes('--workout')) {
 // 1. Accueil.
 await shot('1-accueil');
 await measure('accueil', 'body');
-// 2. « Rouler » ouvre le menu de choix du parcours.
+// 2. Le menu du parcours n'existe plus : les parcours sont des vignettes (tools/mobile : panneau des séances à part).
 await click('#connect-sim'); await sleep(800);
-await evaluate(`document.getElementById('home-ride').disabled = false; document.getElementById('home-ride').click()`);
-await sleep(900);
-await shot('2-menu');
-await measure('menu', '#course-dialog');
+await shot('2-accueil-connecte');
 // 3. L'autre parcours, puis la carte agrandie.
-await click('[data-course="rive"]'); await sleep(500);
-await shot('3-menu-rive');
-await click('#course-map'); await sleep(1000);
+await evaluate(`document.getElementById('home-map-link').click()`); await sleep(1000);
 await shot('4-carte');
 await measure('carte', '#map-dialog');
 await click('#map-close'); await sleep(400);
@@ -214,7 +209,7 @@ if (course) { await click(`[data-course="${course}"]`); await sleep(400); }
 
 if (course === 'velodrome' && !process.argv.includes('--no-ride')) {
   // 5. Vélodrome : on tourne ; l'encart porte la touche « Sortir du vélodrome », sans panneau « Carrefour ».
-  await click('#course-go');
+  await evaluate(`document.getElementById('home-ride').click()`);
   // La vue 3D se construit (plus lentement sans fenêtre) : on attend que l'écran de chargement s'efface.
   for (let i = 0; i < 120 && !(await evaluate("document.getElementById('ride-loading')?.hidden ?? true")); i++) await sleep(500);
   await advance(120_000);
@@ -230,7 +225,7 @@ if (course === 'velodrome' && !process.argv.includes('--no-ride')) {
   await measure('piste-sortie', '.ride');
 } else if (!process.argv.includes('--no-ride')) {
   // 5. Sortie : « Partir », puis le carrefour annoncé.
-  await click('#course-go');
+  await evaluate(`document.getElementById('home-ride').click()`);
   await sleep(1500);
   const adv = process.argv.find((a) => a.startsWith('--advance='))?.slice('--advance='.length);
   // Avance précise : on laisse d'abord la vue finir de se construire, sinon la photo tombe sur l'écran de chargement.

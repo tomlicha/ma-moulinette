@@ -2,6 +2,7 @@ import { createDeviceReporter } from './device-reporter';
 import type { TrainerRecord } from './device';
 import { LogBuffer } from './log-buffer';
 import { createReporter } from './reporter';
+import { newId } from '../../shared/util/uuid';
 
 export interface TelemetryOptions {
   /** État du moment, joint à chaque rapport (trainer, connexion…). Appelé au moment de l'envoi. */
@@ -30,7 +31,7 @@ export function setupTelemetry(opts: TelemetryOptions): { record(msg: string): v
   const reporter = createReporter(buffer, {
     endpoint: url,
     token: (import.meta.env.VITE_LOG_TOKEN as string | undefined) || undefined,
-    session: crypto.randomUUID(),
+    session: newId(),
     context: () => ({
       ...opts.context(),
       userAgent: navigator.userAgent,

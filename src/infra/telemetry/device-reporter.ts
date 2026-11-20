@@ -1,4 +1,5 @@
 import { fingerprint, type TrainerRecord } from './device';
+import { newId } from '../../shared/util/uuid';
 
 export interface DeviceReporterOptions {
   /** Adresse de la route `device` du récepteur. */
@@ -49,7 +50,7 @@ export function createDeviceReporter(opts: DeviceReporterOptions) {
       if (inFlight || read(SENT_KEY) === print) return false;
       let install = read(ID_KEY);
       if (!install) {
-        install = (opts.newId ?? (() => crypto.randomUUID()))();
+        install = (opts.newId ?? newId)();
         write(ID_KEY, install);
       }
       inFlight = true;

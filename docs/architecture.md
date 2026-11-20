@@ -54,7 +54,7 @@ src/
 │  ├─ storage/        KeyValueStore, reprise des anciennes clés
 │  └─ native/         coquille iOS (Capacitor)
 ├─ render/            three.js : core/ (moteur, ambiance, matériaux), world/ (décor, terrain, route), riders/ (coureurs, avatar)
-├─ ui/                un dossier par écran : home/, ride/, devices/, editor/ (orchestrateur + inspector, chart, summary, shelf, mover, phone-controls, library, cadence, dom) ; chaque écran a ses vues : home/home-view, ride/{ride-controls, workout-controls, hud-presenter, ride-loading, crowd, rider-inputs}, devices/{devices-view, log-view}, recap/, account/ ; shared/ (routeur, aide au blocage…)
+├─ ui/                un dossier par écran : home/, ride/, devices/, editor/ (orchestrateur + inspector, chart, summary, shelf, mover, phone-controls, library, cadence, dom) ; chaque écran a ses vues : home/{home-view, home-workouts-view, home-devices-chips, course-picker}, ride/{ride-controls, workout-controls, hud-presenter, ride-loading, crowd, rider-inputs}, devices/{devices-view, log-view}, recap/, account/ ; shared/ (routeur, aide au blocage…)
 ├─ shared/
 │  ├─ protocol/       ce que le serveur et la page se disent : codes de fermeture, utilisateur, en-tête anti-CSRF
 │  └─ util/           journal, erreurs, travail en tâche de fond, émetteur d'événements, type du stockage de clés

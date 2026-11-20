@@ -2,6 +2,8 @@ import { AutoStart } from '../app/auto-start';
 import { BlockLibrary } from '../domain/workout/block-library';
 import { ManualControl } from '../app/manual-control';
 import { WorkoutCatalog } from '../app/workout-catalog';
+import { HomeWorkoutsView } from '../ui/home/home-workouts-view';
+import { workoutCard } from '../ui/home/home-workouts-model';
 import { WorkoutControlsView } from '../ui/ride/workout-controls-view';
 import { WorkoutLibrary } from '../domain/workout/library';
 import { WorkoutSession } from '../app/workout-session';
@@ -42,14 +44,19 @@ export function composeWorkout(w: Wiring): void {
   });
   w.autoStart = autoStart;
 
-  /** Les commandes de la séance : liste de l'accueil, démarrage, pause, palier, intensité (workout-controls-view.ts). */
-  const workoutControls = new WorkoutControlsView({
+  /** La colonne des séances de l'accueil : filtres, liste, détail du choix (home-workouts-view.ts). */
+  const homeWorkouts = new HomeWorkoutsView({
     choose: (value) => chooseWorkout(value),
-    start: () => startWorkout(),
     startFromHome: () => {
       w.router.go('sortie');
       startWorkout();
     },
+  });
+  w.homeWorkouts = homeWorkouts;
+
+  /** Les commandes de la séance : démarrage, pause, palier, intensité (workout-controls-view.ts). */
+  const workoutControls = new WorkoutControlsView({
+    start: () => startWorkout(),
     togglePause: () => workoutSession.togglePause(),
     skip: () => workoutSession.skip(),
     stop: () => workoutSession.stop(),
@@ -82,16 +89,26 @@ export function composeWorkout(w: Wiring): void {
     const { runner, workout } = workoutSession;
     const startReason = !workout && !runner ? 'Choisis d’abord une séance dans la liste.' : workoutStartBlock();
     workoutControls.render({ running: !!runner, paused: workoutSession.paused, startReason });
+    homeWorkouts.setStartBlock(startReason);
     refreshEditorRide?.();
   }
 
-  /** Le profil de la séance choisie, sur l'accueil. */
-  const renderProfile = () => workoutControls.showProfile(workoutSession.workout, w.readFtp());
+  /** « avec Sweet spot 2×20 · 50 min en ERG », sous le parcours dans « Ta sortie » de l'accueil. */
+  function showTripLine() {
+    const wo = workoutSession.workout;
+    const min = wo ? Math.max(1, Math.round(wo.steps.reduce((t, s) => t + s.durationS, 0) / 60)) : 0;
+    w.home?.setWorkoutLine(wo ? `avec ${wo.name} · ${min} min en ERG` : 'sortie libre, sans consigne');
+  }
 
-  /** Les séances que l'on peut choisir : les nôtres et les modèles livrés. La liste de l'accueil les montre. */
+  /** Les séances que l'on peut choisir (les nôtres, puis les modèles livrés), présentées pour la FTP du coureur. */
   function refreshWorkoutChoices() {
     const { mine, samples } = catalog.choices();
-    workoutControls.showChoices(mine, samples);
+    const cards = [...mine, ...samples].flatMap((c) => {
+      const wo = catalog.resolve(c.value);
+      return wo ? [workoutCard(c.value, wo, w.readFtp())] : [];
+    });
+    homeWorkouts.showCards(cards);
+    showTripLine();
   }
 
   function chooseWorkout(value: string) {
@@ -99,19 +116,18 @@ export function composeWorkout(w: Wiring): void {
       w.log("séance en cours : l'arrêter avant d'en choisir une autre");
       return;
     }
-    workoutControls.setChoice(value);
+    homeWorkouts.setChoice(value);
     const chosen = value ? catalog.resolve(value) : undefined;
     workoutSession.select(chosen);
     workoutControls.showWorkoutName(chosen);
+    showTripLine();
     if (!chosen) {
-      renderProfile();
       refreshWorkoutButtons();
       return;
     }
     autoStart.arm();
     for (const x of chosen.warnings) w.log(`séance : ${x}`);
     const total = chosen.steps.reduce((t, s) => t + s.durationS, 0);
-    renderProfile();
     refreshWorkoutButtons();
     w.log(`séance choisie : ${chosen.name} (${chosen.steps.length} paliers, ${fmtTime(total)})`);
   }
@@ -150,7 +166,7 @@ export function composeWorkout(w: Wiring): void {
   /** La FTP a changé (ici ou sur un autre appareil) : séance en cours, profil et éditeur suivent. */
   function ftpChanged() {
     workoutSession.setFtp(w.readFtp());
-    renderProfile();
+    refreshWorkoutChoices();
     editor.refresh();
   }
 
@@ -172,7 +188,7 @@ export function composeWorkout(w: Wiring): void {
     readFtp: w.readFtp,
     log: w.log,
     onLibraryChange: refreshWorkoutChoices,
-    currentChoice: () => workoutControls.choice,
+    currentChoice: () => homeWorkouts.choice,
     // Pendant une séance, le choix reste celui de la séance en cours : on ne le change pas en parcourant la bibliothèque.
     onFocus: (key) => {
       if (!workoutSession.running) chooseWorkout(key);

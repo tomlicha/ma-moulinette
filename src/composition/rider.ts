@@ -34,9 +34,10 @@ export function composeRider(w: Wiring): void {
     readFtp,
     readMass,
     summary: $('rider-summary'),
+    briefs: [$('home-rider-summary')],
     dialog: $<HTMLDialogElement>('rider-dialog'),
     wheel: setupWheel($<HTMLDialogElement>('wheel-dialog')),
-    openers: [$('rider-open')],
+    openers: [$('rider-open'), $('home-rider-open')],
   });
   w.riderProfile = riderProfile;
 }

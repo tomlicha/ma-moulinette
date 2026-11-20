@@ -1,6 +1,7 @@
 import type { KeyValueStore } from '../../shared/util/key-value-store';
 import type { ChangeJournal } from './change-journal';
 import type { EditorBlock } from './blocks';
+import { newId as randomId } from '../../shared/util/uuid';
 
 export interface SavedWorkout {
   id: string;
@@ -22,7 +23,7 @@ export const workoutBody = (w: SavedWorkout) => ({ name: w.name, description: w.
 export class WorkoutLibrary {
   constructor(
     private readonly store: KeyValueStore,
-    private readonly newId: () => string = () => crypto.randomUUID(),
+    private readonly newId: () => string = randomId,
     private readonly journal?: ChangeJournal,
   ) {}
 

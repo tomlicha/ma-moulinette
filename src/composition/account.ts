@@ -23,10 +23,10 @@ export function composeAccount(w: Wiring): void {
   /** Séances changées depuis un autre appareil : l'éditeur et la liste de la sortie suivent, la séance choisie aussi. */
   function workoutsChanged(ids: Set<string>) {
     w.editor.libraryChanged();
-    const before = w.workoutControls.choice;
+    const before = w.homeWorkouts.choice;
     w.refreshWorkoutChoices();
-    const changed = w.workoutControls.choice !== before || (before.startsWith('lib:') && (ids.size === 0 || ids.has(before.slice(4))));
-    if (changed && !w.workoutSession.running) w.chooseWorkout(w.workoutControls.choice);
+    const changed = w.homeWorkouts.choice !== before || (before.startsWith('lib:') && (ids.size === 0 || ids.has(before.slice(4))));
+    if (changed && !w.workoutSession.running) w.chooseWorkout(w.homeWorkouts.choice);
   }
 
   const sync = createSyncClient({

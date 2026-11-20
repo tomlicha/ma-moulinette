@@ -26,6 +26,8 @@ export function setupRiderProfile(o: {
   readMass: () => number;
   /** Élément qui affiche le résumé « 78 kg · FTP 230 W · 2,95 W/kg ». */
   summary: HTMLElement;
+  /** Autres endroits qui montrent le coureur en bref (« 230 W · 78 kg », pastille de l'accueil). */
+  briefs?: HTMLElement[];
   dialog: HTMLDialogElement;
   wheel: ReturnType<typeof setupWheel>;
   /** Ouvreurs : le bouton « Mon coureur » (le médaillon est branché par l'appelant via `open`). */
@@ -46,6 +48,7 @@ export function setupRiderProfile(o: {
     const ftp = o.readFtp();
     const w = wattsPerKg(ftp, mass);
     o.summary.textContent = `${mass} kg · FTP ${ftp} W · ${w} W/kg`;
+    for (const b of o.briefs ?? []) b.textContent = `${ftp} W · ${mass} kg`;
     wkgOut.textContent = w;
     fields.mass.button.textContent = String(mass);
     fields.ftp.button.textContent = String(ftp);

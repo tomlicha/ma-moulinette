@@ -54,9 +54,7 @@ module.exports = async function autostart({ browser, url }) {
   await go('#accueil');
   await sleep(300);
   await page.evaluate(() => {
-    const s = document.getElementById('home-wo-select');
-    s.value = 'sample:sweet-spot';
-    s.dispatchEvent(new Event('change'));
+    document.querySelector('[data-wo="sample:sweet-spot"]').click();
   });
   await sleep(300);
   await steps.mark('séance choisie', { woName: /sweet spot/i, ride: RIDE_START });
