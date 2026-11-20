@@ -17,20 +17,44 @@ function setup(initial: any[] = []) {
     if (i >= 0) records[i] = saved; else records.unshift(saved);
     return saved;
   });
-  return { records, library: { list: () => [...records], save } };
+  const remove = vi.fn((id: string) => {
+    const i = records.findIndex((x) => x.id === id);
+    if (i >= 0) records.splice(i, 1);
+  });
+  return { records, library: { list: () => [...records], save, remove } };
 }
 
 describe('importFinalSurgeWorkouts', () => {
-  it('crée une séance avec sa provenance', () => {
+  it('crée une séance avec un identifiant stable et sa provenance', () => {
     const s = setup();
     expect(importFinalSurgeWorkouts({ library: s.library, workouts: [item()], ftpW: 250 })).toMatchObject({ created: 1, updated: 0 });
+    expect(s.records[0].id).toMatch(/^fs-[a-f0-9]{32}$/);
     expect(s.records[0].source).toEqual({ provider: 'final-surge', externalId: 'fs-1', scheduledAt: '2026-11-20' });
   });
-  it('met à jour le même identifiant quand la séance source change', () => {
+  it('produit le même identifiant dans deux bibliothèques indépendantes', () => {
+    const first = setup();
+    const second = setup();
+    importFinalSurgeWorkouts({ library: first.library, workouts: [item()], ftpW: 250 });
+    importFinalSurgeWorkouts({ library: second.library, workouts: [item()], ftpW: 250 });
+    expect(first.records[0].id).toBe(second.records[0].id);
+  });
+  it('migre un ancien identifiant aléatoire vers l’identifiant stable', () => {
     const s = setup([{ id: 'local-1', name: 'Tempo', description: 'old', blocks: [], source: { provider: 'final-surge', externalId: 'fs-1' }, updatedAt: 1 }]);
     expect(importFinalSurgeWorkouts({ library: s.library, workouts: [item('Tempo updated')], ftpW: 250 })).toMatchObject({ created: 0, updated: 1 });
     expect(s.records).toHaveLength(1);
-    expect(s.records[0].id).toBe('local-1');
+    expect(s.records[0].id).toMatch(/^fs-[a-f0-9]{32}$/);
+    expect(s.records[0].name).toBe('Tempo updated');
+    expect(s.library.remove).toHaveBeenCalledWith('local-1');
+  });
+  it('consolide les anciennes copies ayant la même provenance', () => {
+    const s = setup([
+      { id: 'local-1', name: 'Tempo', description: '', blocks: [], source: { provider: 'final-surge', externalId: 'fs-1' }, updatedAt: 1 },
+      { id: 'local-2', name: 'Tempo', description: '', blocks: [], source: { provider: 'final-surge', externalId: 'fs-1' }, updatedAt: 2 },
+    ]);
+    importFinalSurgeWorkouts({ library: s.library, workouts: [item()], ftpW: 250 });
+    expect(s.records).toHaveLength(1);
+    expect(s.records[0].id).toMatch(/^fs-[a-f0-9]{32}$/);
+    expect(s.library.remove).toHaveBeenCalledTimes(2);
   });
   it('ne réécrit pas une séance inchangée', () => {
     const s = setup();
