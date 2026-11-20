@@ -51,4 +51,4 @@ Toutes les mutations exigent la session Ma Moulinette et l'en-tête anti-CSRF ex
 
 ### Filtrage des séances importées
 
-La liste calendrier Final Surge peut contenir plusieurs sports et des sorties sans structure d'intervalles. Le serveur ne transmet à l'import que les séances dont l'option Workout Builder sélectionnée identifie explicitement le vélo et qui contiennent soit un groupe de répétitions, soit plusieurs étapes de travail à cibles/intensités distinctes. Les séances de course, de natation, les sorties vélo continues et les structures non reconnues sont ignorées.
+La liste calendrier Final Surge peut contenir plusieurs sports et des sorties sans structure d'intervalles. Le serveur ne transmet à l'import que les séances dont l'option Workout Builder sélectionnée identifie explicitement le vélo et qui contiennent au moins un bloc chronométré avec une cible de puissance explicite (en watts ou en % FTP), même si la séance est continue et sans répétitions. Les séances de course, de natation, les sorties vélo libres sans cible de puissance et les structures non reconnues sont ignorées.
