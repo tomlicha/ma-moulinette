@@ -1,7 +1,6 @@
-import { connectFinalSurge, disconnectFinalSurge, finalSurgeStatus, importFinalSurgeWorkouts } from '../../infra/net/final-surge';
+import { connectFinalSurge, disconnectFinalSurge, finalSurgeStatus, importFinalSurgeWorkouts as fetchFinalSurgeWorkouts } from '../../infra/net/final-surge';
 import type { WorkoutLibrary } from '../../domain/workout/library';
-import type { EditorBlock } from '../../domain/workout/blocks';
-import type { Workout, WorkoutStep } from '../../domain/workout/model';
+import { importFinalSurgeWorkouts } from '../../app/final-surge-import';
 
 const today = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
 const addDays = (date: string, days: number) => {
@@ -9,19 +8,6 @@ const addDays = (date: string, days: number) => {
   const d = new Date(Date.UTC(year, month - 1, day + days));
   return d.toISOString().slice(0, 10);
 };
-function blocksFromWorkout(workout: Workout, ftpW: number): EditorBlock[] {
-  return workout.steps.map((step: WorkoutStep): EditorBlock => {
-    const cadenceRpm = step.cadenceRpm;
-    if (step.kind === 'warmup' || step.kind === 'cooldown' || step.kind === 'ramp') {
-      const from = step.target.kind === 'ftp' ? step.target.from : step.target.kind === 'watts' ? step.target.from / ftpW : 0.5;
-      const to = step.target.kind === 'ftp' ? step.target.to : step.target.kind === 'watts' ? step.target.to / ftpW : from;
-      return { type: step.kind, durationS: step.durationS, from, to, ...(cadenceRpm ? { cadenceRpm } : {}) };
-    }
-    if (step.target.kind === 'free') return { type: 'free', durationS: step.durationS };
-    const from = step.target.kind === 'ftp' ? step.target.from : step.target.from / ftpW;
-    return { type: 'steady', durationS: step.durationS, power: from, ...(cadenceRpm ? { cadenceRpm } : {}) };
-  });
-}
 
 export function setupFinalSurgeDialog(options: { library: WorkoutLibrary; ftpW: () => number; onImported: () => void; log: (message: string) => void }): void {
   const dialog = document.createElement('dialog');
@@ -84,24 +70,13 @@ export function setupFinalSurgeDialog(options: { library: WorkoutLibrary; ftpW: 
       } else if (action === 'import') {
         if (!start.value || !end.value || start.value > end.value) throw new Error('Vérifie la période sélectionnée.');
         showStatus('Lecture des séances Final Surge…');
-        const result = await importFinalSurgeWorkouts(start.value, end.value);
-        const ftp = Math.max(1, options.ftpW());
-        let imported = 0;
-        for (const item of result.workouts) {
-          const mapped = item.workout;
-          if (!mapped.steps.length) continue;
-          const blocks = blocksFromWorkout(mapped, ftp);
-          const warnings = [...mapped.warnings];
-          if (mapped.steps.some((s) => s.kind === 'off' || s.kind === 'on' || s.kind === 'max')) warnings.push('Certains types d’intensité Final Surge sont représentés comme paliers dans l’éditeur.');
-          options.library.save({ name: mapped.name, description: [mapped.description, ...warnings].filter(Boolean).join('\n\n'), blocks });
-          imported++;
-        }
+        const fetched = await fetchFinalSurgeWorkouts(start.value, end.value);
+        const result = importFinalSurgeWorkouts({ library: options.library, workouts: fetched.workouts, ftpW: options.ftpW() });
         options.onImported();
-        const issues = result.errors;
-        errors.replaceChildren(...issues.map((message) => { const li = document.createElement('li'); li.textContent = message; return li; }));
-        errors.hidden = !issues.length;
-        showStatus(`${imported} séance(s) importée(s) dans Ma Moulinette.`);
-        options.log(`Final Surge : ${imported} séance(s) importée(s)`);
+        errors.replaceChildren(...fetched.errors.map((message) => { const li = document.createElement('li'); li.textContent = message; return li; }));
+        errors.hidden = !fetched.errors.length;
+        showStatus(`${result.created} créée(s), ${result.updated} mise(s) à jour, ${result.unchanged} inchangée(s), ${result.skipped} ignorée(s).`);
+        options.log(`Final Surge : ${result.created} créée(s), ${result.updated} mise(s) à jour, ${result.unchanged} inchangée(s).`);
       }
     } catch (error) {
       showStatus(error instanceof Error ? error.message : 'Opération Final Surge impossible.');
