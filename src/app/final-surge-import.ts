@@ -22,6 +22,30 @@ function blocksFromWorkout(workout: Workout, ftpW: number): EditorBlock[] {
   });
 }
 
+/**
+ * Identifiant local stable pour une séance Final Surge. Il doit être identique sur tous les appareils :
+ * deux imports indépendants du même externalId deviennent ainsi le même élément dans le journal de synchronisation.
+ */
+function finalSurgeWorkoutId(externalId: string): string {
+  let h1 = 1779033703;
+  let h2 = 3144134277;
+  let h3 = 1013904223;
+  let h4 = 2773480762;
+  for (let i = 0; i < externalId.length; i += 1) {
+    const code = externalId.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ code, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ code, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ code, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ code, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  const hash = [h1, h2, h3, h4].map((part) => (part >>> 0).toString(16).padStart(8, '0')).join('');
+  return `fs-${hash}`;
+}
+
 function sourceOf(item: ImportedWorkout): WorkoutSource | undefined {
   const externalId = item.source.workoutKey?.trim();
   if (!externalId) return undefined;
@@ -30,7 +54,7 @@ function sourceOf(item: ImportedWorkout): WorkoutSource | undefined {
 
 /** Orchestration applicative : transforme les séances du fournisseur, les déduplique et met à jour les imports existants. */
 export function importFinalSurgeWorkouts(options: {
-  library: Pick<WorkoutLibrary, 'list' | 'save'>;
+  library: Pick<WorkoutLibrary, 'list' | 'save' | 'remove'>;
   workouts: ImportedWorkout[];
   ftpW: number;
 }): ImportResult {
