@@ -15,6 +15,7 @@ import { fovFor, FOV_BASE, LOOK_AHEAD_M, lookHeight, SEATED_STATE, standingStep,
 import type { IntervalGate } from '../domain/workout/gate';
 import type { Surface } from '../domain/course/velodrome-track';
 import { pixelRatioFor, type Quality } from './core/quality';
+import { ResolutionGovernor } from './core/resolution-governor';
 
 export type { Quality } from './core/quality';
 
@@ -71,6 +72,10 @@ const percentile = (sorted: number[], p: number) =>
 /** Vue 3D de la sortie : monde, cycliste et caméra de poursuite pilotés par l'état de la simulation. */
 export class RideView {
   onStats?: (s: RenderStats) => void;
+  /** La densité de pixels a changé (résolution dynamique) : nouvelle valeur, en pixels par pixel CSS. */
+  onResolution?: (pixelRatio: number) => void;
+  /** Choisit la densité de pixels d'après le temps des images ; absent si la résolution est fixée (`?resolution=fixed`). */
+  private readonly governor?: ResolutionGovernor;
   /**
    * Appelée une fois si le GPU est perdu : la vue ne dessine plus et ne peut pas reprendre (three.js ne recrée pas ses
    * ressources). À l'appelant de la jeter et d'en construire une autre, sur un canevas neuf.
@@ -115,6 +120,7 @@ export class RideView {
     private readonly canvas: HTMLCanvasElement,
     private readonly journey: Journey,
     quality: Quality,
+    dynamicResolution: boolean,
     assets: RiderAssets,
     private readonly scene: THREE.Scene,
     layout: WorldLayout,
@@ -127,7 +133,9 @@ export class RideView {
     this.gates = new IntervalGates(journey, this.layout);
     this.others = new OthersLayer(assets, layout, LANE_M);
     this.scene.add(this.rider.group, this.others.group, this.gates.group);
-    renderer.setPixelRatio(pixelRatioFor(quality, window.devicePixelRatio));
+    const pixelRatio = pixelRatioFor(quality, window.devicePixelRatio);
+    renderer.setPixelRatio(pixelRatio);
+    if (dynamicResolution) this.governor = new ResolutionGovernor({ max: pixelRatio });
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     addEventListener('resize', this.onWindowResize); // écran masqué : le canevas ne change pas, la fenêtre si (rotation)
@@ -148,6 +156,8 @@ export class RideView {
       forceWebGL?: boolean;
       quality?: Quality;
       relief?: number;
+      /** Baisse la densité de pixels quand les images tardent, la remonte quand tout va bien (défaut : oui). */
+      dynamicResolution?: boolean;
       /** Avancement de la préparation (0 à 1) et l'étape en cours, pour l'écran de chargement. */
       onProgress?: (done: number, step: string) => void;
     } = {},
@@ -185,7 +195,7 @@ export class RideView {
     const world = await background.run(buildWorldSteps(layout, scene, quality === 'high' ? WORLD_HIGH : WORLD_LOW, assets));
     performance.mark('ride:world');
     progress(0.44, 'Abords du départ');
-    view = new RideView(renderer, backend, canvas, journey, quality, assets, scene, layout, world);
+    view = new RideView(renderer, backend, canvas, journey, quality, opts.dynamicResolution ?? true, assets, scene, layout, world);
     // Avant la première image, seulement les abords du départ ; le reste du relief et du décor (jusqu'à 1,2 km) suit en
     // tâche de fond, sans presser, même si l'écran de sortie est ouvert : il ne doit pas voler d'images.
     await background.run(world.primeSteps(view.p.x, view.p.z, true));
@@ -372,6 +382,7 @@ export class RideView {
     this.active = on;
     if (on && !this.raf && !this.lost && !this.disposed) {
       this.lastFrame = 0;
+      this.governor?.reset(); // les durées d'avant la pause ne disent rien d'aujourd'hui
       this.raf = requestAnimationFrame((t) => this.frame(t));
     }
   }
@@ -385,6 +396,11 @@ export class RideView {
     const dtMs = this.lastFrame ? now - this.lastFrame : 16.7;
     this.lastFrame = now;
     const dt = Math.min(dtMs / 1000, MAX_DT_S);
+    const pixelRatio = this.governor?.frame(dtMs, now);
+    if (pixelRatio !== undefined) {
+      this.renderer.setPixelRatio(pixelRatio);
+      this.onResolution?.(pixelRatio);
+    }
 
     const speedMs = this.state.speedKmh / 3.6;
     // Dans l'ascenseur, la distance avance au pas de la cabine, pas à la vitesse des jambes (voir `Ride`).

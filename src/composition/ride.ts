@@ -39,6 +39,7 @@ export function composeRide(w: Wiring): void {
           onProgress,
           forceWebGL: forceWebGL || w.params.get('renderer') === 'webgl2',
           quality: w.quality,
+          dynamicResolution: w.params.get('resolution') !== 'fixed',
           ...(w.relief !== undefined ? { relief: w.relief } : {}),
         },
         background,
