@@ -147,7 +147,7 @@ export function setupAccount(o: {
       </button>
       <div class="account-menu" role="menu" hidden>
         <button type="button" role="menuitem" data-act="name">Changer de nom</button>
-        <button type="button" role="menuitem" class="account-menu-final-surge" data-act="final-surge"><span class="fs-brand-mark" aria-hidden="true">FS</span><span data-final-surge-label>Connecter Final Surge</span></button>
+        <button type="button" role="menuitem" class="account-menu-final-surge" data-act="final-surge"><img class="fs-brand-mark" src="https://finalsurgelivestore.blob.core.windows.net/branding/fs.large.svg" alt="" aria-hidden="true"><span data-final-surge-label>Connecter Final Surge</span></button>
         <button type="button" role="menuitem" data-act="logout">Se déconnecter</button>
         <p class="account-note">Compatible with Strava</p>
       </div>`;
