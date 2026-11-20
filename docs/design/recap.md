@@ -23,8 +23,9 @@ Référence permanente de l'écran **Récapitulatif**, ouvert à la fin d'une s�
 ## Quand il s'ouvre
 
 - **Séance menée au bout du dernier palier** : la sortie est figée à cet instant (l'export s'y arrête), la sortie virtuelle continue derrière.
+- **Arrêt manuel pendant une séance** : la séance est interrompue (non déclarée terminée), la sortie est figée et le récapitulatif s'ouvre, même si moins de 60 s ont été enregistrées.
 - **Sortie arrêtée à la main** (« Arrêter la sortie » du menu), hors séance : la sortie est figée à l'arrêt.
-- Jamais sous **60 s** d'enregistrement, ni après un arrêt subi (trainer perdu), ni hors de l'écran Sortie. Une séance arrêtée avant la fin n'en ouvre pas : la sortie continue, son arrêt ouvrira le récapitulatif.
+- Un arrêt manuel ouvre le récapitulatif **quelle que soit la durée enregistrée**, y compris pendant une séance structurée. Il arrête alors la séance et la sortie virtuelle. Un arrêt subi (trainer perdu) n'ouvre pas le récapitulatif ; hors de l'écran Sortie non plus.
 - **Reprise** : un arrêt (une seconde sans puissance ni cadence) puis **5 s de pédalage d'affilée** ferment le récapitulatif comme « Continuer » (un envoi programmé part tout de suite). Le pédalage qui continue sans arrêt après la fin, en moulinant, ne compte pas : sans cela l'écran disparaîtrait avant d'être lu. Règle : `RideRecorder.resumedAfter`, `RESUME_S` dans `app/ride-export.ts`.
 - La sortie figée reste celle de l'export jusqu'à ce que le cycliste continue (« Continuer » ou reprise). Si elle n'est pas déjà partie, l'export suivant couvre alors toute la sortie, séance comprise.
 
