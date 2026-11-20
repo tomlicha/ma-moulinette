@@ -9,7 +9,7 @@ import { finalSurgeStatus } from '../../infra/net/final-surge';
  * - Sans compte : le bouton officiel « Connect with Strava » et une ligne qui dit ce qu'on gagne, et ce qu'on garde sans
  *   compte (rouler seul, exporter le FIT). Aucune obligation : l'application marche entièrement sans.
  * - Connecté : une pastille avec l'initiale, le nom montré aux autres et l'état en ligne ; elle ouvre un petit menu
- *   (changer de nom, se déconnecter).
+ *   (changer de nom, Strava, Final Surge : chaque service ouvre sa fenêtre, avec sa déconnexion).
  * - Sans serveur de comptes : rien du tout.
  * L'état et les gestes du compte sont dans app/account-session.ts : cet écran les affiche et lui signale les gestes.
  * Spécification : docs/design/compte.md.
@@ -147,8 +147,8 @@ export function setupAccount(o: {
       </button>
       <div class="account-menu" role="menu" hidden>
         <button type="button" role="menuitem" data-act="name">Changer de nom</button>
-        <button type="button" role="menuitem" class="account-menu-final-surge" data-act="final-surge"><img class="fs-brand-mark" src="https://finalsurgelivestore.blob.core.windows.net/branding/fs.large.svg" alt="" aria-hidden="true"><span data-final-surge-label>Connecter Final Surge</span></button>
-        <button type="button" role="menuitem" data-act="logout">Se déconnecter</button>
+        <button type="button" role="menuitem" class="account-menu-strava" data-act="strava" aria-label="Strava connecté : infos et déconnexion"><img class="menu-logo strava-mark" src="/strava/strava-logo-orange.svg" alt="" aria-hidden="true" width="88" height="17"><span>Strava connecté</span><svg class="menu-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg></button>
+        <button type="button" role="menuitem" class="account-menu-final-surge" data-act="final-surge"><img class="menu-logo fs-brand-mark" src="https://finalsurgelivestore.blob.core.windows.net/branding/fs.large.svg" alt="" aria-hidden="true"><span data-final-surge-label>Connecter Final Surge</span><svg class="menu-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg></button>
         <p class="account-note">Compatible with Strava</p>
       </div>`;
     const chip = el.querySelector<HTMLButtonElement>('.account-chip')!;
@@ -183,7 +183,7 @@ export function setupAccount(o: {
       toggle(false);
       if (act === 'name') openNameDialog(user);
       if (act === 'final-surge') window.dispatchEvent(new Event('mm:final-surge-open'));
-      if (act === 'logout') await session.logout();
+      if (act === 'strava') window.dispatchEvent(new Event('mm:strava-open'));
     });
   }
 
