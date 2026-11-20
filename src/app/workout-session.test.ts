@@ -82,6 +82,31 @@ describe('WorkoutSession', () => {
       expect(log).toHaveBeenCalledWith(`séance démarrée : ${workout().name}, FTP 200 W`);
     });
 
+    it('en démarrage différé, le chronomètre attend le premier coup de pédale', () => {
+      const { session } = setup();
+      session.select(workout());
+      session.start(undefined, true);
+      expect(session.running).toBe(true);
+      expect(session.state?.elapsedS).toBe(0);
+      vi.advanceTimersByTime(5000);
+      expect(session.state?.elapsedS).toBe(0);
+      session.onMeasurement({ powerW: 150 });
+      vi.advanceTimersByTime(2000);
+      expect(session.state!.elapsedS).toBeGreaterThan(1.5);
+    });
+
+    it('après arrêt, une nouvelle séance peut démarrer son propre chronomètre', () => {
+      const { session } = setup();
+      session.select(workout());
+      session.start(undefined, true);
+      session.onMeasurement({ cadenceRpm: 80 });
+      session.stop();
+      session.start(undefined, true);
+      session.onMeasurement({ powerW: 100 });
+      vi.advanceTimersByTime(1000);
+      expect(session.state!.elapsedS).toBeGreaterThan(0.5);
+    });
+
     it('ignore un second départ', () => {
       const { session, events } = setup();
       session.select(workout());
