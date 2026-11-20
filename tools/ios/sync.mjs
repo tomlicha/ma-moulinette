@@ -12,11 +12,13 @@ import { fileURLToPath } from 'node:url';
 
 /** Remplace la liste `WKAppBoundDomains` d'un Info.plist (texte XML), ou l'ajoute. */
 export function setAppBoundDomains(plist, domains) {
-  const items = domains.map((d) => `\t\t<string>${d}</string>`).join('\n');
-  const block = `\t<key>WKAppBoundDomains</key>\n\t<array>\n${items}\n\t</array>\n`;
-  const re = /\t<key>WKAppBoundDomains<\/key>\s*<array>[\s\S]*?<\/array>\n/;
+  // Fins de ligne du fichier (CRLF si Git l'a extrait ainsi sous Windows) : le bloc écrit reprend les mêmes.
+  const eol = plist.includes('\r\n') ? '\r\n' : '\n';
+  const items = domains.map((d) => `\t\t<string>${d}</string>`).join(eol);
+  const block = `\t<key>WKAppBoundDomains</key>${eol}\t<array>${eol}${items}${eol}\t</array>${eol}`;
+  const re = /\t<key>WKAppBoundDomains<\/key>\s*<array>[\s\S]*?<\/array>\r?\n/;
   if (re.test(plist)) return plist.replace(re, block);
-  return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}</dict>\n</plist>\n`);
+  return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}</dict>${eol}</plist>${eol}`);
 }
 
 /** Écrit l'adresse de l'application dans la page hors ligne. */
