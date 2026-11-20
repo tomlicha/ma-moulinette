@@ -93,7 +93,7 @@ export class FinalSurgeClient {
     if (!options.accessToken.trim()) throw new TypeError('accessToken requis.');
     if (!options.userKey.trim()) throw new TypeError('userKey requis.');
     this.baseUrl = (options.baseUrl ?? 'https://beta.finalsurge.com/api').replace(/\/+$/, '');
-    this.fetchImpl = options.fetch ?? fetch;
+    this.fetchImpl = options.fetch ?? ((...args) => fetch(...args));
   }
 
   /**
