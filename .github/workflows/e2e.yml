@@ -1,0 +1,47 @@
+# Scénarios de bout en bout (tools/e2e/) : l'application pilotée dans Chromium contre le serveur de dev, trainer simulé.
+# - À chaque pull request : les scénarios rapides (démarrage de la composition, vitesses virtuelles, démarrage au
+#   premier coup de pédale, éditeur de séance).
+# - Sur main, chaque nuit et à la demande : tous, y compris les longs (sortie complète, récapitulatif).
+# Le scénario `gpu` (perte du contexte WebGL) n'y est pas : il dépend du pilote graphique de la machine.
+# Playwright n'est pas une dépendance du projet : installé ici sans modifier package.json.
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm i --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Scénarios rapides
+        if: github.event_name == 'pull_request'
+        run: npm run e2e -- boot account gears autostart editor
+      - name: Tous les scénarios
+        if: github.event_name != 'pull_request'
+        run: npm run e2e -- boot account gears autostart editor app recap
+      - name: Traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: .e2e/
+          if-no-files-found: ignore
+          include-hidden-files: true # .e2e/ est un dossier caché

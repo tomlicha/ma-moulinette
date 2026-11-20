@@ -4,6 +4,9 @@ import { WebBluetoothTrainer } from '../infra/sensors/ble/web-bluetooth';
 import { WorldClient } from '../infra/net/world-client';
 import { blockSource, workoutSource } from '../infra/sync/sources';
 import { createSyncClient } from '../infra/sync/client';
+import { AccountSession } from '../app/account-session';
+import { devLogin, fetchAccount, logout, nativeStravaLogin, saveDisplayName } from '../infra/net/account';
+import { Moulinette, isNativeShell } from '../infra/native/shell';
 import { setupAccount } from '../ui/account/account-chip';
 import type { Wiring } from './wiring';
 
@@ -50,15 +53,31 @@ export function composeAccount(w: Wiring): void {
   const world = new WorldClient(w.journey.network);
   w.world = world;
 
-  const account = setupAccount({
-    hosts: [...document.querySelectorAll<HTMLElement>('.home-top')],
-    log: w.log,
-    onChange: (s) => {
-      if (s.kind === 'signed-in' && s.user.nameConfirmed) world.connect();
-      else world.disconnect();
-      void sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
+  /** Le compte : qui est connecté et les gestes qui changent cela (app/account-session.ts). */
+  const session = new AccountSession({
+    api: {
+      fetchAccount: () => fetchAccount(),
+      saveDisplayName: (name) => saveDisplayName(name),
+      logout: () => logout(),
+      devLogin: (name) => devLogin(name),
+      nativeStravaLogin: () => nativeStravaLogin((x) => Moulinette.authenticate(x)),
     },
+    store: w.prefs,
+    env: () => {
+      const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+      return { userAgent: navigator.userAgent, platform: nav.userAgentData?.platform };
+    },
+    native: isNativeShell(),
+    log: w.log,
   });
+  const account = setupAccount({ hosts: [...document.querySelectorAll<HTMLElement>('.home-top')], session });
+  // Après l'écran, qui se dessine d'abord : puis la salle temps réel et la synchronisation suivent le compte.
+  session.on('changed', (s) => {
+    if (s.kind === 'signed-in' && s.user.nameConfirmed) world.connect();
+    else world.disconnect();
+    void sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
+  });
+  void session.refresh();
 
   /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
   const crowdView = new CrowdView(w.riderTags, w.ridePanel);
