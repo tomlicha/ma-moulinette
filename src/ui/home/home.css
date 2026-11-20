@@ -353,11 +353,9 @@ button.rider-chip:hover { background: #FBF6EF; }
   grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr) clamp(170px, 30dvh, 250px);
 }
 .home-top { gap: 24px; justify-content: flex-start; }
-.home .home-nav { position: static; transform: none; width: auto; flex: none; margin-inline: auto 0; }
-.home .home-nav a { padding: 0 18px; }
-.home .home-nav a[aria-current='page'] { background: #14171A; }
-.home-chips { display: flex; gap: 10px; }
-.home-chip { display: inline-flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; background: #fff; color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); font: 600 1rem Barlow, system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.home-chips { display: flex; flex: none; gap: 10px; margin-inline: auto; }
+.home .home-top .account { margin-left: 0; }
+.home-chip { display: inline-flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; box-sizing: border-box; border-radius: 999px; background: #fff; color: var(--fg); border: 1px solid var(--glass-line); box-shadow: var(--shadow-card); font: 600 1rem Barlow, system-ui, sans-serif; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .home-chip:hover { background: #FBF6EF; }
 .home-chip:focus-visible, .home-seance-card:focus-visible, .home-devices-card:focus-visible, .course-thumb:focus-visible, .home-wo-list :focus-visible, .home-wo-filters :focus-visible, .home-course-nav button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 .chip-devices[data-any='false'] { border: 2px dashed var(--btn-line); }
@@ -440,7 +438,7 @@ button.wo-item-head { display: flex; align-items: center; gap: 12px; width: 100%
 @media (max-width: 900px) and (not ((pointer: coarse) and (orientation: landscape) and (max-height: 600px))) {
   .home { height: auto; min-height: 100dvh; padding: 14px 16px 24px; grid-template-columns: 1fr; grid-template-rows: auto; }
   .home-top { flex-wrap: wrap; gap: 10px; }
-  .home .home-nav { order: 3; flex: 1 0 100%; margin: 0; }
+  .home .home-top .account { margin-left: auto; }
   .home-world, .home-courses, .home-seances { grid-column: 1; grid-row: auto; }
   .home-world { min-height: 380px; }
   .home-courses { height: 460px; }
@@ -456,11 +454,7 @@ button.wo-item-head { display: flex; align-items: center; gap: 12px; width: 100%
   .home { display: block; height: 100dvh; padding: 10px 12px 20px; background: #3F86D0; }
   .home-top { position: relative; justify-content: space-between; gap: 10px; }
   .home-brand { background: none; border: 0; box-shadow: none; backdrop-filter: none; padding: 0 0 0 4px; }
-  .home .home-nav { order: 0; margin: 0 0 0 auto; padding: 4px; }
-  .home .home-nav a { width: 44px; height: 44px; padding: 0; flex: none; }
-  .home .home-nav a span { display: none; }
-  .home .home-nav .nav-ico { display: block; width: 22px; height: 22px; }
-  .home .home-nav a[aria-current='page'] { background: var(--accent); }
+  .home-chips { margin-inline: auto 0; }
   .chip-devices, .chip-rider span, .home-top .account { display: none; }
   .chip-rider { width: 52px; height: 52px; padding: 0; justify-content: center; border: 2px solid #fff; }
   .chip-rider img { width: 100%; height: 100%; border: 0; }

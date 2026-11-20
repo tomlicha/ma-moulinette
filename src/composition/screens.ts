@@ -2,6 +2,7 @@ import { COL_DES_ERABLES } from '../domain/course/courses/col-des-erables';
 import { HomeView } from '../ui/home/home-view';
 import { setupAppShell } from '../ui/shared/app-shell';
 import { setupHomeBackground } from '../ui/home/home-background';
+import { setupHeaderChips } from '../ui/shared/header-chips';
 import { setupRideMenu } from '../ui/ride/ride-menu';
 import { setupRouter } from '../ui/shared/router';
 import { byId as $ } from '../ui/shared/dom';
@@ -42,7 +43,11 @@ export function composeScreens(w: Wiring): void {
   const rideMenu = setupRideMenu({ prefs: w.prefs, opener: $<HTMLButtonElement>('ride-menu-open'), dialog: $<HTMLDialogElement>('ride-menu'), stats: $('view-stats') });
   w.rideMenu = rideMenu;
 
+  // Les pastilles d'en-tête suivent l'écran : accueil et Séances les montrent (repère `data-chips-slot` de leur en-tête).
+  const chips = setupHeaderChips($('home-chips'), 'accueil');
+
   const router = setupRouter((v) => {
+    chips.show(v);
     w.rideViews.view?.setActive(v === 'sortie');
     if (v === 'sortie') w.rideViews.hurry(); // la construction se presse, et démarre si le temps mort n'est pas encore venu
     else w.rideViews.calm(); // on a quitté la sortie avant la fin : la construction repasse derrière l'interface
