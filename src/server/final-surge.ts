@@ -49,7 +49,7 @@ function validDate(v: unknown): v is string {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 }
 
-export function createFinalSurge(accounts: Accounts, store: FinalSurgeStore, secret?: string, f: typeof fetch = fetch) {
+export function createFinalSurge(accounts: Accounts, store: FinalSurgeStore, secret?: string, f: typeof fetch = (...args) => fetch(...args)) {
   return async (req: Request): Promise<Response | undefined> => {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/integrations/final-surge/')) return undefined;
