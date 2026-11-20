@@ -59,9 +59,6 @@ export function importFinalSurgeWorkouts(options: {
   ftpW: number;
 }): ImportResult {
   const ftpW = Number.isFinite(options.ftpW) && options.ftpW > 0 ? options.ftpW : 1;
-  const existing = options.library.list();
-  const bySource = new Map(existing.flatMap((w) => w.source?.provider === 'final-surge'
-    ? [[w.source.externalId, w] as const] : []));
   const result: ImportResult = { created: 0, updated: 0, unchanged: 0, skipped: 0 };
 
   for (const item of options.workouts) {
@@ -73,24 +70,30 @@ export function importFinalSurgeWorkouts(options: {
     if (mapped.steps.some((s) => s.kind === 'off' || s.kind === 'on' || s.kind === 'max')) {
       warnings.push('Certains types d’intensité Final Surge sont représentés comme paliers dans l’éditeur.');
     }
-    const description = [mapped.description, ...warnings].filter(Boolean).join('\n\n');
-    const previous = bySource.get(source.externalId);
-    if (previous && previous.name === mapped.name && (previous.description ?? '') === description &&
+    const description = [mapped.description, ...warnings].filter(Boolean).join('\\n\\n');
+
+    // Relecture pour chaque élément : ne pas réutiliser un instantané antérieur aux sauvegardes précédentes.
+    const matches = options.library.list().filter((w) =>
+      w.source?.provider === 'final-surge' && w.source.externalId === source.externalId);
+    const id = finalSurgeWorkoutId(source.externalId);
+    const previous = matches.find((w) => w.id === id) ?? matches[0];
+    const unchanged = previous?.id === id && previous.name === mapped.name &&
+      (previous.description ?? '') === description &&
       JSON.stringify(previous.blocks) === JSON.stringify(blocks) &&
-      previous.source?.scheduledAt === source.scheduledAt) {
+      previous.source?.scheduledAt === source.scheduledAt;
+
+    if (!unchanged) {
+      options.library.save({ id, name: mapped.name, description, blocks, source });
+      if (previous) result.updated++;
+      else result.created++;
+    } else {
       result.unchanged++;
-      continue;
     }
-    const saved = options.library.save({
-      ...(previous ? { id: previous.id } : {}),
-      name: mapped.name,
-      description,
-      blocks,
-      source,
-    });
-    bySource.set(source.externalId, saved);
-    if (previous) result.updated++;
-    else result.created++;
+
+    // Les anciennes versions utilisaient des IDs aléatoires : les retirer pour converger vers l'ID stable.
+    for (const duplicate of matches) {
+      if (duplicate.id !== id) options.library.remove(duplicate.id);
+    }
   }
   return result;
 }
