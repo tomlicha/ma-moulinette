@@ -1,6 +1,5 @@
 import { connectFinalSurge, disconnectFinalSurge, finalSurgeStatus, importFinalSurgeWorkouts as fetchFinalSurgeWorkouts } from '../../infra/net/final-surge';
 import type { WorkoutLibrary } from '../../domain/workout/library';
-import { importFinalSurgeWorkouts } from '../../app/final-surge-import';
 
 const today = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
 const addDays = (date: string, days: number) => {
@@ -9,7 +8,7 @@ const addDays = (date: string, days: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-export function setupFinalSurgeDialog(options: { library: WorkoutLibrary; ftpW: () => number; onImported: () => void; log: (message: string) => void }): void {
+export function setupFinalSurgeDialog(options: { importWorkouts: (workouts: Awaited<ReturnType<typeof fetchFinalSurgeWorkouts>>['workouts']) => { created: number; updated: number; unchanged: number; skipped: number }; onImported: () => void; log: (message: string) => void }): void {
   const dialog = document.createElement('dialog');
   dialog.className = 'rider-dialog name-dialog';
   dialog.setAttribute('aria-labelledby', 'final-surge-title');
@@ -71,7 +70,7 @@ export function setupFinalSurgeDialog(options: { library: WorkoutLibrary; ftpW: 
         if (!start.value || !end.value || start.value > end.value) throw new Error('Vérifie la période sélectionnée.');
         showStatus('Lecture des séances Final Surge…');
         const fetched = await fetchFinalSurgeWorkouts(start.value, end.value);
-        const result = importFinalSurgeWorkouts({ library: options.library, workouts: fetched.workouts, ftpW: options.ftpW() });
+        const result = options.importWorkouts(fetched.workouts);
         options.onImported();
         errors.replaceChildren(...fetched.errors.map((message) => { const li = document.createElement('li'); li.textContent = message; return li; }));
         errors.hidden = !fetched.errors.length;
