@@ -166,55 +166,6 @@
             </div>
           </section>
 
-          <dialog id="rider-dialog" class="rider-dialog" aria-labelledby="rider-title">
-            <div class="rider-card">
-              <div class="rider-top">
-                <img id="rider-avatar" class="rider-avatar" alt="" />
-                <div>
-                  <span class="home-kicker">Cycliste</span>
-                  <h2 id="rider-title">Mon coureur</h2>
-                  <p class="rider-wkg"><b id="rider-wkg"></b> W/kg</p>
-                </div>
-              </div>
-              <div class="rider-fields">
-                <div class="rider-field">
-                  <label for="rider-mass">Masse (coureur + vélo)</label>
-                  <div class="stepper">
-                    <button type="button" class="secondary" data-step="mass" data-dir="-1" aria-label="Masse moins 1 kg">−</button>
-                    <button type="button" id="rider-mass" class="stepper-value" aria-haspopup="dialog" aria-label="Masse en kilogrammes : choisir sur la roulette"></button>
-                    <span>kg</span>
-                    <button type="button" class="secondary" data-step="mass" data-dir="1" aria-label="Masse plus 1 kg">+</button>
-                  </div>
-                  <p id="rider-mass-note" class="note" hidden>La masse est figée pendant la sortie.</p>
-                </div>
-                <div class="rider-field">
-                  <label for="rider-ftp">FTP</label>
-                  <div class="stepper">
-                    <button type="button" class="secondary" data-step="ftp" data-dir="-1" aria-label="FTP moins 1 W">−</button>
-                    <button type="button" id="rider-ftp" class="stepper-value" aria-haspopup="dialog" aria-label="FTP en watts : choisir sur la roulette"></button>
-                    <span>W</span>
-                    <button type="button" class="secondary" data-step="ftp" data-dir="1" aria-label="FTP plus 1 W">+</button>
-                  </div>
-                </div>
-              </div>
-              <ul id="rider-zones" class="rider-zones" aria-label="Zones de puissance"></ul>
-              <div class="row"><button type="button" data-close>Terminé</button></div>
-            </div>
-          </dialog>
-
-          <dialog id="wheel-dialog" class="wheel-dialog" aria-labelledby="wheel-title">
-            <div class="wheel-card">
-              <h3 id="wheel-title"></h3>
-              <div class="wheel-wrap">
-                <div class="wheel-band" aria-hidden="true"><span id="wheel-unit"></span></div>
-                <div id="wheel-cols" class="wheel-cols"></div>
-              </div>
-              <div class="row">
-                <button type="button" class="secondary" data-wheel-cancel>Annuler</button>
-                <button type="button" data-wheel-ok>OK</button>
-              </div>
-            </div>
-          </dialog>
         </div>
       </section>
 
@@ -631,6 +582,57 @@
           </dialog>
         </div>
       </section>
+
+      <!-- Fiche du coureur et roulette : hors des vues, pour s'ouvrir depuis l'accueil comme depuis Appareils. -->
+        <dialog id="rider-dialog" class="rider-dialog" aria-labelledby="rider-title">
+          <div class="rider-card">
+            <div class="rider-top">
+              <img id="rider-avatar" class="rider-avatar" alt="" />
+              <div>
+                <span class="home-kicker">Cycliste</span>
+                <h2 id="rider-title">Mon coureur</h2>
+                <p class="rider-wkg"><b id="rider-wkg"></b> W/kg</p>
+              </div>
+            </div>
+            <div class="rider-fields">
+              <div class="rider-field">
+                <label for="rider-mass">Masse (coureur + vélo)</label>
+                <div class="stepper">
+                  <button type="button" class="secondary" data-step="mass" data-dir="-1" aria-label="Masse moins 1 kg">−</button>
+                  <button type="button" id="rider-mass" class="stepper-value" aria-haspopup="dialog" aria-label="Masse en kilogrammes : choisir sur la roulette"></button>
+                  <span>kg</span>
+                  <button type="button" class="secondary" data-step="mass" data-dir="1" aria-label="Masse plus 1 kg">+</button>
+                </div>
+                <p id="rider-mass-note" class="note" hidden>La masse est figée pendant la sortie.</p>
+              </div>
+              <div class="rider-field">
+                <label for="rider-ftp">FTP</label>
+                <div class="stepper">
+                  <button type="button" class="secondary" data-step="ftp" data-dir="-1" aria-label="FTP moins 1 W">−</button>
+                  <button type="button" id="rider-ftp" class="stepper-value" aria-haspopup="dialog" aria-label="FTP en watts : choisir sur la roulette"></button>
+                  <span>W</span>
+                  <button type="button" class="secondary" data-step="ftp" data-dir="1" aria-label="FTP plus 1 W">+</button>
+                </div>
+              </div>
+            </div>
+            <ul id="rider-zones" class="rider-zones" aria-label="Zones de puissance"></ul>
+            <div class="row"><button type="button" data-close>Terminé</button></div>
+          </div>
+        </dialog>
+
+        <dialog id="wheel-dialog" class="wheel-dialog" aria-labelledby="wheel-title">
+          <div class="wheel-card">
+            <h3 id="wheel-title"></h3>
+            <div class="wheel-wrap">
+              <div class="wheel-band" aria-hidden="true"><span id="wheel-unit"></span></div>
+              <div id="wheel-cols" class="wheel-cols"></div>
+            </div>
+            <div class="row">
+              <button type="button" class="secondary" data-wheel-cancel>Annuler</button>
+              <button type="button" data-wheel-ok>OK</button>
+            </div>
+          </div>
+        </dialog>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
