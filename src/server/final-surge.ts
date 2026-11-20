@@ -1,4 +1,4 @@
-import { FinalSurgeAuthenticationError, FinalSurgeClient, mapFinalSurgeWorkout, type FinalSurgeRecord } from '../infra/integrations/final-surge/index.ts';
+import { FinalSurgeAuthenticationError, FinalSurgeClient, isCyclingIntervalWorkout, mapFinalSurgeWorkout, type FinalSurgeRecord } from '../infra/integrations/final-surge/index.ts';
 import type { User } from './accounts.ts';
 
 export interface FinalSurgeCredentials { email: string; password: string }
@@ -95,9 +95,12 @@ export function createFinalSurge(accounts: Accounts, store: FinalSurgeStore, sec
           const workoutKey = String(key);
           try {
             const builder = await client.getStructuredWorkout(workoutKey);
+            // La liste calendrier mélange les sports et les séances libres. On ne garde
+            // que les entraînements vélo explicitement structurés avec des intervalles.
+            if (!isCyclingIntervalWorkout(builder)) continue;
             const mapped = mapFinalSurgeWorkout(summary as FinalSurgeRecord, builder);
             if (mapped.workout.steps.length) workouts.push(mapped);
-            else errors.push(`${mapped.workout.name} : aucune étape exploitable.`);
+            else errors.push(`${mapped.workout.name} : structure d'intervalles vélo illisible.`);
           } catch { errors.push('Une séance n’a pas pu être lue.'); }
         }
         return json({ workouts, errors });

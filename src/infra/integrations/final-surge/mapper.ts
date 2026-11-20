@@ -52,7 +52,8 @@ function selectWorkoutOption(builder: RecordLike): RecordLike | undefined {
     return ['cycling', 'bike', 'biking'].includes(sport) && /power|watt/.test(target);
   });
   const cycling = options.find((option) => ['cycling', 'bike', 'biking'].includes((firstText(option, 'sport', 'Sport') ?? '').toLowerCase()));
-  return cyclingPower ?? cycling ?? options[0];
+  // Ne jamais choisir arbitrairement une séance d'un autre sport (course, natation, etc.).
+  return cyclingPower ?? cycling;
 }
 function parseDurationSeconds(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value);
@@ -195,6 +196,50 @@ function expandSteps(rawSteps: unknown[], output: WorkoutStep[], warnings: strin
   }
 }
 
+
+/**
+ * Accepte une séance explicitement cycliste dès qu'elle contient au moins un bloc
+ * chronométré avec une cible de puissance explicite (watts ou %FTP).
+ * Les sorties libres et les structures sans cible de puissance sont exclues.
+ */
+export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
+  const builder = unwrapBuilder(builderPayload);
+  if (!builder) return false;
+  const selected = selectWorkoutOption(builder);
+  if (!selected) return false;
+  const sport = (firstText(selected, 'sport', 'Sport') ?? '').toLowerCase();
+  if (!['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
+
+  const hasPowerTarget = (items: unknown[], depth = 0): boolean => {
+    if (depth > 8) return false;
+    return items.some((item) => {
+      if (!isRecord(item)) return false;
+      const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
+      if (type === 'repeat' || type === 'repetition') {
+        const children = get(item, 'data', 'Data', 'steps', 'Steps');
+        return Array.isArray(children) && hasPowerTarget(children, depth + 1);
+      }
+      if (type !== 'step' && type !== 'workoutstep') return false;
+      const durationType = (firstText(item, 'durationType', 'DurationType') ?? 'TIME').toUpperCase();
+      if (durationType !== 'TIME' || !parseDurationSeconds(get(item, 'duration', 'Duration', 'durationS', 'DurationS'))) return false;
+      const targets = targetEntries(get(item, 'target', 'Target', 'targets', 'Targets'));
+      return targets.some((target) => {
+        const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase();
+        if (!['power', 'watt', 'watts'].includes(targetType)) return false;
+        const { low, high } = numericPair(target);
+        const value = midpoint(low, high);
+        if (value === undefined || value <= 0) return false;
+        const descriptor = [
+          firstText(target, 'targetType', 'TargetType'),
+          firstText(target, 'targetOption', 'TargetOption'),
+          firstText(target, 'unit', 'Unit', 'units', 'Units'),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return /percent|%|ftp|threshold|fraction|watt|\\bw\\b|absolute/.test(descriptor);
+      });
+    });
+  };
+  return hasPowerTarget(readSteps(selected));
+}
 /** Convert a calendar summary and Workout Builder payload to Ma Moulinette's Workout model. */
 export function mapFinalSurgeWorkout(summary: FinalSurgeRecord, builderPayload: unknown, options: FinalSurgeMapperOptions = {}): MappedFinalSurgeWorkout {
   const warnings: string[] = [];
