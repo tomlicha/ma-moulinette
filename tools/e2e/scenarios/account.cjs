@@ -166,24 +166,36 @@ module.exports = async function account({ playwright, browser, url }) {
     await s.mark('déconnecté', { stravaHref: '/api/auth/login', nameDialogOpen: false });
   });
 
-  // iPhone couché en plein écran (844 × 390, sans bordures) : le bouton Strava et le menu du compte (Final Surge) restent à portée
-  // sur l'accueil. Une règle de l'accueil pour téléphone les avait cachés : on regarde ce que l'écran montre, pas le DOM.
+  // iPhone couché en plein écran (844 × 390, sans bordures) : sur chaque écran qui porte le compte, le bouton Strava et le menu
+  // (Final Surge) restent à portée. Une règle de l'accueil pour téléphone les avait cachés : on regarde ce que l'écran montre.
   const phone = {
     ...playwright.devices['iPhone 13 landscape'],
     viewport: { width: 844, height: 390 },
     screen: { width: 844, height: 390 },
   };
-  const seen = async (page, s, label, selectors) => {
-    for (const selector of selectors) {
-      const problem = await page.evaluate(VISIBLE, selector);
-      if (problem) s.fail(`« ${label} » : ${problem}`);
-    }
-  };
   await scene('iPhone couché', phone, async ({ page, s, sleep, waitFor }) => {
-    await seen(page, s, 'visiteur : bouton Strava', ['.home .account .strava-connect']);
+    const seen = async (label, selectors) => {
+      for (const selector of selectors) {
+        const problem = await page.evaluate(VISIBLE, selector);
+        if (problem) s.fail(`« ${label} » : ${problem}`);
+      }
+    };
+    const goTo = async (view) => {
+      await page.evaluate((v) => (location.hash = `#${v}`), view);
+      await waitFor((v) => !document.querySelector(`[data-view="${v}"]`).hidden, view);
+      await sleep(300);
+    };
+
+    // Visiteur. Accueil et Appareils portent le bouton Strava. Sur Séances, le rail de 54 px n'a pas la place de le loger
+    // (account.css : « sans compte, rien dans le rail ») : on s'y connecte depuis un autre écran, rien à vérifier ici.
+    for (const view of ['accueil', 'appareils']) {
+      await goTo(view);
+      await seen(`${view}, visiteur : bouton Strava`, [`[data-view="${view}"] .account .strava-connect`]);
+    }
     if (s.failures.length) return; // bouton caché : la suite de la scène n'aurait plus de sens
+
     // Connexion de développement (le bouton Strava mène hors de la page), puis le nom.
-    await page.evaluate(() => document.querySelector('.home .account-dev').click());
+    await page.evaluate(() => document.querySelector('[data-view="appareils"] .account-dev').click());
     await waitFor(() => document.querySelector('dialog.name-dialog')?.open);
     await page.evaluate(() => {
       document.getElementById('name-input').value = 'Tom L.';
@@ -191,11 +203,18 @@ module.exports = async function account({ playwright, browser, url }) {
     });
     await waitFor(() => !document.querySelector('dialog.name-dialog').open);
     await sleep(300);
-    await seen(page, s, 'connecté : pastille du compte', ['.home .account .account-chip']);
-    if (s.failures.length) return; // pastille introuvable : inutile d'essayer de la toucher
-    await page.locator('.home .account-chip').tap();
-    await sleep(300);
-    await seen(page, s, 'menu du compte ouvert', ['.home .account-menu', '.home .account-menu [data-act="final-surge"]', '.home .account-menu [data-act="logout"]']);
+
+    // Connecté : la pastille, puis le menu ouvert au toucher, entièrement dans l'écran, avec Final Surge.
+    for (const view of ['accueil', 'appareils', 'seances']) {
+      await goTo(view);
+      const root = `[data-view="${view}"]`;
+      await seen(`${view}, connecté : pastille du compte`, [`${root} .account .account-chip`]);
+      if (s.failures.length) return; // pastille introuvable : inutile d'essayer de la toucher
+      await page.locator(`${root} .account-chip`).tap();
+      await sleep(300);
+      await seen(`${view}, menu du compte ouvert`, [`${root} .account-menu`, `${root} .account-menu [data-act="final-surge"]`, `${root} .account-menu [data-act="logout"]`]);
+      await page.keyboard.press('Escape');
+    }
   });
 
   if (errors.length) failures.push(`erreurs de la page : ${errors.join(' | ')}`);
