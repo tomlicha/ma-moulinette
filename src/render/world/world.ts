@@ -493,7 +493,8 @@ function buildClouds(layout: WorldLayout, count: number, tones: Tones): THREE.In
     [0.4, 0.45, -0.3, 0.7],
     [-0.45, 0.3, 0.45, 0.6],
   ];
-  const geo = merge(puffs.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 3).translate(x, y, z)));
+  // Détail 2 (180 faces par boule) : à 180 m de haut ou plus, 320 faces ne se voient pas, et 90 nuages en font 144 000 triangles.
+  const geo = merge(puffs.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 2).translate(x, y, z)));
   geo.scale(1, 0.62, 0.8);
   const mat = new THREE.MeshBasicNodeMaterial({ fog: false });
   mat.colorNode = mix(tones.cloudUnder, tones.cloudTop, tslSmoothstep(-0.55, 0.45, normalWorld.y)) as unknown as NonNullable<THREE.MeshBasicNodeMaterial['colorNode']>;
@@ -576,10 +577,11 @@ export function* buildWorldSteps(layout: WorldLayout, scene: THREE.Scene, opts: 
   yield;
   group.add(terrain.group, road, decor.group, fence, arches, mountains, clouds);
 
-  // Sol de fond sous tout : une grille de cellules de 100 m, posée sous le relief lointain (qui ne descend jamais sous zéro).
+  // Sol de fond sous tout : un seul grand carré plat posé sous le relief lointain (qui ne descend jamais sous zéro). Il n'a pas
+  // besoin de cellules : la lumière et la brume se calculent par pixel, et une grille de 100 m coûtait 100 000 triangles.
   const size = 2 * (layout.radius + FAR_MARGIN_M + 4000);
   const plane = new THREE.Mesh(
-    new THREE.PlaneGeometry(size, size, Math.round(size / 100), Math.round(size / 100)).rotateX(-Math.PI / 2),
+    new THREE.PlaneGeometry(size, size, 1, 1).rotateX(-Math.PI / 2),
     new THREE.MeshStandardNodeMaterial({ color: PALETTE.grassDark, roughness: 1 }),
   );
   plane.position.set(layout.center.x, -3, layout.center.z);

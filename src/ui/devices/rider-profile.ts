@@ -1,15 +1,6 @@
-import { FTP_LIMITS, MASS_LIMITS } from '../../domain/sim/rider-limits';
+import { FTP_LIMITS, MASS_LIMITS, clampValue, wattsPerKg } from '../../domain/sim/rider-limits';
 import { zoneRangesW } from '../../domain/workout/zones';
 import type { setupWheel } from '../shared/wheel-picker';
-
-/** Rapport puissance / masse, à la française : « 2,95 ». */
-export const wattsPerKg = (ftpW: number, massKg: number) => (ftpW / massKg).toFixed(2).replace('.', ',');
-
-/** Ramène une saisie dans les bornes ; une saisie illisible redonne `fallback`. */
-export function clampValue(raw: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(raw)) return fallback;
-  return Math.min(max, Math.max(min, Math.round(raw)));
-}
 
 interface Field {
   /** Bouton qui affiche la valeur et ouvre la roulette. */

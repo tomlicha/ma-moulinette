@@ -42,7 +42,7 @@ function compareApp(a, b) {
     for (const k of Object.keys(x)) {
       if (k === 'route') continue; // le HUD change à chaque instant
       // Un texte court : chiffres neutralisés (durées, compteurs). Un DOM entier : tel quel, sauf les adresses `blob:`.
-      const norm = (v) => (typeof v !== 'string' ? v : v.length > 300 ? v.replace(/blob:[^"')\s]+/g, 'blob:URL') : neutral(v));
+      const norm = (v) => (typeof v === 'object' && v !== null ? neutral(JSON.stringify(v)) : typeof v !== 'string' ? v : v.length > 300 ? v.replace(/blob:[^"')\s]+/g, 'blob:URL') : neutral(v));
       const vx = norm(x[k]);
       const vy = norm(y[k]);
       if (vx === vy) continue;
@@ -79,7 +79,7 @@ function compareEditor(a, b) {
   });
 }
 
-const KINDS = { app: compareApp, autostart: compareApp, gears: compareApp, recap: compareApp, gpu: compareGpu, editor: compareEditor };
+const KINDS = { boot: compareApp, app: compareApp, autostart: compareApp, account: compareApp, gears: compareApp, recap: compareApp, gpu: compareGpu, editor: compareEditor };
 let compared = 0;
 for (const [name, fn] of Object.entries(KINDS)) {
   const a = read(dirA, name);

@@ -1,6 +1,6 @@
 import './account.css';
-import { devLogin, fetchAccount, loginUrl, logout, nativeStravaLogin, prefersStravaApp, saveDisplayName, type AccountState, type User } from '../../infra/net/account';
-import { isNativeShell, Moulinette } from '../../infra/native/shell';
+import type { AccountSession } from '../../app/account-session';
+import { loginUrl, type AccountState, type User } from '../../infra/net/account';
 import type { WorldStatus } from '../../infra/net/world-client';
 
 /**
@@ -10,35 +10,15 @@ import type { WorldStatus } from '../../infra/net/world-client';
  * - Connecté : une pastille avec l'initiale, le nom montré aux autres et l'état en ligne ; elle ouvre un petit menu
  *   (changer de nom, se déconnecter).
  * - Sans serveur de comptes : rien du tout.
+ * L'état et les gestes du compte sont dans app/account-session.ts : cet écran les affiche et lui signale les gestes.
  * Spécification : docs/design/compte.md.
  */
 export interface AccountUi {
-  state(): AccountState;
   /** État de la salle temps réel et nombre de coureurs, pour la ligne d'état de la pastille. */
   setWorld(status: WorldStatus, population: number): void;
 }
 
 const NAME_MAX = 32;
-/** Instant du dernier essai de connexion par l'app Strava (Android), effacé dès qu'une session s'ouvre. */
-const APP_TRY_KEY = 'mm.stravaAppTry';
-
-const readAppTry = (): number | undefined => {
-  try {
-    const v = Number(localStorage.getItem(APP_TRY_KEY));
-    return v > 0 ? v : undefined;
-  } catch {
-    return undefined;
-  }
-};
-const writeAppTry = (v: number | undefined) => {
-  try {
-    if (v === undefined) localStorage.removeItem(APP_TRY_KEY);
-    else localStorage.setItem(APP_TRY_KEY, String(v));
-  } catch {
-    // stockage indisponible : chaque essai repasse par l'app, sans autre conséquence
-  }
-};
-
 const initialOf = (name: string) => [...name.trim()][0]?.toUpperCase() ?? '?';
 
 const html = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -69,10 +49,9 @@ export function worldLine(status: WorldStatus, population: number): { text: stri
 export function setupAccount(o: {
   /** Les en-têtes `.home-top` des écrans plein écran : la pastille s'y ajoute, la même partout. */
   hosts: HTMLElement[];
-  onChange: (s: AccountState) => void;
-  log: (msg: string) => void;
+  session: AccountSession;
 }): AccountUi {
-  let state: AccountState = { kind: 'unavailable' };
+  const { session } = o;
   let world: { status: WorldStatus; population: number } = { status: 'offline', population: 0 };
 
   const slots = o.hosts.map((host) => {
@@ -113,9 +92,7 @@ export function setupAccount(o: {
     error.hidden = true;
     save.disabled = true;
     try {
-      const user = await saveDisplayName(input.value);
-      if (state.kind === 'signed-in') set({ ...state, user });
-      o.log(`compte : nom affiché « ${user.displayName} »`);
+      await session.saveName(input.value);
       dialog.close();
     } catch (err) {
       error.textContent =
@@ -141,36 +118,18 @@ export function setupAccount(o: {
       <p class="account-pitch"><b>Rouler avec les autres</b><span>Sans compte : seul, export FIT</span></p>
       ${s.methods.strava ? `<a class="strava-connect" href="${loginUrl()}"><img src="/strava/connect-with-strava-orange.svg" alt="Connect with Strava" width="237" height="48" /></a>` : ''}
       ${s.methods.dev ? `<button type="button" class="secondary account-dev">Connexion de développement</button>` : ''}`;
-    // Le chemin se décide au toucher : par l'app Strava sur Android, sauf si le dernier essai par l'app n'a rien donné.
+    // Le chemin se décide au toucher (app/account-session.ts) : session système en coquille native, sinon app Strava ou page web.
     el.querySelector<HTMLAnchorElement>('.strava-connect')?.addEventListener('click', (e) => {
-      // Coquille native : session d'authentification système, la WebView ne quitte pas l'application.
-      if (isNativeShell()) {
+      if (session.nativeLogin) {
         e.preventDefault();
-        o.log('compte : connexion Strava par la session système');
-        void nativeStravaLogin((x) => Moulinette.authenticate(x))
-          .then((ok) => {
-            o.log(ok ? 'compte : connecté avec Strava' : 'compte : connexion Strava annulée');
-            if (ok) void refresh();
-          })
-          .catch((err: unknown) => o.log(`compte : connexion Strava impossible (${err instanceof Error ? err.message : err})`));
+        void session.loginNative();
         return;
       }
-      const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-      const viaApp = prefersStravaApp({ userAgent: navigator.userAgent, platform: nav.userAgentData?.platform }, readAppTry(), Date.now());
-      writeAppTry(viaApp ? Date.now() : undefined);
-      (e.currentTarget as HTMLAnchorElement).href = loginUrl(viaApp);
-      o.log(`compte : connexion Strava par ${viaApp ? 'l’app Strava' : 'la page web de Strava'}`);
+      (e.currentTarget as HTMLAnchorElement).href = session.webLoginHref();
     });
-    el.querySelector('.account-dev')?.addEventListener('click', async () => {
+    el.querySelector('.account-dev')?.addEventListener('click', () => {
       const name = window.prompt('Nom du coureur (connexion de développement)', 'Tom L.');
-      if (!name) return;
-      try {
-        const user = await devLogin(name);
-        o.log(`compte : connecté en développement (${user.displayName})`);
-        void refresh();
-      } catch (e) {
-        o.log(`compte : connexion de développement refusée (${e instanceof Error ? e.message : e})`);
-      }
+      if (name) void session.devLogin(name);
     });
   }
 
@@ -209,19 +168,12 @@ export function setupAccount(o: {
       const act = (e.target as HTMLElement).closest('button')?.dataset.act;
       toggle(false);
       if (act === 'name') openNameDialog(user);
-      if (act === 'logout') {
-        try {
-          await logout();
-          o.log('compte : déconnecté');
-        } catch (err) {
-          o.log(`compte : déconnexion impossible (${err instanceof Error ? err.message : err})`);
-        }
-        void refresh();
-      }
+      if (act === 'logout') await session.logout();
     });
   }
 
   function render() {
+    const state = session.state;
     for (const el of slots) {
       el.hidden = state.kind === 'unavailable';
       if (state.kind === 'signed-out') renderOut(el, state);
@@ -230,26 +182,14 @@ export function setupAccount(o: {
     }
   }
 
-  function set(s: AccountState) {
-    if (s.kind === 'signed-in') writeAppTry(undefined);
-    const firstSignIn = s.kind === 'signed-in' && !s.user.nameConfirmed && state.kind !== 'signed-in';
-    state = s;
-    render();
-    o.onChange(s);
-    if (firstSignIn && s.kind === 'signed-in') openNameDialog(s.user);
-  }
-
-  async function refresh() {
-    set(await fetchAccount());
-  }
-
-  void refresh();
+  session.on('changed', render);
+  session.on('firstSignIn', openNameDialog);
 
   return {
-    state: () => state,
     setWorld(status, population) {
       if (status === world.status && population === world.population) return;
       world = { status, population };
+      const state = session.state;
       if (state.kind !== 'signed-in' || !state.user.nameConfirmed) return;
       const line = worldLine(status, population);
       for (const el of slots) {

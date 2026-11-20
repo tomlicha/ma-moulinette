@@ -10,9 +10,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Remplace la liste `WKAppBoundDomains` d'un Info.plist (texte XML), ou l'ajoute. */
+/**
+ * Remplace la liste `WKAppBoundDomains` d'un Info.plist (texte XML), ou l'ajoute. Les fins de ligne du fichier sont
+ * respectées : sous Windows, git le sort en CRLF.
+ */
 export function setAppBoundDomains(plist, domains) {
-  // Fins de ligne du fichier (CRLF si Git l'a extrait ainsi sous Windows) : le bloc écrit reprend les mêmes.
   const eol = plist.includes('\r\n') ? '\r\n' : '\n';
   const items = domains.map((d) => `\t\t<string>${d}</string>`).join(eol);
   const block = `\t<key>WKAppBoundDomains</key>${eol}\t<array>${eol}${items}${eol}\t</array>${eol}`;
