@@ -205,13 +205,9 @@ function expandSteps(rawSteps: unknown[], output: WorkoutStep[], warnings: strin
 export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   const builder = unwrapBuilder(builderPayload);
   if (!builder) return false;
-  const optionsRaw = get(builder, 'target_options', 'targetOptions', 'TargetOptions');
-  const options = Array.isArray(optionsRaw) ? optionsRaw.filter(isRecord) : [];
-  const cycling = options.find((option) => {
-    const sport = (firstText(option, 'sport', 'Sport') ?? '').toLowerCase();
-    return ['cycling', 'bike', 'biking', 'cycle'].includes(sport);
-  });
-  if (!cycling) return false;
+  const cycling = selectWorkoutOption(builder);
+  const sport = (firstText(cycling, 'sport', 'Sport') ?? '').toLowerCase();
+  if (!cycling || !['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
 
   const steps = readSteps(cycling);
   const hasRepeat = (items: unknown[], depth = 0): boolean => {
