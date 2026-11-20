@@ -1,6 +1,6 @@
 # Intégration Final Surge
 
-L'application permet de connecter un compte Final Surge depuis le menu du compte Ma Moulinette, puis d'importer les séances planifiées dans une période choisie.
+L'application permet de connecter un compte Final Surge depuis le menu du compte Ma Moulinette. Dès que la connexion réussit, les séances planifiées d'aujourd'hui à J+13 (14 jours calendaires) sont importées. La même fenêtre glissante est resynchronisée au démarrage de chaque session de l'application, au retour au premier plan et au retour du réseau.
 
 ## Architecture et sécurité
 
@@ -43,7 +43,12 @@ Ces endpoints peuvent changer sans préavis. Cette intégration est expérimenta
 
 - `GET /api/integrations/final-surge/status`
 - `POST /api/integrations/final-surge/connect`
-- `POST /api/integrations/final-surge/workouts`
+- `POST /api/integrations/final-surge/workouts` (fenêtre de 14 jours glissante, aujourd'hui inclus)
 - `POST /api/integrations/final-surge/disconnect`
 
 Toutes les mutations exigent la session Ma Moulinette et l'en-tête anti-CSRF existant.
+
+
+### Filtrage des séances importées
+
+La liste calendrier Final Surge peut contenir plusieurs sports et des sorties sans structure d'intervalles. Le serveur ne transmet à l'import que les séances dont l'option Workout Builder sélectionnée identifie explicitement le vélo et qui contiennent au moins un bloc chronométré avec une cible de puissance explicite (en watts ou en % FTP), même si la séance est continue et sans répétitions. Les séances de course, de natation, les sorties vélo libres sans cible de puissance et les structures non reconnues sont ignorées.
