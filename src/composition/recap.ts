@@ -43,13 +43,10 @@ export function composeRecap(w: Wiring): void {
 
   exporter.start();
 
-  /** En dessous, pas de récapitulatif : un démarrage pour rien ou un essai. */
-  const RECAP_MIN_S = 60;
-
   /** Récapitulatif de fin de sortie : après une séance menée au bout, ou une sortie arrêtée à la main. */
   function offerRecap(done?: { workout: Workout; ftpW: number }) {
     const rec = exporter.current();
-    if (!rec || rec.timerS < RECAP_MIN_S || w.router.current() !== 'sortie') return;
+    if (!rec || w.router.current() !== 'sortie') return;
     const ftpW = done?.ftpW ?? w.readFtp();
     w.rideMenu.close();
     recap.show({
