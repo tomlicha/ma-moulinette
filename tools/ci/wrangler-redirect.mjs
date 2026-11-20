@@ -32,7 +32,7 @@ export function redirectFile(configName = APP_CONFIG) {
 export const PREVIEW_CONFIG = 'wrangler.app.preview.toml';
 
 /**
- * Configuration des aperçus : celle de l'application sans les blocs `[[migrations]]`.
+ * Configuration des aperçus : celle de l'application sans les blocs `[[migrations]]`, avec l'export DO requis.
  *
  * La migration Durable Object `v1` (WorldRoom) est déjà appliquée au Worker parent. `wrangler preview` la renvoyait
  * pourtant à chaque nouvel aperçu, sans `old_tag`, et Cloudflare refusait le déploiement (code 10079, « got tag ''
@@ -40,7 +40,12 @@ export const PREVIEW_CONFIG = 'wrangler.app.preview.toml';
  * plus (« A preview with name ... already exists », code 100338). Constaté le 19 novembre 2026.
  */
 export function stripMigrations(toml) {
-  return toml.replace(/^\[\[migrations\]\]\r?\n(?:(?!\[)[^\n]*\n?)*/gm, '');
+  return toml.replace(/^\\[\\[migrations\\]\\]\\r?\\n(?:(?!\\[)[^\\n]*\\n?)*/gm, '');
+}
+
+/** Les previews utilisent `exports` à la place de `migrations` pour déclarer le Durable Object. */
+export function previewConfig(toml) {
+  return `${stripMigrations(toml).trimEnd()}\\n\\n# Déclaration du Durable Object pour les Worker Previews.\\n[exports.WorldRoom]\\ntype = \\"durable-object\\"\\nstorage = \\"sqlite\\"\\n`;
 }
 
 /** Vrai pour une branche d'aperçu : Workers Builds donne son nom dans WORKERS_CI_BRANCH ; `main` est la production. */
@@ -54,7 +59,7 @@ export function writeRedirect(root, env) {
   let target = APP_CONFIG;
   const appConfig = path.join(root, APP_CONFIG);
   if (isPreviewBuild(env) && fs.existsSync(appConfig)) {
-    fs.writeFileSync(path.join(root, PREVIEW_CONFIG), stripMigrations(fs.readFileSync(appConfig, 'utf8')));
+    fs.writeFileSync(path.join(root, PREVIEW_CONFIG), previewConfig(fs.readFileSync(appConfig, 'utf8')));
     target = PREVIEW_CONFIG;
   }
   const file = path.join(root, '.wrangler', 'deploy', 'config.json');
