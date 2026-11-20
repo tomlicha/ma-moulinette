@@ -123,7 +123,8 @@ const leafShade = (_x: number, y: number, _z: number, ny: number) => (0.74 + 0.3
 
 /**
  * Feuillu en bulles : une grosse boule et trois plus petites, bosselées, à facettes nettes, sur un tronc fin (environ 6 m).
- * `far` : la silhouette vue de loin, une seule boule sur un tronc à quatre pans. Elle n'a qu'une matière : le tronc y
+ * `far` : la silhouette vue de loin (au-delà de `FULL_RANGE_M`, quelques pixels à l'écran), une seule boule de 20 faces sur un
+ * tronc à quatre pans : 28 triangles au lieu de 88, sur plusieurs milliers d'instances. Elle n'a qu'une matière : le tronc y
  * est peint du rapport entre la couleur du bois et celle du feuillage, pour ressortir brun une fois teinté par l'instance.
  */
 function leafyGeometry() {
@@ -137,7 +138,7 @@ function leafyGeometry() {
   painted(crown, leafShade);
   const trunk = new THREE.CylinderGeometry(0.16, 0.24, 2.6, 7).translate(0, 1.3, 0);
 
-  const farCrown = painted(lumpy(new THREE.IcosahedronGeometry(2.25, 1), 0.1, 17).scale(1.08, 0.95, 1.08).translate(0.1, 4.0, -0.1), leafShade);
+  const farCrown = painted(lumpy(new THREE.IcosahedronGeometry(2.25, 0), 0.1, 17).scale(1.08, 0.95, 1.08).translate(0.1, 4.0, -0.1), leafShade);
   const farTrunk = faceted(new THREE.CylinderGeometry(0.2, 0.28, 2.6, 4, 1, true).translate(0, 1.3, 0));
   const wood = [PALETTE.trunk.r / PALETTE.leaf.r, PALETTE.trunk.g / PALETTE.leaf.g, PALETTE.trunk.b / PALETTE.leaf.b];
   const tint = new Float32Array(farTrunk.getAttribute('position').count * 3);
