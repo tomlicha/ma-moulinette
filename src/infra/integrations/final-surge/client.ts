@@ -133,8 +133,27 @@ export class FinalSurgeClient {
     });
     const payload = await this.get(`/WorkoutBuilderGet?${params.toString()}`);
 
-    // Diagnostic temporaire : permet d'inspecter la structure réelle renvoyée par Final Surge.
-    console.info('[Final Surge] WorkoutBuilderGet JSON:', JSON.stringify(payload, null, 2));
+    // Résumé structurel compact : évite d'envoyer le JSON complet (potentiellement très long)
+    // dans les logs Cloudflare. Les valeurs ne sont conservées que pour les champs utiles au diagnostic.
+    const diagnosticFields = new Set(['sport', 'type', 'targettype', 'unit', 'durationtype']);
+    const summarize = (value: unknown, depth = 0): unknown => {
+      if (Array.isArray(value)) {
+        return { arrayLength: value.length, sample: value.slice(0, 2).map((item) => summarize(item, depth + 1)) };
+      }
+      if (value !== null && typeof value === 'object') {
+        const entries = Object.entries(value as Record<string, unknown>).slice(0, 30);
+        return Object.fromEntries(entries.map(([key, item]) => [
+          key,
+          diagnosticFields.has(key.toLowerCase())
+            ? (typeof item === 'string' || typeof item === 'number' ? item : summarize(item, depth + 1))
+            : depth >= 4
+              ? typeof item
+              : summarize(item, depth + 1),
+        ]));
+      }
+      return typeof value;
+    };
+    console.info('[Final Surge] WorkoutBuilderGet structure:', JSON.stringify(summarize(payload)));
 
     return payload;
   }
