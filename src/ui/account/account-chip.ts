@@ -84,14 +84,6 @@ export function setupAccount(o: {
     </form>`;
   document.body.append(dialog);
 
-  // Bouton temporaire de test indépendant du compte Ma Moulinette : visible même sans session ou serveur d'auth.
-  const finalSurgeTestEntry = document.createElement('button');
-  finalSurgeTestEntry.type = 'button';
-  finalSurgeTestEntry.className = 'final-surge-test-entry';
-  finalSurgeTestEntry.textContent = 'Final Surge · test';
-  finalSurgeTestEntry.setAttribute('aria-label', 'Ouvrir la connexion Final Surge pour le test');
-  finalSurgeTestEntry.addEventListener('click', () => window.dispatchEvent(new Event('mm:final-surge-open')));
-  document.body.append(finalSurgeTestEntry);
 
   const input = dialog.querySelector<HTMLInputElement>('#name-input')!;
   const error = dialog.querySelector<HTMLElement>('#name-error')!;
