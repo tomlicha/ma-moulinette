@@ -5,6 +5,7 @@
 //   `--course=velodrome` : la sortie part sur ce parcours ; sur la piste, l'encart et sa touche de sortie, avant et après l'appui.
 //   `--advance=<ms>` : temps virtuel roulé avant la capture de la sortie (300 000 par défaut) ; `--course=arc-en-ciel
 //   --advance=115000` : dans l'ascenseur céleste.
+//   `--nouveautes` : la carte des nouveautés (ouverte seule pour un utilisateur existant), puis le journal, puis l'accueil.
 //   node tools/mobile/summary.mjs <dossierSortie>
 // Chrome : variable CHROME, sinon l'installation Windows habituelle. Limite : c'est Chromium, pas WebKit (iOS).
 import { spawn } from 'node:child_process';
@@ -125,7 +126,7 @@ const MEASURE = (scope) => `(() => {
     targets.push({ t: (el.getAttribute('aria-label') || el.textContent || el.id || el.tagName).trim().replace(/\\s+/g, ' ').slice(0, 36), w: Math.round(r.width), h: Math.round(r.height), id: el.id || el.className.toString().slice(0, 24) });
   }
   const panels = {};
-  for (const sel of ['[data-view="sortie"]', '.ride', '.ride canvas', '.hud', '.hud-left', '.hud-center', '.hud-bottom', '.hud-junction', '.hud-message', '.ride-near', '.rn-exit', '#ride-menu-btn', '.ride-menu-btn', '.ride-quick', '.map-card', '.course-card', '.home-hero-body', '.home-nav', 'a.home-radar', '.home-workout']) {
+  for (const sel of ['[data-view="sortie"]', '.ride', '.ride canvas', '.hud', '.hud-left', '.hud-center', '.hud-bottom', '.hud-junction', '.hud-message', '.ride-near', '.rn-exit', '#ride-menu-btn', '.ride-menu-btn', '.ride-quick', '.map-card', '.course-card', '.home-hero-body', '.home-nav', 'a.home-radar', '.home-workout', '.wn-card', '.wnj-panel']) {
     // Plusieurs écrans partagent des classes (ex. .home-nav) : on prend le premier élément visible, pas le premier du document.
     const el = [...document.querySelectorAll(sel)].find(visible);
     if (el) { const r = el.getBoundingClientRect(); if (r.width) panels[sel] = { x: Math.round(r.left), y: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) }; }
@@ -153,6 +154,10 @@ if (dev.ios) {
   });
 }
 if (dev.standalone) await send('Emulation.setEmulatedMedia', { features: [{ name: 'display-mode', value: 'standalone' }] });
+if (process.argv.includes('--nouveautes')) {
+  // Un utilisateur qui existait avant la fonction (une FTP gardée, aucun repère de nouveautés) : la carte s'ouvre seule.
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `try { if (!localStorage.getItem('mamoulinette.ftp')) localStorage.setItem('mamoulinette.ftp', '230'); } catch {}` });
+}
 await send('Page.navigate', { url });
 await sleep(5000);
 // 0. Guide d'installation : visible sur iPhone tant qu'on n'a pas installé l'application ; on le mesure, puis on le passe.
@@ -189,6 +194,27 @@ if (process.argv.includes('--workout')) {
   writeFileSync(join(outDir, `${deviceName}-rapport.json`), JSON.stringify(report, null, 1));
   ws.close(); proc.kill();
   console.log('terminé (séance)');
+  process.exit(0);
+}
+
+// Nouveautés (--nouveautes) : la carte s'ouvre seule sur l'accueil ; « Tout voir » ouvre le journal (docs/design/nouveautes.md).
+if (process.argv.includes('--nouveautes')) {
+  report.cardOpen = await evaluate("document.getElementById('whatsnew-card').open");
+  await sleep(500);
+  await shot('9-nouveautes-carte');
+  await measure('nouveautes-carte', '#whatsnew-card');
+  await click('#whatsnew-card [data-w="all"]'); await sleep(900);
+  report.journalOpen = await evaluate("document.getElementById('whatsnew-journal').open");
+  await shot('10-nouveautes-journal');
+  await measure('nouveautes-journal', '#whatsnew-journal');
+  await click('#whatsnew-journal [data-w="close"]'); await sleep(400);
+  report.dotAfterClose = await evaluate("document.getElementById('home-news-chip').dataset.unread");
+  await shot('11-accueil-apres-nouveautes');
+  await measure('accueil-apres-nouveautes', 'body');
+  report.errors = errors;
+  writeFileSync(join(outDir, `${deviceName}-rapport.json`), JSON.stringify(report, null, 1));
+  ws.close(); proc.kill();
+  console.log('terminé (nouveautés)');
   process.exit(0);
 }
 

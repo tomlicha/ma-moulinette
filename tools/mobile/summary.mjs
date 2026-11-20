@@ -24,7 +24,9 @@ for (const d of (process.argv[3] ?? 'iphone13,pixel9').split(',')) {
     }
     for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
       const a = s.panels[keys[i]], b = s.panels[keys[j]];
-      if (['.map-card', '.course-card'].includes(keys[i]) || ['.map-card', '.course-card'].includes(keys[j])) continue;
+      // Boîtes de dialogue modales (carte du monde, nouveautés) : elles recouvrent l'écran par construction.
+      const DIALOGS = ['.map-card', '.course-card', '.wn-card', '.wnj-panel'];
+      if (DIALOGS.includes(keys[i]) || DIALOGS.includes(keys[j])) continue;
       const w = Math.min(a.r, b.r) - Math.max(a.x, b.x), h = Math.min(a.b, b.b) - Math.max(a.y, b.y);
       if (w > 2 && h > 2) console.log(`   ⚠ chevauchement ${keys[i]} / ${keys[j]} : ${w}×${h} px`);
     }
