@@ -161,6 +161,7 @@ module.exports = async function online({ playwright, browser, url }) {
 
   await waitFor(() => document.getElementById('home-online-chip')?.hidden === false);
   await steps.mark('pastille « En ligne » : deux autres coureurs', { chipHidden: false, chipCount: '2' });
+  await shot('0-accueil');
 
   // Sans trainer, rejoindre est bloqué avec la raison dite.
   await click('home-online-chip');
