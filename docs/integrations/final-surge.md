@@ -1,41 +1,49 @@
-# Intégration Final Surge — première tranche technique
+# Intégration Final Surge
 
-Cette tranche ajoute un client de lecture et un convertisseur isolés. Elle n'active pas la synchronisation dans le Worker ni dans l'interface.
+L'application permet de connecter un compte Final Surge depuis le menu du compte Ma Moulinette, puis d'importer les séances planifiées dans une période choisie.
 
-## Statut et limites
+## Architecture et sécurité
 
-Les endpoints observés dans le projet public `pavelzaitsau/finalsurge-mcp` sont des endpoints utilisés par l'application Web Final Surge, pas une API publique/partenaire documentée. Ils peuvent changer sans préavis et leur usage en production doit être autorisé par Final Surge.
+- Le navigateur envoie les identifiants uniquement à `POST /api/integrations/final-surge/connect` sur le Worker Ma Moulinette.
+- Le Worker vérifie les identifiants auprès de Final Surge avant de les conserver.
+- Les identifiants sont chiffrés en AES-GCM avant écriture dans D1. La clé maître n'est jamais stockée dans D1 ni envoyée au navigateur.
+- Aucun mot de passe ni jeton Final Surge n'est conservé dans le stockage local du navigateur ou journalisé.
+- À chaque import, le Worker déchiffre les identifiants, ouvre une session Final Surge et lit les séances. Cela permet de retrouver une session sans intervention de l'utilisateur après expiration d'un jeton.
+- La déconnexion supprime les identifiants chiffrés.
 
+Configurer une clé secrète d'au moins 32 caractères sur le Worker de l'application :
+
+```sh
+npx wrangler secret put FINAL_SURGE_ENCRYPTION_KEY -c wrangler.app.toml
+```
+
+Pour un environnement de prévisualisation, configurer également le secret sur le Worker de preview si Cloudflare ne le rend pas disponible automatiquement.
+
+## API Final Surge utilisée
+
+Les routes observées dans le projet public `pavelzaitsau/finalsurge-mcp` sont celles de l'application Web Final Surge, et non une API publique/partenaire documentée :
+
+- `POST /login`
 - `GET /WorkoutList`
 - `GET /WorkoutBuilderGet`
 
-Le client reçoit un `accessToken` et un `userKey` déjà obtenus. Il ne prend jamais de mot de passe et ne fait pas de login automatique. Un HTTP 401 remonte sous forme `FinalSurgeAuthenticationError`.
+Ces endpoints peuvent changer sans préavis. Cette intégration est expérimentale et non officielle ; vérifier les conditions d'utilisation de Final Surge avant tout usage en production.
 
-## Modules
+## Conversion des séances
 
-- `client.ts` : appels GET, padding de dates et filtrage local.
-- `mapper.ts` : conversion des structures Builder vers le type `Workout`.
-- `types.ts` : contrats d'entrée/sortie.
-- `__tests__/` : tests Vitest.
-
-## Règles de conversion
-
-- La variante cycling/bike est priorisée si plusieurs sports sont retournés.
 - Les répétitions sont dépliées en étapes individuelles.
-- Les durées TIME sont converties en secondes.
-- Les cibles de puissance explicitement identifiées en %FTP ou watts sont converties vers `Target`.
-- Toute plage min/max de puissance est ramenée à son point milieu pour fournir une consigne ERG fixe : 80–90 % FTP devient 85 % FTP; 180–220 W devient 200 W. Un avertissement est ajouté.
-- Les cibles de cadence en rpm sont converties en valeur moyenne si nécessaire.
-- Les étapes DISTANCE, autres types de durée et unités de puissance inconnues sont signalées; aucune durée ou puissance n'est inventée.
+- Les durées de type TIME sont converties en secondes.
+- Les cibles de puissance en %FTP ou en watts sont ramenées au point milieu lorsqu'elles sont exprimées en plage, puis transformées en consigne ERG fixe.
+- Les cibles en watts sont converties en fraction de FTP au moment de l'import, à partir de la FTP configurée dans Ma Moulinette.
+- Les cibles de cadence sont conservées.
+- Les étapes non temporelles ou les cibles illisibles sont signalées ; aucune durée ou puissance n'est inventée.
+- L'éditeur actuel ne représente pas séparément tous les types d'intensité Final Surge : certains types (par exemple effort/récupération) sont importés comme paliers, avec un avertissement conservé dans la description.
 
-## Validation à faire avant toute activation
+## Routes Ma Moulinette
 
-Les fixtures sont illustratives et non des captures réseau vérifiées. Avec un JSON anonymisé de WorkoutBuilderGet, confirmer les champs de cible, leurs unités, le wrapper de réponse et la forme des répétitions. Ne pas demander ni stocker les mots de passe Final Surge. Ne pas présenter ces endpoints comme une API officielle.
+- `GET /api/integrations/final-surge/status`
+- `POST /api/integrations/final-surge/connect`
+- `POST /api/integrations/final-surge/workouts`
+- `POST /api/integrations/final-surge/disconnect`
 
-## Tests
-
-```bash
-npm test -- src/infra/integrations/final-surge/__tests__
-```
-
-Les tests n'appellent pas Final Surge.
+Toutes les mutations exigent la session Ma Moulinette et l'en-tête anti-CSRF existant.
