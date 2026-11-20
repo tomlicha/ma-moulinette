@@ -70,7 +70,7 @@ export function importFinalSurgeWorkouts(options: {
     if (mapped.steps.some((s) => s.kind === 'off' || s.kind === 'on' || s.kind === 'max')) {
       warnings.push('Certains types d’intensité Final Surge sont représentés comme paliers dans l’éditeur.');
     }
-    const description = [mapped.description, ...warnings].filter(Boolean).join('\\n\\n');
+    const description = [mapped.description, ...warnings].filter(Boolean).join('\n\n');
 
     // Relecture pour chaque élément : ne pas réutiliser un instantané antérieur aux sauvegardes précédentes.
     const matches = options.library.list().filter((w) =>
