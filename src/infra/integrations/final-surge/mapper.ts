@@ -211,13 +211,15 @@ export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   if (!['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
 
   const hasPowerTarget = (items: unknown[], depth = 0): boolean => {
-    if (depth > 8) return false;
-    return items.some((item) => {
+    if (depth > 8 || items.length === 0) return false;
+    return items.every((item) => {
       if (!isRecord(item)) return false;
       const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
       if (type === 'repeat' || type === 'repetition') {
+        const countRaw = get(item, 'repeats', 'repeat', 'Repeat', 'count', 'Count');
+        const count = typeof countRaw === 'number' ? Math.floor(countRaw) : Number(countRaw);
         const children = get(item, 'data', 'Data', 'steps', 'Steps');
-        return Array.isArray(children) && hasPowerTarget(children, depth + 1);
+        return Number.isInteger(count) && count >= 1 && Array.isArray(children) && hasPowerTarget(children, depth + 1);
       }
       if (type !== 'step' && type !== 'workoutstep') return false;
       const durationType = (firstText(item, 'durationType', 'DurationType') ?? 'TIME').toUpperCase();
@@ -225,16 +227,11 @@ export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
       const targets = targetEntries(get(item, 'target', 'Target', 'targets', 'Targets'));
       return targets.some((target) => {
         const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase();
-        if (!['power', 'watt', 'watts'].includes(targetType)) return false;
-        const { low, high } = numericPair(target);
-        const value = midpoint(low, high);
-        if (value === undefined || value <= 0) return false;
-        const descriptor = [
-          firstText(target, 'targetType', 'TargetType'),
-          firstText(target, 'targetOption', 'TargetOption'),
-          firstText(target, 'unit', 'Unit', 'units', 'Units'),
-        ].filter(Boolean).join(' ').toLowerCase();
-        return /percent|%|ftp|threshold|fraction|watt|\\bw\\b|absolute/.test(descriptor);
+        if (['power', 'watt', 'watts', 'ftp', 'percentftp'].includes(targetType)) return true;
+        const descriptor = [firstText(target, 'targetOption', 'TargetOption'), firstText(target, 'unit', 'Unit', 'units', 'Units')]
+          .filter(Boolean).join(' ').toLowerCase();
+        return ['ftp', 'percentftp', 'watt', 'watts'].some((kind) => descriptor.includes(kind)) ||
+          /(^|\\s)w($|\\s)/.test(descriptor);
       });
     });
   };
