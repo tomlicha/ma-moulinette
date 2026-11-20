@@ -117,9 +117,15 @@ describe('isCyclingIntervalWorkout', () => {
     ] }] })).toBe(true);
   });
 
-  it('rejects a continuous cycling workout', () => {
+  it('accepts a continuous Z2 cycling workout when its block has a defined power target', () => {
     expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
-      { type: 'step', durationType: 'TIME', duration: '90:00', target: power(65) },
+      { type: 'step', intensity: 'ACTIVE', durationType: 'TIME', duration: '90:00', target: power(65) },
+    ] }] })).toBe(true);
+  });
+
+  it('rejects a free cycling workout without a power target', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '90:00', target: [{ targetType: 'heartRate', targetLow: 120, targetHigh: 130 }] },
     ] }] })).toBe(false);
   });
 
