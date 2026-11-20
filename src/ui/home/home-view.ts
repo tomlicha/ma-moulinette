@@ -22,7 +22,7 @@ const COURSE_SCENE: Record<string, string> = { col: 'Col des Érables', rive: 'R
 /**
  * L'accueil : le parcours retenu (nom, description, scène de fond qui lui ressemble, sans rotation), le menu qui le
  * choisit (avec sa carte), et le bouton « Rouler ». On choisit le parcours dans le menu que « Rouler » ouvre : la carte
- * de l'accueil n'a pas la place d'un sélecteur. Il demande (`HomeViewActions`) ; ce que le choix change est dans main.ts.
+ * de l'accueil n'a pas la place d'un sélecteur. Il demande (`HomeViewActions`) ; ce que le choix change est dans composition/workout.ts.
  */
 export class HomeView {
   private readonly picker: CoursePicker;

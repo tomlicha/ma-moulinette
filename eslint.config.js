@@ -5,13 +5,13 @@ import tseslint from 'typescript-eslint';
 /**
  * Architecture en couches (docs/architecture.md) : une couche n'importe que des couches inférieures.
  *
- *   shared  <  domain  <  infra  <  app  <  ui, render        (main.ts, la racine de composition, importe tout)
+ *   shared  <  domain  <  infra  <  app  <  ui, render  <  composition   (composition/ importe tout ; main.ts ne fait qu'appeler composeApp)
  *
  * `src/server` (le Worker) est à part : il n'a rien à faire de l'interface, du rendu ni de l'application.
  * Chaque règle interdit les couches « au-dessus » du dossier concerné. Niveau `error` : la CI refuse un import qui
  * remonte. `src/integration` (tests qui traversent les couches) n'est soumis à aucune règle.
  */
-const layer = (name) => `(^|/)${name}/`;
+const layer = (name) => `(^|/)${name}(/|$)`;
 const forbid = (...names) => ({
   'no-restricted-imports': [
     'error',
@@ -24,13 +24,13 @@ const forbid = (...names) => ({
   ],
 });
 const LAYER_RULES = [
-  { files: ['src/shared/**/*.ts'], rules: forbid('domain', 'infra', 'app', 'ui', 'render', 'server') },
-  { files: ['src/domain/**/*.ts'], rules: forbid('infra', 'app', 'ui', 'render', 'server') },
-  { files: ['src/infra/**/*.ts'], rules: forbid('app', 'ui', 'render', 'server') },
-  { files: ['src/app/**/*.ts'], rules: forbid('ui', 'server') },
-  { files: ['src/render/**/*.ts'], rules: forbid('app', 'ui', 'server') },
-  { files: ['src/ui/**/*.ts'], rules: forbid('server') },
-  { files: ['src/server/**/*.ts'], rules: forbid('app', 'ui', 'render') },
+  { files: ['src/shared/**/*.ts'], rules: forbid('domain', 'infra', 'app', 'ui', 'render', 'composition', 'server') },
+  { files: ['src/domain/**/*.ts'], rules: forbid('infra', 'app', 'ui', 'render', 'composition', 'server') },
+  { files: ['src/infra/**/*.ts'], rules: forbid('app', 'ui', 'render', 'composition', 'server') },
+  { files: ['src/app/**/*.ts'], rules: forbid('ui', 'composition', 'server') },
+  { files: ['src/render/**/*.ts'], rules: forbid('app', 'ui', 'composition', 'server') },
+  { files: ['src/ui/**/*.ts'], rules: forbid('composition', 'server') },
+  { files: ['src/server/**/*.ts'], rules: forbid('app', 'ui', 'render', 'composition') },
 ];
 
 /**
