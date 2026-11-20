@@ -5,7 +5,21 @@ const { openPage, sleep, Steps } = require('../lib.cjs');
 
 const METHODS = { strava: true, dev: true };
 
-module.exports = async function account({ browser, url }) {
+// Un élément « se voit » s'il a une taille, n'est ni caché ni transparent, et tient dans la fenêtre : c'est ce que perçoit le cycliste.
+// (Une règle CSS qui met `display: none` sur le compte, ou le pousse hors de l'écran, passerait un simple « existe dans la page ».)
+const VISIBLE = (selector) => {
+  const el = document.querySelector(selector);
+  if (!el) return `${selector} : absent de la page`;
+  const r = el.getBoundingClientRect();
+  const st = getComputedStyle(el);
+  if (!r.width || !r.height || st.display === 'none' || st.visibility === 'hidden' || +st.opacity === 0) return `${selector} : caché (${Math.round(r.width)} × ${Math.round(r.height)}, display ${st.display})`;
+  if (r.left < 0 || r.top < 0 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) {
+    return `${selector} : déborde de l'écran (${Math.round(r.left)},${Math.round(r.top)} → ${Math.round(r.right)},${Math.round(r.bottom)} pour ${innerWidth} × ${innerHeight})`;
+  }
+  return null;
+};
+
+module.exports = async function account({ playwright, browser, url }) {
   const steps = [];
   const failures = [];
   const errors = [];
@@ -150,6 +164,38 @@ module.exports = async function account({ browser, url }) {
     await page.evaluate(() => document.querySelector('.account-menu [data-act="logout"]').click());
     await waitFor(() => document.querySelector('.strava-connect'));
     await s.mark('déconnecté', { stravaHref: '/api/auth/login', nameDialogOpen: false });
+  });
+
+  // iPhone couché en plein écran (844 × 390, sans bordures) : le bouton Strava et le menu du compte (Final Surge) restent à portée
+  // sur l'accueil. Une règle de l'accueil pour téléphone les avait cachés : on regarde ce que l'écran montre, pas le DOM.
+  const phone = {
+    ...playwright.devices['iPhone 13 landscape'],
+    viewport: { width: 844, height: 390 },
+    screen: { width: 844, height: 390 },
+  };
+  const seen = async (page, s, label, selectors) => {
+    for (const selector of selectors) {
+      const problem = await page.evaluate(VISIBLE, selector);
+      if (problem) s.fail(`« ${label} » : ${problem}`);
+    }
+  };
+  await scene('iPhone couché', phone, async ({ page, s, sleep, waitFor }) => {
+    await seen(page, s, 'visiteur : bouton Strava', ['.home .account .strava-connect']);
+    if (s.failures.length) return; // bouton caché : la suite de la scène n'aurait plus de sens
+    // Connexion de développement (le bouton Strava mène hors de la page), puis le nom.
+    await page.evaluate(() => document.querySelector('.home .account-dev').click());
+    await waitFor(() => document.querySelector('dialog.name-dialog')?.open);
+    await page.evaluate(() => {
+      document.getElementById('name-input').value = 'Tom L.';
+      document.getElementById('name-save').click();
+    });
+    await waitFor(() => !document.querySelector('dialog.name-dialog').open);
+    await sleep(300);
+    await seen(page, s, 'connecté : pastille du compte', ['.home .account .account-chip']);
+    if (s.failures.length) return; // pastille introuvable : inutile d'essayer de la toucher
+    await page.locator('.home .account-chip').tap();
+    await sleep(300);
+    await seen(page, s, 'menu du compte ouvert', ['.home .account-menu', '.home .account-menu [data-act="final-surge"]', '.home .account-menu [data-act="logout"]']);
   });
 
   if (errors.length) failures.push(`erreurs de la page : ${errors.join(' | ')}`);
