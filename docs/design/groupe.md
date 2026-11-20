@@ -272,12 +272,12 @@ Les coureurs gardent leurs connexions (API d'hibernation) mais l'objet perdait s
 
 1. Liste d'amis dans l'application (relation réciproque, D1, « Qui peut me rejoindre : mes amis »).
 2. % de FTP et état « à l'arrêt » des membres pendant la séance.
-4. Mesure de charge du Durable Object avec 30 coureurs d'un groupe (`npm run bots`).
+4. Mesure de charge **réelle** du Durable Object avec 30 coureurs d'un groupe (`npm run bots` contre un aperçu de branche). La logique de la salle est mesurée (`npm run load`, voir [salle](salle.md#rouler-avec-dautres--coût-des-messages-20-novembre-2026)) : quelques centièmes de milliseconde par message de groupe, `who` à 0,2 ms pour 1000 coureurs.
 
 ## Questions ouvertes
 
 1. ~~**Strava, amis**~~ Réglé le 20 novembre 2026 : l'endpoint n'existe plus, voir plus haut.
 2. ~~**Coureur de référence**~~ Réglé le 20 novembre 2026 : le groupe prend l'allure de son créateur, voir plus haut.
-3. **Charge du Durable Object** : 30 coureurs d'un groupe en plus du monde ; à mesurer avec `npm run bots` (voir [salle](salle.md)).
+3. **Charge du Durable Object** : la logique est mesurée (voir [salle](salle.md)) ; reste la capacité réelle avec 30 coureurs d'un groupe en plus du monde, à mesurer avec `npm run bots` contre un aperçu de branche.
 4. ~~**Carrefours en groupe**~~ Réglé le 20 novembre 2026 : le créateur choisit, voir plus haut.
 5. ~~**Séance de groupe et FIT**~~ Réglé le 20 novembre 2026 : la distance et la vitesse du fichier sont celles du groupe, donc celles du créateur ; la puissance exportée reste la puissance réelle de chacun. À confirmer avec un vrai envoi à Strava, qui recalcule parfois l'allure.

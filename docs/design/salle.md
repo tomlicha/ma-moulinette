@@ -36,6 +36,23 @@ Maintenant, au-delà de `INTEREST_K + 1` = 33 coureurs actifs, chacun reçoit se
 - Le temps de calcul d'un tick (budget : 250 ms) reste sous 20 ms jusqu'à 1000 coureurs, même en peloton ; **51 ms à 2000 en peloton** (un cas extrême : 2000 coureurs sur 300 m). Sans intérêt, le tick ne coûte presque rien en calcul (un seul tampon partagé), mais le coût passe dans les envois : 76 Mo/s.
 - **Ce que cette mesure ne dit pas** : le coût réseau réel, et surtout **la capacité d'un seul Durable Object** (un par monde). Il reçoit 4 états par seconde de chaque coureur et envoie 4 messages par seconde à chacun : à 1000 coureurs, 4000 messages entrants et 4000 sortants par seconde sur un seul objet. La limite réelle de Cloudflare est à mesurer avec de vrais clients sur un aperçu de branche (`npm run bots` contre un aperçu) avant d'annoncer une capacité. Au-delà, il faudra répartir le monde en plusieurs objets (par zone du réseau).
 
+## Rouler avec d'autres : coût des messages (20 novembre 2026)
+
+Les messages de la liste « En ligne » et des groupes ([groupe](groupe.md)) ne passent pas par le tick : chacun est traité quand il arrive. `npm run load` les mesure aussi (second tableau) : la vraie `Room`, sans réseau, 200 coureurs différents qui demandent « qui est en ligne » (une demande par seconde et par coureur au plus), puis des choix de route diffusés à un groupe de 30 et des arrivées dans un groupe.
+
+| Coureurs | `who` (ms) | pire `who` (ms) | réponse `who` (octets) | choix de route à 30 membres (ms) | arrivée dans un groupe (ms) |
+|---:|---:|---:|---:|---:|---:|
+| 1000 | 0,19 | 0,68 | 2746 | 0,014 | 0,022 |
+| 2000 | 0,44 | 1,28 | 2800 | 0,012 | 0,022 |
+| 5000 | 0,91 | 2,52 | 2800 | 0,010 | 0,021 |
+
+À lire :
+
+- **`who` parcourt toute la salle** (filtre par nom, tri), donc son coût grandit avec elle : environ 0,2 ms à 1000 coureurs, 0,9 ms à 5000. La réponse est bornée (30 coureurs et les groupes ouverts, environ 2,8 Ko).
+- **Le panneau « En ligne » rafraîchit toutes les 5 s** tant qu'il est ouvert : si la moitié de 2000 coureurs l'ouvrait en même temps, ce serait 200 demandes par seconde, soit 90 ms de calcul par seconde sur l'objet (9 %). Le plafond d'une demande par seconde et par coureur borne le pire cas à 2000 demandes par seconde, soit 88 % : il ne peut pas arriver avec un panneau qui se rafraîchit toutes les 5 s, mais ce serait à surveiller (une réponse gardée une seconde en cache le ramènerait à une par seconde pour toute la salle).
+- Le choix de route d'un créateur et l'arrivée d'un membre coûtent quelques centièmes de milliseconde : rien à craindre à 30 membres.
+- Comme pour le tick, **ce tableau ne dit rien de la capacité réelle d'un Durable Object** (messages entrants, écritures de stockage à chaque changement de groupe, hibernation) : à mesurer avec de vrais clients sur un aperçu de branche.
+
 ## Aspiration (17 novembre 2026)
 
 Derrière un autre coureur, on économise une part de la **traînée de l'air** (le roulement et la gravité ne changent pas). Calcul du côté de chaque client avec les coureurs qu'il reçoit : le serveur ne simule rien.
