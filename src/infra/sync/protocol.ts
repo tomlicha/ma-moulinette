@@ -56,10 +56,13 @@ const isBlocks = (v: unknown, min: number) =>
   Array.isArray(v) && v.length >= min && v.length <= 500 && v.every((b) => isObject(b) && typeof b.type === 'string');
 
 function isWorkoutSource(value: unknown): boolean {
-  return isObject(value) &&
-    value.provider === 'final-surge' &&
-    isText(value.externalId, 128, 1) &&
-    (value.scheduledAt === undefined || (isText(value.scheduledAt, 32, 1) && /^\d{4}-\d{2}-\d{2}/.test(value.scheduledAt)));
+  if (!isObject(value) || value.provider !== 'final-surge') return false;
+  if (typeof value.externalId !== 'string' || value.externalId.length < 1 || value.externalId.length > 128) return false;
+  if (value.scheduledAt === undefined) return true;
+  return typeof value.scheduledAt === 'string' &&
+    value.scheduledAt.length >= 1 &&
+    value.scheduledAt.length <= 32 &&
+    /^\d{4}-\d{2}-\d{2}/.test(value.scheduledAt);
 }
 
 function isBody(kind: SyncKind, id: string, body: unknown): boolean {
