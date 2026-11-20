@@ -40,7 +40,7 @@ Le client (`src/`) est rangé en **couches**. Une couche n'importe que des couch
 src/
 ├─ main.ts            quatre lignes : appelle composeApp()
 ├─ composition/       la racine de composition, un module par ensemble : platform, rider, trainer, devices, ride, workout, hud, recap, screens, account, launch ; wiring.ts (ce qu'ils se passent), index.ts (l'ordre)
-├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart, VirtualGearbox, RecapSender
+├─ app/               SensorReadings, SettingsStore, GradeController, TrainerController, RideSession, WorkoutSession, DeviceManager, RideViewLoader, RideExport, EditorSession, ManualControl, WorkoutCatalog, RiderSettingsSync, AutoStart, VirtualGearbox, RecapSender, AccountSession
 ├─ domain/
 │  ├─ sim/            physique, Ride, Journey, aspiration, vitesses virtuelles, lissage de la pente
 │  ├─ course/         réseau routier, parcours, vélodrome, données des parcours (courses/)
@@ -81,6 +81,7 @@ Les classes de `app/` ont chacune une seule raison de changer :
 | `RiderSettingsSync` | la FTP et la masse vues par la synchronisation du compte : ce que l'appareil en sait, ce qu'il fait de ce qui vient d'ailleurs | les champs eux-mêmes (port `RiderInputsPort`) |
 | `VirtualGearbox` | les vitesses virtuelles du Zwift Cog : Cog monté ou non, plateau, vitesse, butées, mémorisation | les boutons et le clavier (`GearsView`), le calcul des braquets (`domain/sim/virtual-gears.ts`) |
 | `RecapSender` | l'envoi du récapitulatif à Strava : compte à rebours, envoi automatique, suspension par un geste, essais après refus | l'écran du récapitulatif (`ui/recap/recap.ts`), l'envoi lui-même (`RideExport`) |
+| `AccountSession` | le compte du joueur : qui est connecté, connexion Strava (page web, app Android, session système), connexion de développement, nom affiché, déconnexion | la pastille et ses boîtes (`ui/account/account-chip.ts`), les appels au serveur (`infra/net/account.ts`) |
 | `AutoStart` | le démarrage au premier coup de pédale (sortie libre ou séance choisie), armé à l'arrivée sur l'écran Sortie | l'écran, le démarrage lui-même (il le demande) |
 | `WorkoutSession` | la séance choisie et son déroulement ; la consigne ERG qu'elle impose | la sortie (l'appelant démarre l'une avec l'autre), l'export, le récapitulatif |
 
@@ -115,5 +116,5 @@ Les scénarios de `tools/e2e/` (voir son README) pilotent l'application dans Chr
 
 ## Reste à faire
 
-1. Les `setupX()` de `ui/` qui restent (menu de la sortie, routeur, fiche du coureur, compte, coque de l'application, roulette) sont des fonctions de DOM sans règle métier à isoler : les passer en classes `View` serait cosmétique. Le compte (`ui/account/account-chip.ts`) mélange le réseau et l'affichage : à scinder si on y touche (nom affiché, connexion Strava).
+1. Les `setupX()` de `ui/` qui restent (menu de la sortie, routeur, fiche du coureur, compte, coque de l'application, roulette) sont des fonctions de DOM sans règle métier à isoler : les passer en classes `View` serait cosmétique. Le compte est scindé : `AccountSession` porte l'état et les gestes, la pastille n'affiche que.
 2. Le scénario `app` du `tools/e2e` ne couvre pas le Bluetooth réel, ni la connexion à un compte, ni un envoi réel à Strava : à compléter avec des essais sur le matériel.
