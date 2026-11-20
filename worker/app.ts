@@ -9,6 +9,8 @@ import { networkSignature, PROTOCOL_VERSION } from '../src/infra/net/protocol.ts
 import { createAccounts } from '../src/server/accounts.ts';
 import { createSync } from '../src/server/sync.ts';
 import { createUserStrava } from '../src/server/user-strava.ts';
+import { createFinalSurge } from '../src/server/final-surge.ts';
+import { createD1FinalSurgeStore } from './final-surge-store.ts';
 import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_SIGNED_OUT } from '../src/server/room.ts';
 import { COL_DES_ERABLES } from '../src/domain/course/courses/col-des-erables.ts';
 import { WORLD_PATH } from '../src/infra/net/world-client.ts';
@@ -29,6 +31,7 @@ interface Env {
   WORLD: DurableObjectNamespaceLike;
   STRAVA_CLIENT_ID?: string;
   STRAVA_CLIENT_SECRET?: string;
+  FINAL_SURGE_ENCRYPTION_KEY?: string;
   /** Origine publique, quand elle diffère de celle des requêtes (serveur de dev Vite devant `wrangler dev`). */
   PUBLIC_ORIGIN?: string;
   /** « 1 » : connexion par simple nom, sans Strava. Seulement dans `.dev.vars`, jamais en ligne. */
@@ -36,6 +39,10 @@ interface Env {
 }
 
 const SIGNATURE = networkSignature(COL_DES_ERABLES);
+
+// TEMPORAIRE : connexion de test activée uniquement sur le Preview de la PR Final Surge.
+// Ne jamais élargir cette condition au domaine de production ; retirer après validation de l'intégration.
+const FINAL_SURGE_PREVIEW_HOST = 'feat-final-surge-workout-reader-ma-moulinette-ride.moulinette-ride.workers.dev';
 
 declare const WebSocketPair: { new (): { 0: CfWebSocket; 1: CfWebSocket & { accept(): void } } };
 
@@ -55,7 +62,7 @@ export default {
       clientId: env.STRAVA_CLIENT_ID,
       clientSecret: env.STRAVA_CLIENT_SECRET,
       publicOrigin: env.PUBLIC_ORIGIN || undefined,
-      devLogin: env.DEV_LOGIN === '1',
+      devLogin: env.DEV_LOGIN === '1' || url.hostname === FINAL_SURGE_PREVIEW_HOST,
     });
 
     if (url.pathname === WORLD_PATH) {
@@ -76,6 +83,10 @@ export default {
 
     const auth = await accounts.handle(req);
     if (auth) return auth;
+
+    const finalSurge = createFinalSurge(accounts, createD1FinalSurgeStore(env.DB), env.FINAL_SURGE_ENCRYPTION_KEY);
+    const finalSurgeResponse = await finalSurge(req);
+    if (finalSurgeResponse) return finalSurgeResponse;
 
     const synced = await createSync(accounts, createD1SyncStore(env.DB))(req);
     if (synced) return synced;

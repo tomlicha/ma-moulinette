@@ -5,9 +5,11 @@ import { WorldClient } from '../infra/net/world-client';
 import { blockSource, workoutSource } from '../infra/sync/sources';
 import { createSyncClient } from '../infra/sync/client';
 import { AccountSession } from '../app/account-session';
+import { importFinalSurgeWorkouts as mapAndSaveFinalSurgeWorkouts } from '../app/final-surge-import';
 import { devLogin, fetchAccount, logout, nativeStravaLogin, saveDisplayName } from '../infra/net/account';
 import { Moulinette, isNativeShell } from '../infra/native/shell';
 import { setupAccount } from '../ui/account/account-chip';
+import { setupFinalSurgeDialog } from '../ui/account/final-surge-dialog';
 import type { Wiring } from './wiring';
 
 export function composeAccount(w: Wiring): void {
@@ -75,6 +77,11 @@ export function composeAccount(w: Wiring): void {
     log: w.log,
   });
   const account = setupAccount({ hosts: [...document.querySelectorAll<HTMLElement>('.home-top')], session });
+  setupFinalSurgeDialog({
+    importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp() }),
+    onImported: w.refreshWorkoutChoices,
+    log: w.log,
+  });
   // Après l'écran, qui se dessine d'abord : puis la salle temps réel et la synchronisation suivent le compte.
   let firstSync: Promise<void> = Promise.resolve();
   session.on('changed', (s) => {

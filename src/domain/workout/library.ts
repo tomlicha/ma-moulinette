@@ -3,18 +3,31 @@ import type { ChangeJournal } from './change-journal';
 import type { EditorBlock } from './blocks';
 import { newId as randomId } from '../../shared/util/uuid';
 
+export interface WorkoutSource {
+  provider: 'final-surge';
+  externalId: string;
+  scheduledAt?: string;
+}
+
 export interface SavedWorkout {
   id: string;
   name: string;
   description?: string;
   blocks: EditorBlock[];
+  /** Identité de la séance chez son fournisseur, pour mettre à jour l'import au lieu de le dupliquer. */
+  source?: WorkoutSource;
   updatedAt: number;
 }
 
 const KEY = 'mamoulinette.workouts';
 
 /** Contenu d'une séance tel qu'il est synchronisé avec le compte (src/infra/sync/protocol.ts). */
-export const workoutBody = (w: SavedWorkout) => ({ name: w.name, description: w.description, blocks: w.blocks });
+export const workoutBody = (w: SavedWorkout) => ({
+  name: w.name,
+  description: w.description,
+  blocks: w.blocks,
+  ...(w.source ? { source: w.source } : {}),
+});
 
 /**
  * Séances créées dans l'éditeur, gardées dans le navigateur de l'utilisateur. Chaque modification est notée dans le
