@@ -198,52 +198,48 @@ function expandSteps(rawSteps: unknown[], output: WorkoutStep[], warnings: strin
 
 
 /**
- * True uniquement pour un Workout Builder explicitement cycliste contenant une vraie
- * structure d'intervalles : répétitions ou plusieurs blocs de travail à intensités/cibles distinctes.
- * Les séances libres/continues, les autres sports et les payloads non identifiés sont exclus.
+ * Accepte une séance explicitement cycliste dès qu'elle contient au moins un bloc
+ * chronométré avec une cible de puissance explicite (watts ou %FTP).
+ * Les sorties libres et les structures sans cible de puissance sont exclues.
  */
 export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   const builder = unwrapBuilder(builderPayload);
   if (!builder) return false;
-  const cycling = selectWorkoutOption(builder);
-  const sport = (firstText(cycling, 'sport', 'Sport') ?? '').toLowerCase();
-  if (!cycling || !['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
+  const selected = selectWorkoutOption(builder);
+  if (!selected) return false;
+  const sport = (firstText(selected, 'sport', 'Sport') ?? '').toLowerCase();
+  if (!['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
 
-  const steps = readSteps(cycling);
-  const hasRepeat = (items: unknown[], depth = 0): boolean => {
+  const hasPowerTarget = (items: unknown[], depth = 0): boolean => {
     if (depth > 8) return false;
     return items.some((item) => {
       if (!isRecord(item)) return false;
       const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
       if (type === 'repeat' || type === 'repetition') {
         const children = get(item, 'data', 'Data', 'steps', 'Steps');
-        const countRaw = get(item, 'repeats', 'repeat', 'Repeat', 'count', 'Count');
-        const count = Number(countRaw);
-        return Number.isInteger(count) && count >= 2 && Array.isArray(children) &&
-          children.some((child) => isRecord(child) && ['step', 'workoutstep'].includes((firstText(child, 'type', 'Type') ?? 'step').toLowerCase()));
+        return Array.isArray(children) && hasPowerTarget(children, depth + 1);
       }
-      const children = get(item, 'data', 'Data', 'steps', 'Steps');
-      return Array.isArray(children) && hasRepeat(children, depth + 1);
+      if (type !== 'step' && type !== 'workoutstep') return false;
+      const durationType = (firstText(item, 'durationType', 'DurationType') ?? 'TIME').toUpperCase();
+      if (durationType !== 'TIME' || !parseDurationSeconds(get(item, 'duration', 'Duration', 'durationS', 'DurationS'))) return false;
+      const targets = targetEntries(get(item, 'target', 'Target', 'targets', 'Targets'));
+      return targets.some((target) => {
+        const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase();
+        if (!['power', 'watt', 'watts'].includes(targetType)) return false;
+        const { low, high } = numericPair(target);
+        const value = midpoint(low, high);
+        if (value === undefined || value <= 0) return false;
+        const descriptor = [
+          firstText(target, 'targetType', 'TargetType'),
+          firstText(target, 'targetOption', 'TargetOption'),
+          firstText(target, 'unit', 'Unit', 'units', 'Units'),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return /percent|%|ftp|threshold|fraction|watt|\\bw\\b|absolute/.test(descriptor);
+      });
     });
   };
-  if (hasRepeat(steps)) return true;
-
-  // Certains plans encodent les intervalles comme des étapes consécutives plutôt qu'un groupe repeat.
-  const workSteps = steps.filter((item): item is RecordLike => {
-    if (!isRecord(item)) return false;
-    const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
-    if (type !== 'step' && type !== 'workoutstep') return false;
-    const intensity = (firstText(item, 'intensity', 'Intensity') ?? 'ACTIVE').toUpperCase();
-    return !['WARMUP', 'WARM_UP', 'COOLDOWN', 'COOL_DOWN', 'REST', 'RECOVERY'].includes(intensity);
-  });
-  const signatures = new Set(workSteps.map((step) => {
-    const intensity = (firstText(step, 'intensity', 'Intensity') ?? 'ACTIVE').toUpperCase();
-    const targets = get(step, 'target', 'Target', 'targets', 'Targets');
-    return JSON.stringify({ intensity, targets });
-  }));
-  return workSteps.length >= 2 && signatures.size >= 2;
+  return hasPowerTarget(readSteps(selected));
 }
-
 /** Convert a calendar summary and Workout Builder payload to Ma Moulinette's Workout model. */
 export function mapFinalSurgeWorkout(summary: FinalSurgeRecord, builderPayload: unknown, options: FinalSurgeMapperOptions = {}): MappedFinalSurgeWorkout {
   const warnings: string[] = [];
