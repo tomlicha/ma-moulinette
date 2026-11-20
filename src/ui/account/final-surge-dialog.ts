@@ -5,7 +5,7 @@ import type { Workout, WorkoutStep } from '../../domain/workout/model';
 
 const today = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
 const addDays = (date: string, days: number) => {
-  const [year, month, day] = date.split('-').map(Number);
+  const [year = 1970, month = 1, day = 1] = date.split('-').map(Number);
   const d = new Date(Date.UTC(year, month - 1, day + days));
   return d.toISOString().slice(0, 10);
 };
