@@ -52,7 +52,8 @@ function selectWorkoutOption(builder: RecordLike): RecordLike | undefined {
     return ['cycling', 'bike', 'biking'].includes(sport) && /power|watt/.test(target);
   });
   const cycling = options.find((option) => ['cycling', 'bike', 'biking'].includes((firstText(option, 'sport', 'Sport') ?? '').toLowerCase()));
-  return cyclingPower ?? cycling ?? options[0];
+  // Ne jamais choisir arbitrairement une séance d'un autre sport (course, natation, etc.).
+  return cyclingPower ?? cycling;
 }
 function parseDurationSeconds(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value);
@@ -193,6 +194,58 @@ function expandSteps(rawSteps: unknown[], output: WorkoutStep[], warnings: strin
     const kind: StepKind = intensity === 'free' || target.kind === 'free' ? (intensity === 'free' ? 'free' : intensity) : intensity;
     output.push({ kind, durationS: duration, target, ...(cadenceRpm !== undefined ? { cadenceRpm } : {}) });
   }
+}
+
+
+/**
+ * True uniquement pour un Workout Builder explicitement cycliste contenant une vraie
+ * structure d'intervalles : répétitions ou plusieurs blocs de travail à intensités/cibles distinctes.
+ * Les séances libres/continues, les autres sports et les payloads non identifiés sont exclus.
+ */
+export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
+  const builder = unwrapBuilder(builderPayload);
+  if (!builder) return false;
+  const optionsRaw = get(builder, 'target_options', 'targetOptions', 'TargetOptions');
+  const options = Array.isArray(optionsRaw) ? optionsRaw.filter(isRecord) : [];
+  const cycling = options.find((option) => {
+    const sport = (firstText(option, 'sport', 'Sport') ?? '').toLowerCase();
+    return ['cycling', 'bike', 'biking', 'cycle'].includes(sport);
+  });
+  if (!cycling) return false;
+
+  const steps = readSteps(cycling);
+  const hasRepeat = (items: unknown[], depth = 0): boolean => {
+    if (depth > 8) return false;
+    return items.some((item) => {
+      if (!isRecord(item)) return false;
+      const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
+      if (type === 'repeat' || type === 'repetition') {
+        const children = get(item, 'data', 'Data', 'steps', 'Steps');
+        const countRaw = get(item, 'repeats', 'repeat', 'Repeat', 'count', 'Count');
+        const count = Number(countRaw);
+        return Number.isInteger(count) && count >= 2 && Array.isArray(children) &&
+          children.some((child) => isRecord(child) && ['step', 'workoutstep'].includes((firstText(child, 'type', 'Type') ?? 'step').toLowerCase()));
+      }
+      const children = get(item, 'data', 'Data', 'steps', 'Steps');
+      return Array.isArray(children) && hasRepeat(children, depth + 1);
+    });
+  };
+  if (hasRepeat(steps)) return true;
+
+  // Certains plans encodent les intervalles comme des étapes consécutives plutôt qu'un groupe repeat.
+  const workSteps = steps.filter((item): item is RecordLike => {
+    if (!isRecord(item)) return false;
+    const type = (firstText(item, 'type', 'Type') ?? 'step').toLowerCase();
+    if (type !== 'step' && type !== 'workoutstep') return false;
+    const intensity = (firstText(item, 'intensity', 'Intensity') ?? 'ACTIVE').toUpperCase();
+    return !['WARMUP', 'WARM_UP', 'COOLDOWN', 'COOL_DOWN', 'REST', 'RECOVERY'].includes(intensity);
+  });
+  const signatures = new Set(workSteps.map((step) => {
+    const intensity = (firstText(step, 'intensity', 'Intensity') ?? 'ACTIVE').toUpperCase();
+    const targets = get(step, 'target', 'Target', 'targets', 'Targets');
+    return JSON.stringify({ intensity, targets });
+  }));
+  return workSteps.length >= 2 && signatures.size >= 2;
 }
 
 /** Convert a calendar summary and Workout Builder payload to Ma Moulinette's Workout model. */
