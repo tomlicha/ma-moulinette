@@ -160,7 +160,8 @@ export function composeWorkout(w: Wiring): void {
     autoStart.disarm();
     // La séance se roule sur le parcours : sans sortie en cours, le cycliste resterait immobile dans la vue.
     if (!w.rideSession.active && w.trainerCtl.connected) w.startRide();
-    workoutSession.start();
+    // Le HUD et l'ERG sont prêts, mais le temps de séance ne compte qu'au premier coup de pédale.
+    workoutSession.start(undefined, true);
   }
 
   /** La FTP a changé (ici ou sur un autre appareil) : séance en cours, profil et éditeur suivent. */
