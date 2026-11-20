@@ -144,6 +144,7 @@ export function setupAccount(o: {
       </button>
       <div class="account-menu" role="menu" hidden>
         <button type="button" role="menuitem" data-act="name">Changer de nom</button>
+        <button type="button" role="menuitem" data-act="final-surge">Connecter Final Surge</button>
         <button type="button" role="menuitem" data-act="logout">Se déconnecter</button>
         <p class="account-note">Compatible with Strava</p>
       </div>`;
@@ -168,6 +169,7 @@ export function setupAccount(o: {
       const act = (e.target as HTMLElement).closest('button')?.dataset.act;
       toggle(false);
       if (act === 'name') openNameDialog(user);
+      if (act === 'final-surge') window.dispatchEvent(new Event('mm:final-surge-open'));
       if (act === 'logout') await session.logout();
     });
   }
