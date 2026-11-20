@@ -5,7 +5,6 @@ import { WorldClient } from '../infra/net/world-client';
 import { blockSource, workoutSource } from '../infra/sync/sources';
 import { createSyncClient } from '../infra/sync/client';
 import { AccountSession } from '../app/account-session';
-import { importFinalSurgeWorkouts } from '../app/final-surge-import';
 import { importFinalSurgeWorkouts as mapAndSaveFinalSurgeWorkouts } from '../app/final-surge-import';
 import { devLogin, fetchAccount, logout, nativeStravaLogin, saveDisplayName } from '../infra/net/account';
 import { Moulinette, isNativeShell } from '../infra/native/shell';
