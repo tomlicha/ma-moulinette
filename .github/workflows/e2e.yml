@@ -33,10 +33,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Scénarios rapides
         if: github.event_name == 'pull_request'
-        run: npm run e2e -- boot account gears autostart editor
+        run: npm run e2e -- boot account gears autostart editor group online route
       - name: Tous les scénarios
         if: github.event_name != 'pull_request'
-        run: npm run e2e -- boot account gears autostart editor app recap
+        run: npm run e2e -- boot account gears autostart editor group online route app recap
       - name: Traces
         if: failure()
         uses: actions/upload-artifact@v4

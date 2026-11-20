@@ -215,3 +215,16 @@ describe('profil de séance', () => {
     expect([0.5, 0.6, 0.8, 1.0, 1.1, 1.5].map(zoneOf)).toEqual(['z1', 'z2', 'z3', 'z4', 'z5', 'z6']);
   });
 });
+
+describe('WorkoutRunner.seek', () => {
+  const w = parseZwo(sample('decouverte.zwo'));
+  it('se place à un instant donné, entre 0 et la durée', () => {
+    const r = new WorkoutRunner(w, 250);
+    expect(r.seek(10).elapsedS).toBe(10);
+    expect(r.seek(-5).elapsedS).toBe(0);
+    expect(r.seek(1e9).done).toBe(true);
+    // revenir en arrière est permis (l'horloge extérieure a le dernier mot)
+    expect(r.seek(100).done).toBe(false);
+    expect(r.state().stepIndex).toBe(new WorkoutRunner(w, 250).seek(100).stepIndex);
+  });
+});

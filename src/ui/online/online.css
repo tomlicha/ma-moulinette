@@ -1,0 +1,75 @@
+/*
+ * « Rouler avec d'autres » : le panneau des coureurs en ligne, des séances de groupe et de la salle d'attente, chargé à la
+ * demande (la pastille de l'accueil : online-chip.css). Même famille que le journal des nouveautés (ui/whatsnew/whatsnew.css) :
+ * un panneau qui glisse depuis la droite. Jetons de src/style.css. Référence : docs/design/groupe.md.
+ * iPhone en paysage : plein écran 844 × 390, bord à bord (CLAUDE.md), zones sûres dans le contenu.
+ */
+.op {
+  --op-num: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden;
+  background: transparent; color: var(--fg); font: 500 16px/1.35 Barlow, system-ui, sans-serif; overscroll-behavior: contain;
+}
+.op[open] { display: flex; justify-content: flex-end; }
+.op::backdrop { background: rgb(20 23 26 / .42); }
+.op button, .op input, .op select { font-family: inherit; }
+.op button { cursor: pointer; }
+.op :focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.op-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.op-panel { width: min(560px, 100%); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; background: var(--card); box-shadow: -18px 0 48px rgb(20 23 26 / .25); animation: op-in .22s ease-out; }
+@keyframes op-in { from { transform: translateX(32px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .op-panel { animation: none; } }
+
+.op-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 28px 12px; border-bottom: 1px solid var(--line); }
+.op-title { margin: 0; font: 700 38px/1 var(--op-num); }
+.op-close { flex: none; width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--btn-line); background: var(--raised); color: var(--fg); }
+.op-close svg { width: 20px; height: 20px; }
+.op-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 28px 28px; display: flex; flex-direction: column; gap: 18px; }
+
+.op-block, .op-notice { margin: 0; padding: 10px 14px; border-radius: 12px; font-weight: 600; font-size: 15px; }
+.op-block { background: #FDEBDD; color: #7A2E0A; }
+.op-notice { background: var(--raised); border: 1px solid var(--line); }
+.op-block[hidden], .op-notice[hidden], .op-lobby[hidden], .op-empty[hidden] { display: none; }
+[data-o='browse'][hidden] { display: none; }
+[data-o='browse'] { display: flex; flex-direction: column; gap: 18px; }
+
+.op-search input { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid var(--btn-line); background: var(--raised); color: var(--fg); font-size: 16px; }
+.op-kicker { margin: 0 0 4px; font: 700 13px var(--op-num); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.op-sub { margin: 0 0 8px; font-size: 15px; color: var(--muted); }
+.op-empty { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+.op-list { list-style: none; margin: 0; padding: 0; }
+.op-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.op-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); opacity: .55; }
+.op-riding { background: #2B8A3E; opacity: 1; }
+.op-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; font-size: 17px; }
+.op-state { flex: none; color: var(--muted); font-size: 14px; }
+.op-group { align-items: center; }
+.op-group-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.op-group-txt .op-who { flex: none; }
+.op-group-txt .op-state { white-space: normal; }
+
+.op-star { flex: none; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; }
+.op-star.op-friend { color: var(--accent); }
+.op-btn { flex: none; min-height: 44px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 16px; }
+.op-btn:disabled { opacity: .4; cursor: not-allowed; }
+.op-btn-quiet { background: var(--raised); color: var(--fg); border: 1px solid var(--btn-line); margin-top: 14px; }
+
+.op-create-row { display: flex; gap: 10px; align-items: center; }
+.op-select select { min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--btn-line); background: var(--raised); color: var(--fg); font-size: 16px; font-weight: 600; }
+
+.op-lobby { display: flex; flex-direction: column; }
+.op-name { margin: 0; font: 700 30px/1.1 var(--op-num); }
+.op-count { margin: 6px 0 12px; font: 700 40px/1 var(--op-num); color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* ---------- iPhone en paysage (844 × 390, plein écran) ---------- */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .op-panel { width: 540px; }
+  .op-head { padding: 8px max(48px, env(safe-area-inset-right)) 8px 24px; }
+  .op-title { font-size: 30px; }
+  .op-close { border: 0; background: transparent; }
+  .op-scroll { padding: 8px max(48px, env(safe-area-inset-right)) 20px 24px; gap: 12px; }
+  .op-row { min-height: 48px; }
+  .op-who { font-size: 16px; }
+  .op-name { font-size: 26px; }
+  .op-count { font-size: 34px; margin: 2px 0 8px; }
+}

@@ -7,6 +7,7 @@
  */
 import { networkSignature, PROTOCOL_VERSION } from '../src/infra/net/protocol.ts';
 import { createAccounts } from '../src/server/accounts.ts';
+import { createFriends } from '../src/server/friends.ts';
 import { createSync } from '../src/server/sync.ts';
 import { createUserStrava } from '../src/server/user-strava.ts';
 import { createFinalSurge } from '../src/server/final-surge.ts';
@@ -15,6 +16,7 @@ import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_SIGNED_OUT } from '../src/ser
 import { COL_DES_ERABLES } from '../src/domain/course/courses/col-des-erables.ts';
 import { WORLD_PATH } from '../src/infra/net/world-client.ts';
 import { createD1AccountStore } from './account-store.ts';
+import { createD1FriendStore } from './friend-store.ts';
 import { createD1SyncStore } from './sync-store.ts';
 import type { D1Database } from './d1-store.ts';
 import type { CfWebSocket } from './world-room.ts';
@@ -90,6 +92,9 @@ export default {
 
     const synced = await createSync(accounts, createD1SyncStore(env.DB))(req);
     if (synced) return synced;
+
+    const friends = await createFriends(accounts, createD1FriendStore(env.DB))(req);
+    if (friends) return friends;
 
     const strava = createUserStrava(accounts, { clientId: env.STRAVA_CLIENT_ID, clientSecret: env.STRAVA_CLIENT_SECRET });
     return (await strava(req)) ?? new Response('not found', { status: 404 });

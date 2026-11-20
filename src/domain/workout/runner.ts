@@ -53,6 +53,12 @@ export class WorkoutRunner {
     return this.state();
   }
 
+  /** Se place à `elapsedS` depuis le début (séance rythmée par une horloge extérieure : séance de groupe), entre 0 et la durée. */
+  seek(elapsedS: number): WorkoutState {
+    this.elapsed = Math.min(this.totalS, Math.max(0, elapsedS));
+    return this.state();
+  }
+
   /** Passe au début du palier suivant (ou termine la séance sur le dernier). */
   skip(): WorkoutState {
     const i = this.indexAt(this.elapsed);

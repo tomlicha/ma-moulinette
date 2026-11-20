@@ -33,6 +33,23 @@ export interface JunctionOption {
   turn: Turn;
 }
 
+/**
+ * Séance de groupe : tout le groupe fait le même trajet, donc la même simulation. Le **créateur** choisit à chaque carrefour ;
+ * son choix est diffusé et chacun l'applique au moment où son propre trajet valide la route (la route est identifiée par son
+ * rang dans le trajet : `legIndex`). Sans choix connu à ce moment-là, le parcours (sinon le tout droit) l'emporte, comme en solo.
+ */
+export interface GroupRouting {
+  /** Le choix du groupe pour la route numéro `legIndex` (celle qui suit le prochain carrefour) ; `undefined` : pas décidé. */
+  choiceFor(legIndex: number): number | undefined;
+  /** Ce coureur choisit pour le groupe. */
+  readonly decides: boolean;
+  /** Ce coureur vient de toucher une option : à diffuser au groupe (elle ne s'applique qu'à son retour, comme pour les autres). */
+  decide(legIndex: number, index: number): void;
+}
+
+/** Le créateur ne peut plus changer le choix à cette distance du carrefour, en m : de quoi laisser le message arriver chez tous avant le verrou (`LOCK_M`). */
+export const DECIDE_CLOSE_M = LOCK_M + 60;
+
 export interface PendingJunction {
   nodeId: string;
   /** Distance du trajet où se trouve le nœud, en m. */
@@ -41,8 +58,12 @@ export interface PendingJunction {
   distanceM: number;
   /** Options de la gauche vers la droite. */
   options: JunctionOption[];
-  /** Option retenue : le choix du cycliste, sinon le tout droit. */
+  /** Option retenue : le choix du cycliste (ou du groupe), sinon le tout droit. */
   selected: number;
+  /** Rang de la route à choisir dans le trajet : de quoi désigner ce carrefour auprès du groupe. */
+  legIndex: number;
+  /** Séance de groupe seulement : qui choisit, et si le choix est encore ouvert. */
+  group?: { decides: boolean; closed: boolean };
 }
 
 const wrapPi = (a: number) => {
@@ -62,6 +83,10 @@ export class Journey implements Course {
   private choice: number | undefined;
   /** Sortie de piste programmée à la prochaine porte (`setTrackExit`). */
   private exitTrack = false;
+  /** Séance de groupe : le créateur choisit (`setGroupRouting`). */
+  private routing?: GroupRouting;
+  /** Distance restante au dernier carrefour annoncé, en m : le choix du créateur se ferme près du nœud. */
+  private lastRemainingM = Infinity;
 
   private courseDef: CourseDef | undefined;
 
@@ -98,6 +123,47 @@ export class Journey implements Course {
     this.exitTrack = false;
   }
 
+  /**
+   * Repart de la position `pos` d'un autre coureur, `behindM` derrière lui dans son sens de marche (au plus jusqu'au
+   * début de sa route). La distance 0 du trajet est ce point : une sortie qui commence là compte ses kilomètres depuis
+   * l'endroit où l'on a rejoint, pas depuis le départ du réseau. Les routes suivantes suivent le parcours choisi, sinon
+   * le tout droit. Renvoie la position retenue, `undefined` si la route est inconnue (réseau différent).
+   */
+  placeAt(pos: NetPosition, behindM = 10): NetPosition | undefined {
+    const edge = this.network.edges.get(pos.edgeId);
+    if (!edge) return undefined;
+    const along = pos.forward ? pos.s : edge.lengthM - pos.s; // distance parcourue sur la route, dans son sens de marche
+    // Dans un ascenseur, on monte en cabine : on y entre par le pied, pas au milieu.
+    const from = edge.isLift ? 0 : Math.min(edge.lengthM, Math.max(0, along - behindM));
+    this.committed.length = 0;
+    this.committed.push({ edge, forward: pos.forward, startM: -from, lengthM: edge.lengthM, liftedM: 0 });
+    this.tentative = [];
+    this.choice = undefined;
+    this.exitTrack = false;
+    return { edgeId: edge.id, forward: pos.forward, s: pos.forward ? from : edge.lengthM - from };
+  }
+
+  /**
+   * Passe en séance de groupe (`GroupRouting`) : les choix du coureur ne comptent plus, ceux du créateur du groupe oui. Sans
+   * argument, redevient un trajet libre. À appeler hors de toute sortie (avant le départ, ou une fois arrêté).
+   */
+  setGroupRouting(routing: GroupRouting | undefined): void {
+    this.routing = routing;
+    this.choice = undefined;
+    this.exitTrack = false;
+    this.tentative = [];
+  }
+
+  /** Un choix du groupe vient d'arriver : le prolongement déjà calculé par défaut n'est plus le bon. */
+  refreshRouting(): void {
+    this.tentative = [];
+  }
+
+  /** Le choix en cours pour la route numéro `legIndex` : celui du groupe en séance de groupe, sinon celui du coureur. */
+  private chosen(legIndex: number): number | undefined {
+    return this.routing ? this.routing.choiceFor(legIndex) : this.choice;
+  }
+
   /** Fin de la partie validée, en m. */
   get committedEndM(): number {
     const last = this.committed[this.committed.length - 1]!;
@@ -109,7 +175,8 @@ export class Journey implements Course {
     while (distanceM >= this.committedEndM - LOCK_M) {
       const last = this.committed[this.committed.length - 1]!;
       const options = this.optionsAfter(last);
-      const index = this.choice ?? this.defaultFor(last, options);
+      const wanted = this.chosen(this.committed.length);
+      const index = wanted !== undefined && wanted >= 0 && wanted < options.length ? wanted : this.defaultFor(last, options);
       const leg = this.legFor(options[index]!, last);
       this.committed.push(leg);
       this.choice = undefined;
@@ -132,12 +199,17 @@ export class Journey implements Course {
     if (isTrack(last)) return undefined;
     const options = this.optionsAfter(last);
     if (options.length < 2) return undefined;
+    const legIndex = this.committed.length;
+    const wanted = this.chosen(legIndex);
+    this.lastRemainingM = atM - distanceM;
     return {
       nodeId: endNodeId(last),
       atM,
       distanceM: atM - distanceM,
       options,
-      selected: this.choice ?? this.defaultFor(last, options),
+      selected: wanted !== undefined && wanted >= 0 && wanted < options.length ? wanted : this.defaultFor(last, options),
+      legIndex,
+      ...(this.routing ? { group: { decides: this.routing.decides, closed: atM - distanceM <= DECIDE_CLOSE_M } } : {}),
     };
   }
 
@@ -170,6 +242,7 @@ export class Journey implements Course {
    * piste au lieu d'un tour de plus. Sans effet hors de la piste ; s'efface une fois sorti.
    */
   setTrackExit(on: boolean): void {
+    if (this.routing) return; // en groupe, tout le monde fait le même trajet
     this.exitTrack = on;
     this.tentative = [];
   }
@@ -198,6 +271,12 @@ export class Journey implements Course {
   choose(index: number): boolean {
     const options = this.optionsAfter(this.committed[this.committed.length - 1]!);
     if (!Number.isInteger(index) || index < 0 || index >= options.length) return false;
+    if (this.routing) {
+      // Seul le créateur choisit, et jusqu'à `DECIDE_CLOSE_M` du carrefour ; son choix revient par `choiceFor`, comme chez les autres.
+      if (!this.routing.decides || this.lastRemainingM <= DECIDE_CLOSE_M) return false;
+      this.routing.decide(this.committed.length, index);
+      return true;
+    }
     this.choice = index;
     this.tentative = [];
     return true;
@@ -340,7 +419,8 @@ export class Journey implements Course {
       const last = this.tentative[this.tentative.length - 1] ?? this.committed[this.committed.length - 1]!;
       const options = this.optionsAfter(last);
       // Seul le prochain carrefour tient compte du choix en cours ; les suivants prennent le tout droit.
-      const index = this.tentative.length === 0 && this.choice !== undefined ? this.choice : this.defaultFor(last, options);
+      const wanted = this.tentative.length === 0 ? this.chosen(this.committed.length) : undefined;
+      const index = wanted !== undefined && wanted >= 0 && wanted < options.length ? wanted : this.defaultFor(last, options);
       this.tentative.push(this.legFor(options[index]!, last));
     }
     return findLeg(this.tentative, d);

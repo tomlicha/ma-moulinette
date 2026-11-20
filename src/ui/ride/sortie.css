@@ -275,3 +275,14 @@ html[data-notch='left'] .ride { --edge-r: 12px; }
   .ride { --near-clear: calc(168px + 6px); }
   .ride:has(.ride-quick:not([hidden]), .ride-gears:not([hidden])) { --near-clear: calc(168px + 6px + 52px); }
 }
+
+/* Suivi : le bouton de la ligne de chaque coureur proche (icône « rattraper » : le nom garde toute la place). Le panneau du suivi est dans hud.css. */
+.rn-follow {
+  position: relative; flex: none; display: grid; place-items: center; width: 26px; height: 22px; padding: 0; border-radius: 8px;
+  border: 1px solid var(--rg-line); background: var(--rg-tint); color: var(--rg-fg); cursor: pointer; text-shadow: none;
+}
+.rn-follow svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.rn-follow::after { content: ''; position: absolute; inset: -11px -6px; } /* zone de toucher élargie sans grossir la ligne */
+.rn-follow:focus-visible { outline: 2px solid var(--rg-fg); outline-offset: 1px; }
+.rn-follow[hidden] { display: none; }
+.rn-followed .rn-name { font-weight: 700; color: var(--rg-accent); }

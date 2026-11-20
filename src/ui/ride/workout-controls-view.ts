@@ -23,6 +23,8 @@ export interface WorkoutControlsModel {
   paused: boolean;
   /** Pourquoi on ne peut pas démarrer la séance maintenant (`undefined` : on peut). */
   startReason: string | BlockReason | undefined;
+  /** Séance de groupe : le temps est celui du groupe, ni pause ni palier suivant ; « Arrêter » devient « Quitter le groupe ». */
+  locked?: boolean;
 }
 
 /**
@@ -38,6 +40,8 @@ export class WorkoutControlsView {
   private readonly harder = byId<HTMLButtonElement>('wo-harder');
   private readonly quick = byId('ride-quick');
   private readonly quickPause = byId<HTMLButtonElement>('rq-pause');
+  private readonly quickSkip = byId<HTMLButtonElement>('rq-skip');
+  private readonly stopLabel = this.stop.textContent;
 
   constructor(actions: WorkoutControlsActions) {
     this.start.addEventListener('click', () => actions.start());
@@ -82,5 +86,10 @@ export class WorkoutControlsView {
     this.start.hidden = m.running;
     for (const b of [this.pause, this.skip, this.stop]) b.hidden = !m.running;
     byId('wo-intensity-row').hidden = !m.running;
+    // Séance de groupe : le temps est celui du groupe.
+    const locked = !!m.locked && m.running;
+    for (const b of [this.pause, this.skip]) b.hidden = !m.running || locked;
+    for (const b of [this.quickPause, this.quickSkip]) b.hidden = locked;
+    this.stop.textContent = locked ? 'Quitter la séance de groupe' : this.stopLabel;
   }
 }

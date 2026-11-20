@@ -6,6 +6,8 @@ import type { RoadNetwork } from '../../domain/course/network';
 import { RemoteTrack } from '../../domain/course/remote-track';
 import type { JourneyPoint, NetPosition } from '../../domain/course/track';
 import { Interpolator } from './interpolation';
+import type { Workout } from '../../domain/workout/model';
+import { parseServerMessage, type ClientGroupMessage, type JoinableBy, type ServerGroupMessage } from './group-protocol';
 import { networkSignature, PROTOCOL_VERSION, StateCodec } from './protocol';
 import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_REPLACED, CLOSE_SIGNED_OUT } from '../../shared/protocol/close-codes';
 
@@ -80,6 +82,8 @@ export class WorldClient {
   onStatus?: (s: WorldStatus) => void;
   /** Arrivées et départs, pour le journal ou une notification. */
   onRoster?: (event: 'join' | 'leave', name: string) => void;
+  /** Ce que le serveur dit du suivi : accepté, fini, quelqu'un me suit ou ne me suit plus. */
+  onGroup?: (msg: ServerGroupMessage) => void;
 
   private readonly codec: StateCodec;
   private readonly remotes = new Map<number, Remote>();
@@ -91,6 +95,8 @@ export class WorldClient {
   private retryTimer: unknown;
   private wanted = false;
   private lastSent = -Infinity;
+  private joinable: JoinableBy = 'all';
+  private friends: readonly string[] = [];
   private readonly now: () => number;
 
   constructor(
@@ -108,6 +114,75 @@ export class WorldClient {
   /** Nombre de coureurs dans la salle, le joueur compris (0 hors connexion). */
   get population(): number {
     return this.status_ === 'online' ? this.names.size : 0;
+  }
+
+  /** Qui peut me rejoindre : retenu, renvoyé à chaque connexion. */
+  setJoinable(who: JoinableBy): void {
+    this.joinable = who;
+    this.sendGroup({ type: 'joinable', who });
+  }
+
+  /** Mes amis (identifiants de compte) : la salle les montre en tête et laisse entrer ceux de « mes amis ». Retenus, renvoyés à chaque connexion. */
+  setFriends(ids: readonly string[]): void {
+    this.friends = ids;
+    this.sendGroup({ type: 'friends', ids: [...ids] });
+  }
+
+  /** Rejoindre et suivre le coureur `slot` ; la réponse arrive par `onGroup` (`followStart` ou `followEnd`). */
+  follow(slot: number): void {
+    this.sendGroup({ type: 'follow', slot });
+  }
+
+  /** Arrêter de suivre. */
+  unfollow(): void {
+    this.sendGroup({ type: 'unfollow' });
+  }
+
+  /** Le coureur suivi renvoie un suiveur. */
+  refuseFollower(slot: number): void {
+    this.sendGroup({ type: 'refuse', slot });
+  }
+
+  /** Qui est en ligne (filtré par le nom `q`) et quels groupes existent ; la réponse arrive par `onGroup` (`who`). */
+  who(q = ''): void {
+    this.sendGroup({ type: 'who', q });
+  }
+
+  /** Une mesure de l'horloge commune : `time` revient par `onGroup` avec l'heure du serveur. */
+  ping(clientMs: number): void {
+    this.sendGroup({ type: 'time', c: clientMs });
+  }
+
+  /** Crée une séance de groupe qui démarre dans `startInS` secondes, et la rejoint. La réponse est `groupState`. */
+  createGroup(workout: Workout, courseId: string, startInS: number, ref: { ftpW: number; massKg: number }): void {
+    this.sendGroup({ type: 'groupCreate', workout, courseId, startInS, ftpW: ref.ftpW, massKg: ref.massKg });
+  }
+
+  joinGroup(id: string): void {
+    this.sendGroup({ type: 'groupJoin', id });
+  }
+
+  leaveGroup(): void {
+    this.sendGroup({ type: 'groupLeave' });
+  }
+
+  /** Le créateur du groupe choisit l'option `index` au carrefour qui précède la route `leg` du trajet. */
+  routeGroup(leg: number, index: number): void {
+    this.sendGroup({ type: 'groupRoute', leg, index });
+  }
+
+  /** Mon numéro dans la salle ; `undefined` hors connexion. */
+  get slot(): number | undefined {
+    return this.status_ === 'online' ? this.selfSlot : undefined;
+  }
+
+  /** Vrai si le coureur `slot` est dans la salle (suivi possible). */
+  has(slot: number): boolean {
+    return this.status_ === 'online' && this.names.has(slot);
+  }
+
+  private sendGroup(msg: ClientGroupMessage): void {
+    if (this.status_ === 'online') this.socket?.send(JSON.stringify(msg));
   }
 
   /** Se connecte, et se reconnecte tout seul jusqu'à `disconnect()`. */
@@ -215,6 +290,7 @@ export class WorldClient {
     } catch {
       return;
     }
+    if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'welcome' && typeof msg.slot === 'number') {
       this.reset();
       this.selfSlot = msg.slot;
@@ -222,6 +298,8 @@ export class WorldClient {
       this.attempt = 0;
       this.lastSent = -Infinity;
       this.setStatus('online');
+      if (this.joinable !== 'all') this.sendGroup({ type: 'joinable', who: this.joinable });
+      if (this.friends.length) this.sendGroup({ type: 'friends', ids: [...this.friends] });
     } else if (msg.type === 'join' && typeof msg.slot === 'number' && typeof msg.name === 'string') {
       this.names.set(msg.slot, msg.name);
       const r = this.remotes.get(msg.slot);
@@ -232,6 +310,9 @@ export class WorldClient {
       this.names.delete(msg.slot);
       this.remotes.delete(msg.slot);
       if (name) this.onRoster?.('leave', name);
+    } else {
+      const group = parseServerMessage(msg as Record<string, unknown>);
+      if (group) this.onGroup?.(group);
     }
   }
 

@@ -1,7 +1,9 @@
 import { composeAccount } from './account';
 import { composeDevices } from './devices';
+import { composeGroup } from './group';
 import { composeHud } from './hud';
 import { composeLaunch } from './launch';
+import { composeOnline } from './online';
 import { composePlatform } from './platform';
 import { composeRecap } from './recap';
 import { composeRide } from './ride';
@@ -29,6 +31,8 @@ export function composeApp(): void {
   composeRecap(w); // l'export de la sortie et son récapitulatif
   composeScreens(w); // l'accueil, le menu de la sortie, le routeur
   composeAccount(w); // synchronisation, compte, salle temps réel
+  composeGroup(w); // suivre un coureur, être suivi : bandeau, bouton de l'encart, réglage « me rejoindre »
+  composeOnline(w); // la pastille « En ligne », le panneau, la séance de groupe
   composeWhatsNew(w); // la carte et le journal des nouveautés ; leurs repères rejoignent la synchronisation d'account
   composeLaunch(w); // la première connexion
 }

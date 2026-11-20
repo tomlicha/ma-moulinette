@@ -1,5 +1,5 @@
 /**
- * Fonds de l'écran d'accueil : quatre scènes dessinées dans la direction graphique du jeu, qui se relaient toutes les minutes.
+ * Fonds de l'écran d'accueil : cinq scènes dessinées dans la direction graphique du jeu, qui se relaient toutes les minutes.
  * Référence : docs/design/accueil-appareils.md. Les `id` internes de chaque dessin sont uniques (ils partagent le même document).
  */
 export interface HomeScene {
@@ -124,6 +124,50 @@ export const HOME_SCENES: HomeScene[] = [
 <g filter="url(#glowR)" opacity=".55"><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 0)" stroke="#FF4F6A" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 2.2)" stroke="#FF9B33" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 4.4)" stroke="#FFD93D" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 6.6)" stroke="#45D98A" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 8.8)" stroke="#3FA2FF" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 11)" stroke="#9A64FF" stroke-width="2.6" fill="none"/></g><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 0)" stroke="#FF4F6A" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 2.2)" stroke="#FF9B33" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 4.4)" stroke="#FFD93D" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 6.6)" stroke="#45D98A" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 8.8)" stroke="#3FA2FF" stroke-width="2.6" fill="none"/><path d="M700 112 C760 140 760 200 700 206 C640 212 630 160 680 146 C730 134 770 160 800 150" transform="translate(0 11)" stroke="#9A64FF" stroke-width="2.6" fill="none"/>
 <g filter="url(#glowR)" opacity=".55"><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 0)" stroke="#FF4F6A" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 9)" stroke="#FF9B33" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 18)" stroke="#FFD93D" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 27)" stroke="#45D98A" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 36)" stroke="#3FA2FF" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 45)" stroke="#9A64FF" stroke-width="10" fill="none"/></g><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 0)" stroke="#FF4F6A" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 9)" stroke="#FF9B33" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 18)" stroke="#FFD93D" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 27)" stroke="#45D98A" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 36)" stroke="#3FA2FF" stroke-width="10" fill="none"/><path d="M800 238 C660 250 520 316 380 420" transform="translate(0 45)" stroke="#9A64FF" stroke-width="10" fill="none"/>
 <g fill="#FFF3C4"><path d="M250 57 l3 5 l-3 5 l-3 -5Z"/><path d="M330 77 l3 5 l-3 5 l-3 -5Z"/><path d="M410 119 l3 5 l-3 5 l-3 -5Z"/><path d="M480 127 l3 5 l-3 5 l-3 -5Z"/><path d="M560 115 l3 5 l-3 5 l-3 -5Z"/><path d="M626 97 l3 5 l-3 5 l-3 -5Z"/></g>
+`,
+  },
+  {
+    name: 'Vélodrome de Roubaix',
+    description: 'Jour de course · la piste en béton, ses virages relevés et la tribune en fête.',
+    svg: `
+<defs>
+<linearGradient id="skyV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7FB8E6"/><stop offset="1" stop-color="#D4E8F6"/></linearGradient>
+<linearGradient id="grassV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8CC271"/><stop offset="1" stop-color="#5E9F4B"/></linearGradient>
+<pattern id="crowdV" width="15" height="11" patternUnits="userSpaceOnUse"><rect width="15" height="11" fill="#2C3A5E"/><rect x="1" y="2" width="3" height="6" fill="#F2C230"/><rect x="5" y="1" width="3" height="7" fill="#E4572E"/><rect x="9" y="3" width="3" height="5" fill="#F4F1E8"/><rect x="12" y="1" width="2" height="7" fill="#35B7A3"/><rect x="3" y="8" width="3" height="3" fill="#9B5DE5"/><rect x="8" y="8" width="4" height="3" fill="#3F95DB"/></pattern>
+<pattern id="chkV" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#fff"/><rect width="4" height="4" fill="#151515"/><rect x="4" y="4" width="4" height="4" fill="#151515"/></pattern>
+</defs>
+<rect width="800" height="420" fill="url(#skyV)"/>
+<g fill="#fff" opacity=".85"><ellipse cx="120" cy="70" rx="64" ry="13"/><ellipse cx="170" cy="58" rx="42" ry="11"/><ellipse cx="610" cy="48" rx="70" ry="12"/><ellipse cx="560" cy="60" rx="40" ry="9"/></g>
+<rect y="196" width="800" height="224" fill="url(#grassV)"/>
+<g fill="#4E8A3E"><circle cx="40" cy="190" r="16"/><circle cx="82" cy="193" r="11"/><circle cx="230" cy="192" r="13"/><circle cx="288" cy="194" r="9"/><circle cx="360" cy="193" r="12"/></g>
+<g fill="#6FAF58"><circle cx="36" cy="184" r="9"/><circle cx="226" cy="186" r="7"/></g>
+<rect y="187" width="450" height="9" fill="url(#crowdV)" opacity=".95"/>
+<path d="M0 196 H452 C440 248 300 330 150 420 H0Z" fill="#79B85F"/>
+<g fill="#6AA852" opacity=".75"><path d="M0 300 L330 236 L352 262 L0 352Z"/><path d="M0 392 L215 330 L190 420 H0Z"/><path d="M0 214 L420 200 L420 214 L0 238Z"/></g>
+<path d="M0 396 L392 228" stroke="#fff" stroke-width="2.5" fill="none" opacity=".85"/>
+<path d="M452 196 C440 248 300 330 150 420 H262 C372 340 472 262 462 196Z" fill="#3F95DB"/>
+<path d="M462 196 C472 262 372 340 262 420 H700 C612 330 526 250 484 196Z" fill="#DAD6CB"/>
+<path d="M468 196 C479 262 396 340 326 420" stroke="#1B1B1B" stroke-width="2.5" fill="none"/>
+<path d="M474 196 C490 258 446 332 410 420" stroke="#D8382F" stroke-width="3.5" fill="none"/>
+<path d="M481 196 C520 252 600 330 672 420" stroke="#1F4FB5" stroke-width="2.5" fill="none"/>
+<path d="M484 190 L800 108 V420 H700 C612 330 526 250 484 196Z" fill="#9AA89E"/>
+<path d="M522 184 L800 118 V292 C700 246 590 214 522 186Z" fill="url(#crowdV)"/>
+<path d="M514 168 L800 74 V122 L522 188Z" fill="#46633C"/>
+<path d="M514 168 L800 74" stroke="#2F4529" stroke-width="3" fill="none"/>
+<g fill="#E4572E"><path d="M560 168 l6 9 l6 -9Z"/><path d="M600 156 l6 9 l6 -9Z"/><path d="M640 144 l6 9 l6 -9Z"/><path d="M680 132 l6 9 l6 -9Z"/><path d="M720 120 l6 9 l6 -9Z"/></g>
+<g fill="#F2C230"><path d="M580 162 l6 9 l6 -9Z"/><path d="M620 150 l6 9 l6 -9Z"/><path d="M660 138 l6 9 l6 -9Z"/><path d="M700 126 l6 9 l6 -9Z"/></g>
+<path d="M548 258 L800 306 V420 H700 C650 360 596 298 548 258Z" fill="#7F8D97"/>
+<path d="M548 258 L800 306" stroke="#1F4FB5" stroke-width="3" fill="none"/>
+<text transform="translate(574 296) rotate(13) skewX(-6)" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="34" letter-spacing="2" fill="#1E2B46">VÉLODROME</text>
+<g><rect x="436" y="168" width="4" height="30" fill="#151515"/><rect x="488" y="168" width="4" height="30" fill="#151515"/><rect x="432" y="156" width="64" height="13" fill="#D8382F"/><rect x="436" y="159" width="56" height="3" fill="#fff" opacity=".85"/><rect x="432" y="169" width="64" height="5" fill="url(#chkV)"/></g>
+<g><rect x="402" y="176" width="3" height="22" fill="#4C555C"/><rect x="394" y="168" width="20" height="10" fill="#F4F1E8" stroke="#4C555C" stroke-width="1.5"/></g>
+<g><circle cx="404" cy="132" r="7" fill="#D8382F"/><circle cx="416" cy="138" r="6" fill="#fff"/><circle cx="392" cy="140" r="6" fill="#3F95DB"/><path d="M404 139 L440 176 M416 144 L440 176 M392 146 L440 176" stroke="#8A8F96" stroke-width="1" fill="none" opacity=".7"/></g>
+<g><g transform="translate(420 262) scale(1.15)"><ellipse cx="0" cy="22" rx="3" ry="15" fill="#222"/><rect x="-6" y="-1" width="12" height="13" rx="4" fill="#161616"/><path d="M-9 -3 Q0 -14 9 -3 L8 5 H-8Z" fill="#35C2A8"/><circle cy="-12" r="5.5" fill="#2F6FD0"/></g>
+<g transform="translate(470 246)"><ellipse cx="0" cy="20" rx="3" ry="13" fill="#222"/><rect x="-6" y="-1" width="12" height="12" rx="4" fill="#161616"/><path d="M-9 -3 Q0 -13 9 -3 L8 5 H-8Z" fill="#F2C230"/><circle cy="-11" r="5" fill="#F2C230"/></g>
+<g transform="translate(398 244) scale(.85)"><ellipse cx="0" cy="20" rx="3" ry="13" fill="#222"/><rect x="-6" y="-1" width="12" height="12" rx="4" fill="#161616"/><path d="M-9 -3 Q0 -13 9 -3 L8 5 H-8Z" fill="#4A90E2"/><circle cy="-11" r="5" fill="#1F4FB5"/></g>
+<g transform="translate(446 226) scale(.65)"><ellipse cx="0" cy="20" rx="3" ry="13" fill="#222"/><rect x="-6" y="-1" width="12" height="12" rx="4" fill="#161616"/><path d="M-9 -3 Q0 -13 9 -3 L8 5 H-8Z" fill="#E4572E"/><circle cy="-11" r="5" fill="#F4F1E8"/></g></g>
+<g transform="translate(290 78)"><ellipse cx="0" cy="0" rx="12" ry="5" fill="#E9ECEF"/><rect x="-22" y="-8" width="44" height="2" fill="#555"/><path d="M10 0 L30 -3" stroke="#E9ECEF" stroke-width="3"/><rect x="-1" y="-8" width="2" height="4" fill="#555"/></g>
+<g><rect x="448" y="120" width="4" height="4" fill="#F2C230"/><rect x="458" y="132" width="3" height="3" fill="#E4572E"/><rect x="432" y="128" width="3" height="3" fill="#fff"/><rect x="470" y="116" width="3" height="3" fill="#3F95DB"/><rect x="426" y="144" width="3" height="3" fill="#35B7A3"/></g>
 `,
   },
 ];

@@ -134,6 +134,7 @@ export function composeAccount(w: Wiring): void {
     .catch(() => undefined);
 
   const crowdView = new CrowdView(w.riderTags, w.ridePanel);
+  w.crowd = crowdView;
   const showCrowd = () => crowdView.render(world.status, world.population);
   world.onStatus = (s) => {
     account.setWorld(s, world.population);

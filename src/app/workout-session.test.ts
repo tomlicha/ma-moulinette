@@ -302,4 +302,52 @@ describe('WorkoutSession', () => {
       expect(events.filter((e) => e === 'ended')).toHaveLength(1);
     });
   });
+
+  describe('séance de groupe (horloge extérieure)', () => {
+    it("arrive au bon palier, avec la FTP de ce coureur, même en retard", () => {
+      const { session, trainer } = setup();
+      session.select(workout());
+      let elapsedS = 600; // dix minutes après le départ du groupe
+      session.start(() => elapsedS);
+      expect(session.synced).toBe(true);
+      expect(session.state?.elapsedS).toBe(600);
+      const target = session.state?.targetW;
+      expect(target).toBeGreaterThan(0);
+      elapsedS = 601;
+      vi.advanceTimersByTime(250);
+      expect(session.state?.elapsedS).toBe(601);
+      expect(trainer.connected).toBe(true);
+    });
+
+    it("suit l'horloge du groupe, pas le temps de ce coureur (le temps passe même sans trainer)", () => {
+      const { session, trainer } = setup({ connected: false });
+      session.select(workout());
+      let elapsedS = 0;
+      session.start(() => elapsedS);
+      elapsedS = 120;
+      vi.advanceTimersByTime(250);
+      expect(session.state?.elapsedS).toBe(120);
+      expect(trainer.setTargetPower).not.toHaveBeenCalled(); // pas de trainer : pas de consigne
+    });
+
+    it("ne se met pas en pause et ne saute pas de palier à la main", () => {
+      const { session } = setup();
+      session.select(workout());
+      session.start(() => 30);
+      session.togglePause();
+      expect(session.paused).toBe(false);
+      const step = session.state?.stepIndex;
+      session.skip();
+      expect(session.state?.stepIndex).toBe(step);
+    });
+
+    it("se termine quand l'horloge du groupe dépasse la séance, et redevient libre", () => {
+      const { session, events } = setup();
+      session.select(workout());
+      session.start(() => 1e6);
+      expect(events).toContain('ended');
+      expect(session.running).toBe(false);
+      expect(session.synced).toBe(false);
+    });
+  });
 });

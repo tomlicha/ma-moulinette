@@ -13,7 +13,7 @@
 export type EntryKind = 'new' | 'improved';
 
 /** Petite icône de l'entrée (la vue la dessine). */
-export type EntryIcon = 'route' | 'track' | 'map' | 'sync' | 'sun' | 'home' | 'pause' | 'layers';
+export type EntryIcon = 'route' | 'track' | 'map' | 'sync' | 'sun' | 'home' | 'pause' | 'layers' | 'people';
 
 /** Illustration du héros et de la vignette du journal (la vue la dessine). */
 export type EntryArt = 'rainbow' | 'velodrome' | 'map' | 'home';
@@ -107,5 +107,29 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     icon: 'home',
     art: 'home',
     target: { view: 'accueil', label: "Voir l'accueil" },
+  },
+  {
+    id: '2026-11-20-seance-de-groupe',
+    kind: 'new',
+    title: 'Séance de groupe',
+    text: 'Lance une séance à plusieurs : tout le monde part ensemble et reste groupé sur la route, quelle que soit la puissance de chacun, à l’allure du créateur. Aux carrefours, c’est lui qui choisit.',
+    icon: 'people',
+    target: { view: 'accueil', label: 'Voir les groupes' },
+  },
+  {
+    id: '2026-11-20-suivre-un-coureur',
+    kind: 'new',
+    title: 'Rouler avec quelqu’un',
+    text: 'Dans « En ligne » sur l’accueil, ajoute des amis d’une étoile et rejoins un coureur en sortie : l’écart s’affiche et un coup de pouce t’aide à recoller.',
+    icon: 'people',
+    target: { view: 'accueil', label: 'Voir qui est en ligne' },
+  },
+  {
+    id: '2026-11-20-velodrome-accueil',
+    kind: 'improved',
+    title: 'Le vélodrome a son image',
+    text: 'Sur l’accueil, le fond et la vignette du vélodrome montrent maintenant la piste, la tribune et l’arche d’arrivée.',
+    icon: 'track',
+    target: { view: 'accueil', label: 'Choisir la piste' },
   },
 ];
