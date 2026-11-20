@@ -57,12 +57,12 @@ const isBlocks = (v: unknown, min: number) =>
 
 function isWorkoutSource(value: unknown): boolean {
   if (!isObject(value) || value.provider !== 'final-surge') return false;
-  if (typeof value.externalId !== 'string' || value.externalId.length < 1 || value.externalId.length > 128) return false;
-  if (value.scheduledAt === undefined) return true;
-  return typeof value.scheduledAt === 'string' &&
-    value.scheduledAt.length >= 1 &&
-    value.scheduledAt.length <= 32 &&
-    /^\d{4}-\d{2}-\d{2}/.test(value.scheduledAt);
+  const externalId = value.externalId;
+  if (typeof externalId !== 'string' || externalId.length < 1 || externalId.length > 128) return false;
+  const scheduledAt = value.scheduledAt;
+  if (scheduledAt === undefined) return true;
+  if (typeof scheduledAt !== 'string' || scheduledAt.length < 1 || scheduledAt.length > 32) return false;
+  return /^\d{4}-\d{2}-\d{2}/.test(scheduledAt);
 }
 
 function isBody(kind: SyncKind, id: string, body: unknown): boolean {
