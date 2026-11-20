@@ -84,6 +84,9 @@ async function run({ playwright, browser, url }, profile) {
 
   const edited = { sub: /modifiée/ };
 
+  // L'éditeur est un chunk chargé à la demande (ui/editor/lazy-editor.ts) : sur une machine lente, il n'est pas encore là à
+  // l'arrivée sur l'écran. On attend qu'il ait écrit son premier état.
+  for (let i = 0; i < 150 && !(await page.evaluate(() => document.getElementById('ed-sub')?.textContent?.trim())); i++) await sleep(100);
   await steps.mark('écran ouvert', { sub: /lecture seule/, saved: 0 });
   if (profile.phone) {
     await click('[data-open-panel="lib"]');

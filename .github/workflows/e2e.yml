@@ -44,3 +44,4 @@ jobs:
           name: e2e-traces
           path: .e2e/
           if-no-files-found: ignore
+          include-hidden-files: true # .e2e/ est un dossier caché
