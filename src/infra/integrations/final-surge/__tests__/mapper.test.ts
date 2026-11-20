@@ -58,4 +58,50 @@ describe('mapFinalSurgeWorkout', () => {
     expect(result.workout.steps[0]?.target).toEqual({ kind: 'free' });
     expect(result.workout.warnings.join(' ')).toContain('unité de cible de puissance inconnue');
   });
+
+
+  it('maps a 95–105% FTP range to exactly 100% FTP ERG', () => {
+    const result = mapFinalSurgeWorkout({ Title: 'Threshold' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '6:00', target: [{ targetType: 'power', targetOption: 'percentFTP', targetLow: 95, targetHigh: 105 }] },
+    ] }] });
+    expect(result.workout.steps[0]).toMatchObject({ durationS: 360, target: { kind: 'ftp', from: 1, to: 1 } });
+  });
+
+  it('maps cadence ranges to their midpoint while preserving the duration', () => {
+    const result = mapFinalSurgeWorkout({ Title: 'Cadence' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '3:30', target: [
+        { targetType: 'power', targetOption: 'percentFTP', targetLow: 80, targetHigh: 80 },
+        { targetType: 'cadence', targetLow: 85, targetHigh: 95 },
+      ] },
+    ] }] });
+    expect(result.workout.steps[0]).toMatchObject({ durationS: 210, cadenceRpm: 90, target: { kind: 'ftp', from: 0.8, to: 0.8 } });
+  });
+
+  it('skips malformed duration steps and reports a warning', () => {
+    const result = mapFinalSurgeWorkout({ Title: 'Malformed duration' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: 'not-a-time', target: power(80) },
+    ] }] });
+    expect(result.workout.steps).toHaveLength(0);
+    expect(result.workout.warnings.join(' ')).toContain('durée absente ou invalide');
+  });
+
+  it('does not expand a repetition group beyond the configured safety limit', () => {
+    const result = mapFinalSurgeWorkout({ Title: 'Repeat limit' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'repeat', repeats: 51, data: [
+        { type: 'step', durationType: 'TIME', duration: '1:00', target: power(80) },
+      ] },
+    ] }] });
+    expect(result.workout.steps).toHaveLength(0);
+    expect(result.workout.warnings.join(' ')).toContain('dépasse la limite de 50');
+  });
+
+  it('does not invent a target for malformed repetition groups', () => {
+    const result = mapFinalSurgeWorkout({ Title: 'Bad repeat' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'repeat', repeats: 0, data: [
+        { type: 'step', durationType: 'TIME', duration: '1:00', target: power(80) },
+      ] },
+    ] }] });
+    expect(result.workout.steps).toHaveLength(0);
+    expect(result.workout.warnings.join(' ')).toContain('groupe de répétitions invalide');
+  });
 });
