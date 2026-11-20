@@ -6,6 +6,8 @@ import { blockSource, workoutSource } from '../infra/sync/sources';
 import { createSyncClient } from '../infra/sync/client';
 import { AccountSession } from '../app/account-session';
 import { importFinalSurgeWorkouts as mapAndSaveFinalSurgeWorkouts } from '../app/final-surge-import';
+import { synchronizeFinalSurge } from '../app/final-surge-sync';
+import { finalSurgeStatus, importFinalSurgeWorkouts as fetchFinalSurgeWorkouts } from '../infra/net/final-surge';
 import { devLogin, fetchAccount, logout, nativeStravaLogin, saveDisplayName } from '../infra/net/account';
 import { Moulinette, isNativeShell } from '../infra/native/shell';
 import { setupAccount } from '../ui/account/account-chip';
@@ -41,15 +43,42 @@ export function composeAccount(w: Wiring): void {
     log: w.log,
   });
 
-  // Retour sur la page, retour du réseau, et toutes les deux minutes tant qu'elle est visible : les autres appareils ont pu changer quelque chose.
+  let signedIn = false;
+  let finalSurgeSyncInFlight: Promise<void> | undefined;
+  const synchronizeConnectedFinalSurge = (): Promise<void> => {
+    if (!signedIn) return Promise.resolve();
+    if (finalSurgeSyncInFlight) return finalSurgeSyncInFlight;
+    finalSurgeSyncInFlight = (async () => {
+      const state = await finalSurgeStatus();
+      if (!state.connected) return;
+      const result = await synchronizeFinalSurge({
+        fetchWorkouts: fetchFinalSurgeWorkouts,
+        importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp() }),
+      });
+      if (result.created || result.updated) w.refreshWorkoutChoices();
+      const message = `Final Surge : ${result.created} créée(s), ${result.updated} mise(s) à jour, ${result.unchanged} inchangée(s), ${result.skipped} ignorée(s).`;
+      w.log(message);
+      for (const error of result.errors) w.log(`Final Surge : ${error}`);
+    })().catch((error) => {
+      w.log(`Synchronisation Final Surge impossible : ${error instanceof Error ? error.message : 'erreur inconnue'}`);
+    }).finally(() => {
+      finalSurgeSyncInFlight = undefined;
+    });
+    return finalSurgeSyncInFlight;
+  };
+
+  // À chaque retour au premier plan, les données du compte et les séances Final Surge peuvent avoir changé.
   document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void synchronizeConnectedFinalSurge();
     void sync.now();
-    // Retour au premier plan avec un trainer perdu : la reconnexion est retentée sans attendre son prochain signal.
     const dev = w.trainerCtl.device;
     if (document.visibilityState === 'visible' && dev instanceof WebBluetoothTrainer) dev.retryNow();
   });
 
-  addEventListener('online', () => void sync.now());
+  addEventListener('online', () => {
+    void sync.now();
+    void synchronizeConnectedFinalSurge();
+  });
 
   setInterval(() => {
     if (document.visibilityState === 'visible') void sync.now();
@@ -77,39 +106,41 @@ export function composeAccount(w: Wiring): void {
     log: w.log,
   });
   const account = setupAccount({ hosts: [...document.querySelectorAll<HTMLElement>('.home-top')], session });
-  setupFinalSurgeDialog({
+  const syncFinalSurge = () => synchronizeFinalSurge({
+    fetchWorkouts: fetchFinalSurgeWorkouts,
     importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp() }),
+  });
+  setupFinalSurgeDialog({
+    syncWorkouts: syncFinalSurge,
     onImported: w.refreshWorkoutChoices,
     log: w.log,
   });
-  // Après l'écran, qui se dessine d'abord : puis la salle temps réel et la synchronisation suivent le compte.
+
+  // La première synchronisation du compte précède l'import Final Surge, afin que les séances déjà synchronisées
+  // depuis un autre appareil soient présentes avant la déduplication.
   let firstSync: Promise<void> = Promise.resolve();
   session.on('changed', (s) => {
+    signedIn = s.kind === 'signed-in';
     if (s.kind === 'signed-in' && s.user.nameConfirmed) world.connect();
     else world.disconnect();
     firstSync = sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
+    if (signedIn) void firstSync.then(synchronizeConnectedFinalSurge);
   });
-  // Qui est connecté, puis la première synchronisation : ce qui dépend du compte (les nouveautés déjà lues sur un autre
-  // appareil) attend cela, avec son propre délai. Sans compte ni réseau, la promesse se tient aussi.
+  // Qui est connecté, puis la première synchronisation : ce qui dépend du compte attend cela.
   w.accountSettled = session
     .refresh()
     .catch(() => undefined)
     .then(() => firstSync)
     .catch(() => undefined);
 
-  /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
   const crowdView = new CrowdView(w.riderTags, w.ridePanel);
-
   const showCrowd = () => crowdView.render(world.status, world.population);
-
   world.onStatus = (s) => {
     account.setWorld(s, world.population);
     showCrowd();
     w.log(`multijoueur : ${s}`);
   };
-
   world.onRoster = (event, name) => w.log(`multijoueur : ${name} ${event === 'join' ? 'arrive' : 'part'}`);
-
   setInterval(() => {
     account.setWorld(world.status, world.population);
     showCrowd();
