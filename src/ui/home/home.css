@@ -455,7 +455,9 @@ button.wo-item-head { display: flex; align-items: center; gap: 12px; width: 100%
   .home-top { position: relative; justify-content: space-between; gap: 10px; }
   .home-brand { background: none; border: 0; box-shadow: none; backdrop-filter: none; padding: 0 0 0 4px; }
   .home-chips { margin-inline: auto 0; }
-  .chip-devices, .chip-rider span, .home-top .account { display: none; }
+  .chip-devices, .chip-rider span { display: none; }
+  /* Le compte reste dans l'en-tête : c'est là que vivent le bouton Strava et le menu Final Surge (account.css le réduit à 40 px). */
+  .home .home-top .account { margin-left: 0; }
   .chip-rider { width: 52px; height: 52px; padding: 0; justify-content: center; border: 2px solid #fff; }
   .chip-rider img { width: 100%; height: 100%; border: 0; }
   .home-world { position: absolute; z-index: 0; inset: 0; border-radius: 0; box-shadow: none; }
