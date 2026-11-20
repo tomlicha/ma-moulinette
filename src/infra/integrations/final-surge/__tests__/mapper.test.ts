@@ -123,6 +123,20 @@ describe('isCyclingIntervalWorkout', () => {
     ] }] })).toBe(true);
   });
 
+  it('accepts watt targets expressed with the unit W and preserves low target values', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '10:00', target: [{ targetType: 'power', targetOption: 'absolute', unit: 'W', targetLow: 12, targetHigh: 34 }] },
+      { type: 'step', durationType: 'TIME', duration: '20:00', target: [{ targetType: 'power', targetOption: 'absolute', unit: 'W', targetLow: 12, targetHigh: 23 }] },
+    ] }] })).toBe(true);
+  });
+
+  it('rejects the whole cycling workout when even one step has no power or FTP target', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '10:00', target: power(60) },
+      { type: 'step', durationType: 'TIME', duration: '20:00', target: [] },
+    ] }] })).toBe(false);
+  });
+
   it('rejects a free cycling workout without a power target', () => {
     expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
       { type: 'step', durationType: 'TIME', duration: '90:00', target: [{ targetType: 'heartRate', targetLow: 120, targetHigh: 130 }] },
