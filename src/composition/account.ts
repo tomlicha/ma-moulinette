@@ -29,9 +29,13 @@ export function composeAccount(w: Wiring): void {
     if (changed && !w.workoutSession.running) w.chooseWorkout(w.homeWorkouts.choice);
   }
 
+  // Le tableau reste ouvert : les modules suivants (nouveautés) y ajoutent leurs sources avant la première synchronisation,
+  // qui attend la réponse du compte, donc commence après la composition.
+  w.syncSources = [riderSettingsSync, workoutSource(w.library, workoutsChanged), blockSource(w.blockLibrary, () => w.editor.libraryChanged())];
+
   const sync = createSyncClient({
     journal: w.syncJournal,
-    sources: [riderSettingsSync, workoutSource(w.library, workoutsChanged), blockSource(w.blockLibrary, () => w.editor.libraryChanged())],
+    sources: w.syncSources,
     log: w.log,
   });
 
@@ -72,12 +76,19 @@ export function composeAccount(w: Wiring): void {
   });
   const account = setupAccount({ hosts: [...document.querySelectorAll<HTMLElement>('.home-top')], session });
   // Après l'écran, qui se dessine d'abord : puis la salle temps réel et la synchronisation suivent le compte.
+  let firstSync: Promise<void> = Promise.resolve();
   session.on('changed', (s) => {
     if (s.kind === 'signed-in' && s.user.nameConfirmed) world.connect();
     else world.disconnect();
-    void sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
+    firstSync = sync.setUser(s.kind === 'signed-in' ? s.user : undefined);
   });
-  void session.refresh();
+  // Qui est connecté, puis la première synchronisation : ce qui dépend du compte (les nouveautés déjà lues sur un autre
+  // appareil) attend cela, avec son propre délai. Sans compte ni réseau, la promesse se tient aussi.
+  w.accountSettled = session
+    .refresh()
+    .catch(() => undefined)
+    .then(() => firstSync)
+    .catch(() => undefined);
 
   /** Pastille de l'écran Sortie : visible seulement avec un compte connecté à la salle. */
   const crowdView = new CrowdView(w.riderTags, w.ridePanel);

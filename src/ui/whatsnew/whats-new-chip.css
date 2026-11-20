@@ -1,0 +1,15 @@
+/*
+ * La pastille « Nouveautés » de l'en-tête de l'accueil (docs/design/nouveautes.md). Elle reprend `.home-chip` (home.css).
+ * Dans sa propre feuille : la carte et le journal (whatsnew.css) sont chargés à la demande, pas la pastille.
+ */
+.chip-news { position: relative; gap: 8px; padding: 0 16px 0 12px; }
+.news-ico svg { display: block; width: 22px; height: 22px; color: var(--accent); }
+.news-dot { display: none; position: absolute; top: 7px; right: 9px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-sizing: content-box; translate: 2px -2px; }
+.chip-news[data-unread='true'] .news-dot { display: block; }
+
+/* iPhone en paysage : seule l'icône, ronde comme la fiche du coureur. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .chip-news { width: 52px; height: 52px; padding: 0; justify-content: center; border: 2px solid #fff; }
+  .news-label { display: none; }
+  .news-dot { top: 4px; right: 4px; }
+}

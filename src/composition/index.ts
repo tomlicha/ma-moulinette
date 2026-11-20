@@ -8,6 +8,7 @@ import { composeRide } from './ride';
 import { composeRider } from './rider';
 import { composeScreens } from './screens';
 import { composeTrainer } from './trainer';
+import { composeWhatsNew } from './whatsnew';
 import { composeWorkout } from './workout';
 import type { Wiring } from './wiring';
 
@@ -28,5 +29,6 @@ export function composeApp(): void {
   composeRecap(w); // l'export de la sortie et son récapitulatif
   composeScreens(w); // l'accueil, le menu de la sortie, le routeur
   composeAccount(w); // synchronisation, compte, salle temps réel
+  composeWhatsNew(w); // la carte et le journal des nouveautés ; leurs repères rejoignent la synchronisation d'account
   composeLaunch(w); // la première connexion
 }
