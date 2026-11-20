@@ -131,7 +131,12 @@ export class FinalSurgeClient {
       array: 'true',
       newobject: 'true',
     });
-    return this.get(`/WorkoutBuilderGet?${params.toString()}`);
+    const payload = await this.get(`/WorkoutBuilderGet?${params.toString()}`);
+
+    // Diagnostic temporaire : permet d'inspecter la structure réelle renvoyée par Final Surge.
+    console.info('[Final Surge] WorkoutBuilderGet JSON:', JSON.stringify(payload, null, 2));
+
+    return payload;
   }
 
   private async get(path: string): Promise<unknown> {

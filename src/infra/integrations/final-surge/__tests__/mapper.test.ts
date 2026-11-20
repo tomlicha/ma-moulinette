@@ -179,4 +179,17 @@ describe('isCyclingIntervalWorkout', () => {
       { type: 'step', durationType: 'TIME', duration: '5:00', target: power(105) },
     ] }] })).toBe(false);
   });
+
+  it('accepts Final Surge sport labels containing bike, such as Bike - Interval', () => {
+    const builder = { target_options: [{ sport: 'Bike - Interval', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '10:00', target: [{ targetType: 'power', targetOption: 'absolute', unit: 'W', targetLow: 12, targetHigh: 34 }] },
+      { type: 'repeat', repeats: 2, data: [
+        { type: 'step', durationType: 'TIME', duration: '20:00', target: [{ targetType: 'power', targetOption: 'absolute', unit: 'W', targetLow: 12, targetHigh: 243 }] },
+      ] },
+    ] }] };
+    expect(isCyclingIntervalWorkout(builder)).toBe(true);
+    const mapped = mapFinalSurgeWorkout({ Title: 'Bike intervals' }, builder);
+    expect(mapped.workout.steps).toHaveLength(3);
+    expect(mapped.workout.steps[0]?.target).toEqual({ kind: 'watts', from: 23, to: 23 });
+  });
 });

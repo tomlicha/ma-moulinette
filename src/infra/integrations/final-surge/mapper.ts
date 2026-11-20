@@ -42,14 +42,16 @@ function unwrapBuilder(payload: unknown): RecordLike | undefined {
   }
   return isRecord(current) ? current : undefined;
 }
+function isBikeSport(value: string | undefined): boolean {
+  const sport = (value ?? '').toLowerCase();
+  return sport.includes('bike') || ['cycling', 'biking', 'cycle'].includes(sport);
+}
 function selectWorkoutOption(builder: RecordLike): RecordLike | undefined {
   const raw = get(builder, 'target_options', 'targetOptions', 'TargetOptions');
   const options = Array.isArray(raw) ? raw.filter(isRecord) : [];
   if (!options.length) return builder;
-  // Le sport est le premier critère : ne jamais choisir un autre sport parce qu'il a une cible de puissance.
-  return options.find((option) => ['cycling', 'bike', 'biking', 'cycle'].includes(
-    (firstText(option, 'sport', 'Sport') ?? '').toLowerCase(),
-  ));
+  // Le sport est le premier critère : accepter les libellés Final Surge comme « Bike - Interval ».
+  return options.find((option) => isBikeSport(firstText(option, 'sport', 'Sport', 'type', 'Type')));
 }
 function parseDurationSeconds(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value);
@@ -202,8 +204,8 @@ export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   if (!builder) return false;
   const selected = selectWorkoutOption(builder);
   if (!selected) return false;
-  const sport = (firstText(selected, 'sport', 'Sport') ?? '').toLowerCase();
-  if (!['cycling', 'bike', 'biking', 'cycle'].includes(sport)) return false;
+  const sport = firstText(selected, 'sport', 'Sport', 'type', 'Type');
+  if (!isBikeSport(sport)) return false;
 
   const hasPowerTargetOnEveryStep = (items: unknown[], depth = 0): boolean => {
     if (depth > 8 || items.length === 0) return false;
