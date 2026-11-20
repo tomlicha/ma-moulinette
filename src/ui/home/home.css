@@ -211,14 +211,15 @@ button.rider-chip:hover { background: #FBF6EF; }
 .rider-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rider-field label { font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .rider-field .note { margin: 0; font-size: .8rem; }
-.stepper { display: flex; align-items: center; height: 48px; overflow: hidden; border: 1px solid var(--btn-line); border-radius: 14px; background: #fff; }
-.stepper button { width: 44px; height: 100%; flex: none; padding: 0; border: 0; border-radius: 0; background: rgb(90 60 30 / .06); color: var(--fg); font-size: 1.3rem; }
-.stepper button:hover:not(:disabled) { background: rgb(90 60 30 / .12); }
-.stepper button.stepper-value { flex: 1; width: auto; min-width: 0; padding: 0 4px 0 0; background: transparent; color: var(--fg); text-align: right; font: 700 1.25rem Barlow, system-ui, sans-serif; }
-.stepper button.stepper-value:hover:not(:disabled) { background: rgb(90 60 30 / .06); }
-.stepper button.stepper-value:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
-.stepper button:disabled { opacity: .5; cursor: not-allowed; }
-.stepper > span { padding: 0 8px 0 2px; color: var(--muted); font-size: .9rem; }
+.rider-stepper { display: flex; align-items: center; gap: 4px; height: 56px; padding: 4px; box-sizing: border-box; border-radius: 16px; background: rgb(90 60 30 / .06); }
+.rider-stepper button { width: 44px; height: 44px; flex: none; padding: 0; border: 1px solid var(--btn-line); border-radius: 50%; background: #fff; color: var(--fg); font-size: 1.4rem; line-height: 1; }
+.rider-stepper button:hover:not(:disabled) { background: #FBF6EF; }
+.rider-stepper button:disabled { opacity: .4; cursor: not-allowed; }
+.rider-stepper-val { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+.rider-stepper-val input { width: 3.2ch; min-width: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg); text-align: right; font: 700 1.6rem/1.2 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-variant-numeric: tabular-nums; box-shadow: none; }
+.rider-stepper-val input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.rider-stepper-val input:read-only { cursor: pointer; }
+.rider-stepper-val span { color: var(--muted); font-size: .95rem; }
 .rider-zones { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
 .rider-zones li { display: flex; align-items: center; gap: 8px; font-size: .95rem; }
 .rider-zones li i { width: 10px; height: 10px; flex: none; border-radius: 3px; }
@@ -319,7 +320,7 @@ button.rider-chip:hover { background: #FBF6EF; }
   .rider-card { padding: 14px 18px; gap: 8px; }
   .rider-avatar { width: 56px; height: 56px; }
   .rider-top h2 { font-size: 1.6rem; }
-  .stepper { height: 40px; }
+  .rider-stepper { height: 52px; }
   .rider-zones { grid-template-columns: 1fr 1fr; gap: 3px 16px; }
   .wheel-card { --wh: 160px; padding: 12px 16px; gap: 8px; }
   .rider-zones li { font-size: .85rem; }
@@ -361,8 +362,8 @@ button.rider-chip:hover { background: #FBF6EF; }
 .dev-pill[data-tone='ok'] i { background: #2B8A3E; box-shadow: 0 0 0 3px rgb(43 138 62 / .2); }
 .dev-pill[data-tone='busy'] i { background: #C2257A; }
 .dev-pill[data-tone='error'] i { background: #C92A2A; }
-.chip-rider { padding: 0 18px 0 6px; }
-.chip-rider img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); background: #E2E4E7; }
+.chip-rider { padding: 0 18px 0 6px; white-space: nowrap; flex: none; }
+.chip-rider img { width: 36px; height: 36px; flex: none; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); background: #E2E4E7; }
 
 /* Le monde : la scène dans une carte arrondie ; le titre sur le ciel, « Ta sortie » en bas. */
 .home-world { position: relative; z-index: 1; grid-column: 1 / 9; grid-row: 2; min-height: 0; overflow: hidden; border-radius: var(--radius-card); background: #3F86D0; box-shadow: var(--shadow-card); }

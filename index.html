@@ -597,22 +597,20 @@
             <div class="rider-fields">
               <div class="rider-field">
                 <label for="rider-mass">Masse (coureur + vélo)</label>
-                <div class="stepper">
-                  <button type="button" class="secondary" data-step="mass" data-dir="-1" aria-label="Masse moins 1 kg">−</button>
-                  <button type="button" id="rider-mass" class="stepper-value" aria-haspopup="dialog" aria-label="Masse en kilogrammes : choisir sur la roulette"></button>
-                  <span>kg</span>
-                  <button type="button" class="secondary" data-step="mass" data-dir="1" aria-label="Masse plus 1 kg">+</button>
-                </div>
+                <div class="rider-stepper">
+                    <button type="button" data-step="mass" data-dir="-1" aria-label="Masse moins 1 kg">−</button>
+                    <div class="rider-stepper-val"><input type="text" id="rider-mass" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Masse en kilogrammes" /><span>kg</span></div>
+                    <button type="button" data-step="mass" data-dir="1" aria-label="Masse plus 1 kg">+</button>
+                  </div>
                 <p id="rider-mass-note" class="note" hidden>La masse est figée pendant la sortie.</p>
               </div>
               <div class="rider-field">
                 <label for="rider-ftp">FTP</label>
-                <div class="stepper">
-                  <button type="button" class="secondary" data-step="ftp" data-dir="-1" aria-label="FTP moins 1 W">−</button>
-                  <button type="button" id="rider-ftp" class="stepper-value" aria-haspopup="dialog" aria-label="FTP en watts : choisir sur la roulette"></button>
-                  <span>W</span>
-                  <button type="button" class="secondary" data-step="ftp" data-dir="1" aria-label="FTP plus 1 W">+</button>
-                </div>
+                <div class="rider-stepper">
+                    <button type="button" data-step="ftp" data-dir="-1" aria-label="FTP moins 1 W">−</button>
+                    <div class="rider-stepper-val"><input type="text" id="rider-ftp" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="FTP en watts" /><span>W</span></div>
+                    <button type="button" data-step="ftp" data-dir="1" aria-label="FTP plus 1 W">+</button>
+                  </div>
               </div>
             </div>
             <ul id="rider-zones" class="rider-zones" aria-label="Zones de puissance"></ul>
