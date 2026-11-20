@@ -47,3 +47,8 @@ Ces endpoints peuvent changer sans préavis. Cette intégration est expérimenta
 - `POST /api/integrations/final-surge/disconnect`
 
 Toutes les mutations exigent la session Ma Moulinette et l'en-tête anti-CSRF existant.
+
+
+### Filtrage des séances importées
+
+La liste calendrier Final Surge peut contenir plusieurs sports et des sorties sans structure d'intervalles. Le serveur ne transmet à l'import que les séances dont l'option Workout Builder sélectionnée identifie explicitement le vélo et qui contiennent soit un groupe de répétitions, soit plusieurs étapes de travail à cibles/intensités distinctes. Les séances de course, de natation, les sorties vélo continues et les structures non reconnues sont ignorées.
