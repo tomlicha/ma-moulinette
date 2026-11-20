@@ -43,6 +43,7 @@ export function composeHud(w: Wiring): void {
     v.onTags = (tags) => riderTags.set(tags);
     v.onNearby = (n) => ridePanel.setNearby(n, w.rideSession.active ? w.rideSession.draft : 0);
     v.onStats = (s) => rideLoading.showStats(s);
+    v.onResolution = (r) => w.log(`rendu 3D : résolution ${r} (selon le temps des images ; ?resolution=fixed pour la figer)`);
     w.log(`rendu 3D : ${v.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} · qualité ${w.quality}${w.rideViews.losses ? ` · reprise n° ${w.rideViews.losses}` : ''}`);
   });
 
