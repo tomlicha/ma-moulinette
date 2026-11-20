@@ -25,11 +25,6 @@ migrations_dir = "worker/migrations"
 name = "WORLD"
 class_name = "WorldRoom"
 
-# Déclare explicitement l'export du Durable Object pour les déploiements Worker Previews.
-[exports.WorldRoom]
-type = "durable-object"
-storage = "sqlite"
-
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["WorldRoom"]
