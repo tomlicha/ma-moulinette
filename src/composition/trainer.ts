@@ -85,6 +85,7 @@ export function composeTrainer(w: Wiring): void {
 
   w.hub.on('measurement', (m) => {
     w.autoStart.onMeasurement(m);
+    w.workoutSession.onMeasurement(m);
     readings.record(m);
   });
 }
