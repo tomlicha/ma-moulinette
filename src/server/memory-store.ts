@@ -1,5 +1,6 @@
 import type { Tokens } from '../infra/export/strava/api';
 import type { AccountStore, Provider, User } from './accounts';
+import type { FriendStore } from './friends';
 import type { SyncRow, SyncStore } from './sync';
 
 /** Comptes en mémoire : pour les tests. Même comportement que le magasin D1 du Worker. */
@@ -76,6 +77,33 @@ export function createMemorySyncStore(): SyncStore {
     },
     async countLive(userId) {
       return of(userId).filter((r) => r.body !== null).length;
+    },
+  };
+}
+
+/** Amis en mémoire : pour les tests. Même comportement que le magasin D1 du Worker (les noms viennent des comptes). */
+export function createMemoryFriendStore(accounts: { users: Map<string, User> }): FriendStore {
+  const rows: { userId: string; friendId: string; at: number }[] = [];
+  const describe = (id: string) => {
+    const u = accounts.users.get(id);
+    return u && u.nameConfirmed ? { id: u.id, name: u.displayName } : undefined;
+  };
+  return {
+    async list(userId) {
+      return rows
+        .filter((r) => r.userId === userId)
+        .sort((a, b) => a.at - b.at || (a.friendId < b.friendId ? -1 : 1))
+        .flatMap((r) => describe(r.friendId) ?? []);
+    },
+    async describe(id) {
+      return describe(id);
+    },
+    async add(userId, friendId, now) {
+      if (!rows.some((r) => r.userId === userId && r.friendId === friendId)) rows.push({ userId, friendId, at: now });
+    },
+    async remove(userId, friendId) {
+      const i = rows.findIndex((r) => r.userId === userId && r.friendId === friendId);
+      if (i >= 0) rows.splice(i, 1);
     },
   };
 }

@@ -48,6 +48,8 @@
 .op-group-txt .op-who { flex: none; }
 .op-group-txt .op-state { white-space: normal; }
 
+.op-star { flex: none; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; }
+.op-star.op-friend { color: var(--accent); }
 .op-btn { flex: none; min-height: 44px; padding: 0 20px; border: 0; border-radius: 14px; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 16px; }
 .op-btn:disabled { opacity: .4; cursor: not-allowed; }
 .op-btn-quiet { background: var(--raised); color: var(--fg); border: 1px solid var(--btn-line); margin-top: 14px; }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GroupSummary } from '../../infra/net/group-protocol';
-import { countdownText, durationText, groupLine, groupPill, leftText, ridersTitle, riderStatus } from './online-model';
+import { countdownText, durationText, friendErrorText, groupLine, groupPill, leftText, ridersTitle, riderStatus } from './online-model';
 
 const g = (over: Partial<GroupSummary> = {}): GroupSummary => ({ id: 'g1', name: 'Séance de Léa', workoutName: 'Sweet spot', courseId: 'col', t0: 10_000, durationS: 1500, count: 3, ...over });
 
@@ -33,8 +33,9 @@ describe('groupLine', () => {
 
 describe('la liste « En ligne »', () => {
   it('dit si le coureur roule, et combien la liste ne montre pas', () => {
-    expect(riderStatus({ riding: true })).toBe('en sortie');
-    expect(riderStatus({ riding: false })).toBe('en ligne');
+    expect(riderStatus({ riding: true, open: true })).toBe('en sortie');
+    expect(riderStatus({ riding: true, open: false })).toBe('en sortie · amis seulement');
+    expect(riderStatus({ riding: false, open: true })).toBe('en ligne');
     expect(ridersTitle(0, 0)).toBe('En ligne');
     expect(ridersTitle(12, 12)).toBe('En ligne · 12');
     expect(ridersTitle(30, 128)).toBe('En ligne · 30 sur 128');
@@ -51,4 +52,13 @@ describe('la pastille et les raisons de départ', () => {
     for (const r of ['self-stopped', 'offline', 'over', 'full', 'unknown', 'empty', 'invalid', 'missed', 'busy']) expect(leftText(r, 'Séance de Léa').length).toBeGreaterThan(10);
     expect(leftText('over', 'Séance de Léa')).toContain('Séance de Léa');
   });
+
+describe('friendErrorText', () => {
+  it("dit pourquoi un ami n'a pas pu être ajouté", () => {
+    expect(friendErrorText('too-many')).toContain('100');
+    expect(friendErrorText('unknown')).toContain('plus disponible');
+    expect(friendErrorText('signed-out')).toContain('Strava');
+    expect(friendErrorText('unavailable')).toContain('serveur');
+  });
+});
 });

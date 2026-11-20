@@ -16,8 +16,11 @@
 import type { RoadNetwork } from '../../domain/course/network';
 import type { NetPosition } from '../../domain/course/track';
 
-/** 2 : la séance de groupe prend l'allure du créateur (`groupCreate` porte sa FTP et sa masse) ; un ancien client est invité à recharger. */
-export const PROTOCOL_VERSION = 2;
+/**
+ * 2 : la séance de groupe prend l'allure du créateur (`groupCreate` porte sa FTP et sa masse).
+ * 3 : les amis (`friends`, et `uid`, `friend`, `open` dans `who`). Un ancien client est invité à recharger la page.
+ */
+export const PROTOCOL_VERSION = 3;
 
 /**
  * Gestion d'intérêt : au-delà de `INTEREST_K + 1` coureurs, la salle n'envoie à chacun que ses `INTEREST_K` plus proches

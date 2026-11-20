@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Member } from '../src/server/room.ts';
-import { GROUP_NEXT_KEY, GROUP_PREFIX, WorldRoom, type CfWebSocket, type DurableObjectStateLike } from './world-room.ts';
+import { FRIENDS_PREFIX, GROUP_NEXT_KEY, GROUP_PREFIX, WorldRoom, type CfWebSocket, type DurableObjectStateLike } from './world-room.ts';
 
 /** Une connexion factice : elle garde ce qu'on lui envoie, et son coureur en pièce jointe, comme celle de Cloudflare. */
 class FakeSocket implements CfWebSocket {
@@ -133,5 +133,31 @@ describe('WorldRoom : les groupes survivent à un redémarrage', () => {
     await ready();
     say(room, lea, { type: 'who' });
     expect((lea.last('who') as { groups: unknown[] }).groups).toEqual([]);
+  });
+
+  it("range la liste d'amis de chaque coureur et la retrouve après un redémarrage ; celle d'un coureur parti est effacée", async () => {
+    const storage = fakeStorage();
+    const lea = new FakeSocket({ slot: 1, userId: 'u1', name: 'Léa' });
+    const tom = new FakeSocket({ slot: 2, userId: 'u2', name: 'Tom' });
+    const first = boot(storage, [lea, tom]);
+    await first.ready();
+    say(first.room, lea, { type: 'friends', ids: ['u2'] });
+    say(first.room, tom, { type: 'friends', ids: ['u1', 'u9'] });
+    expect(storage.data.get(FRIENDS_PREFIX + 'u1')).toEqual(['u2']);
+    expect(storage.data.get(FRIENDS_PREFIX + 'u2')).toEqual(['u1', 'u9']);
+
+    // Redémarrage : Léa est encore connectée, Tom non.
+    const lea2 = new FakeSocket(lea.deserializeAttachment() as Member);
+    const paul = new FakeSocket({ slot: 3, userId: 'u3', name: 'Paul' });
+    const second = boot(storage, [lea2, paul]);
+    await second.ready();
+    expect(storage.data.has(FRIENDS_PREFIX + 'u2')).toBe(false); // celle de Tom n'a plus personne
+    // La liste de Léa a été reprise : Paul est ami de personne, Léa a Tom (parti) ; elle voit Paul sans le marquer.
+    say(second.room, paul, { type: 'who' });
+    say(second.room, lea2, { type: 'who' });
+    expect((lea2.last('who') as { riders: { name: string; friend: boolean }[] }).riders).toEqual([expect.objectContaining({ name: 'Paul', friend: false })]);
+    // Et son « mes amis » marche : elle a ajouté u3 ? non, elle n'a que u2. Elle ajoute Paul : il est marqué sans nouveau redémarrage.
+    say(second.room, lea2, { type: 'friends', ids: ['u3'] });
+    expect(storage.data.get(FRIENDS_PREFIX + 'u1')).toEqual(['u3']);
   });
 });

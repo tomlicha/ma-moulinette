@@ -1,10 +1,13 @@
+import { FriendsList } from '../app/friends-list';
 import { GroupSession, type GroupLeaveReason } from '../app/group-session';
+import { changeFriend, fetchFriends } from '../infra/net/friends';
 import { GroupDrift } from '../domain/group/drift';
 import { GroupPace } from '../domain/group/group-pace';
 import type { Workout } from '../domain/workout/model';
+import type { OnlineRider } from '../infra/net/group-protocol';
 import { lazyOnline } from '../ui/online/lazy-online';
 import { setupOnlineChip } from '../ui/online/online-chip';
-import { groupPill, leftText } from '../ui/online/online-model';
+import { friendErrorText, groupPill, leftText } from '../ui/online/online-model';
 import { followEndText } from '../ui/ride/follow-view';
 import { byId as $ } from '../ui/shared/dom';
 import type { Wiring } from './wiring';
@@ -25,10 +28,19 @@ export function composeOnline(w: Wiring): void {
     followHandle?.(msg);
     groups.handle(msg);
   };
+  // Mes amis : ceux que j'ai ajoutés depuis la liste « En ligne », rangés avec mon compte et dits à la salle à chaque connexion.
+  const friends = new FriendsList({
+    api: { list: () => fetchFriends(), add: (id) => changeFriend({ add: id }), remove: (id) => changeFriend({ remove: id }) },
+    world: w.world,
+  });
   const previousOnStatus = w.world.onStatus;
   w.world.onStatus = (s) => {
     previousOnStatus?.(s);
-    if (s !== 'online') groups.worldLost();
+    if (s === 'online') void friends.load();
+    else {
+      groups.worldLost();
+      friends.clear();
+    }
   };
 
   const courseName = (id: string) => w.journey.network.course(id)?.name ?? id;
@@ -41,6 +53,10 @@ export function composeOnline(w: Wiring): void {
         ? 'Connecte ton home trainer pour rouler avec d’autres.'
         : undefined;
 
+  /** La liste « En ligne » telle que je la vois : mes amis en tête, d'après ma liste (elle suit mon geste sans attendre la salle). */
+  const withFriends = (riders: readonly OnlineRider[]): OnlineRider[] =>
+    riders.map((r) => ({ ...r, friend: friends.has(r.uid) })).sort((a, b) => Number(b.friend) - Number(a.friend));
+
   const planNow = () => ({ workoutName: w.workoutSession.workout?.name, courseName: courseName(w.home.selectedCourseId()) });
 
   const online = lazyOnline(
@@ -51,6 +67,12 @@ export function composeOnline(w: Wiring): void {
         online.panel?.notice('');
         online.panel?.close();
         w.follow.request(slot, name, 'place');
+      },
+      toggleFriend: (uid, name, on) => {
+        online.panel?.notice('');
+        void (on ? friends.add(uid, name) : friends.remove(uid)).then((r) => {
+          if (r !== 'ok') online.panel?.notice(friendErrorText(r));
+        });
       },
       joinGroup: (id) => {
         online.panel?.notice('');
@@ -73,7 +95,7 @@ export function composeOnline(w: Wiring): void {
       panel.setBlock(blockReason());
       panel.setPlan(planNow());
       panel.setGroup(groups.group);
-      panel.render(groups.online.riders, groups.online.groups, groups.online.total);
+      panel.render(withFriends(groups.online.riders), groups.online.groups, groups.online.total);
     },
   );
 
@@ -104,7 +126,8 @@ export function composeOnline(w: Wiring): void {
   // Un choix du créateur est arrivé : le prolongement de la route déjà calculé par défaut n'est plus le bon.
   groups.on('routes', () => w.journey.refreshRouting());
 
-  groups.on('online', (d) => online.whenLoaded((panel) => panel.render(d.riders, d.groups, d.total)));
+  groups.on('online', (d) => online.whenLoaded((panel) => panel.render(withFriends(d.riders), d.groups, d.total)));
+  friends.on('changed', () => online.whenLoaded((panel) => panel.render(withFriends(groups.online.riders), groups.online.groups, groups.online.total)));
   groups.on('changed', (g) => {
     online.whenLoaded((panel) => panel.setGroup(g));
     w.crowd.setGroupLine(g && groups.running ? groupPill(g.members.length) : undefined);

@@ -8,6 +8,7 @@
  *   { type: 'unfollow' }            arrêter de suivre
  *   { type: 'refuse', slot }        le coureur suivi ne veut plus de ce suiveur
  *   { type: 'who', q? }             qui est en ligne (filtré par nom) et quels groupes existent
+ *   { type: 'friends', ids }        mes amis (identifiants de compte) : la salle s'en sert pour les montrer en tête et pour « mes amis peuvent me rejoindre »
  *   { type: 'time', c }             heure du client, pour régler l'horloge commune
  *   { type: 'groupCreate', workout, courseId, startInS, ftpW, massKg }   crée une séance de groupe qui démarre dans `startInS`
  *                                       secondes ; sa FTP et sa masse fixent l'allure du groupe (voir `domain/group/group-pace.ts`)
@@ -19,7 +20,7 @@
  *   { type: 'followEnd', reason }              le suivi est fini (refusé, impossible, ou le coureur est parti)
  *   { type: 'followedBy', slot, name }         quelqu'un me suit
  *   { type: 'unfollowedBy', slot }             il ne me suit plus
- *   { type: 'who', riders, groups, total }     réponse à `who`
+ *   { type: 'who', riders, groups, total }     réponse à `who` ; chaque coureur : `uid` (son compte), `friend` (je l'ai ajouté), `open` (je peux le rejoindre)
  *   { type: 'time', c, s }                     l'heure du client renvoyée, et celle du serveur (horloge commune)
  *   { type: 'groupState', group }              on est dans ce groupe : séance, parcours, départ, membres
  *   { type: 'groupMembers', id, leader, members }   les membres ont changé (et peut-être le créateur : le plus ancien qui reste)
@@ -28,6 +29,7 @@
  */
 import type { NetPosition } from '../../domain/course/track';
 import type { Workout } from '../../domain/workout/model';
+import { isAccountId, MAX_FRIENDS } from '../../shared/protocol/friends';
 import { readWireWorkout } from '../../domain/workout/wire';
 
 export type JoinableBy = 'none' | 'friends' | 'all';
@@ -45,6 +47,12 @@ export interface OnlineRider {
   name: string;
   /** Il est en sortie en ce moment : on peut le rejoindre. */
   riding: boolean;
+  /** L'identifiant de son compte : de quoi l'ajouter en ami. */
+  uid: string;
+  /** Je l'ai ajouté en ami. */
+  friend: boolean;
+  /** Son réglage « Qui peut me rejoindre » me laisse le rejoindre (tout le monde, ou ses amis dont je suis). */
+  open: boolean;
 }
 
 export interface GroupMember {
@@ -89,6 +97,7 @@ export type ClientGroupMessage =
   | { type: 'unfollow' }
   | { type: 'refuse'; slot: number }
   | { type: 'who'; q: string }
+  | { type: 'friends'; ids: string[] }
   | { type: 'time'; c: number }
   | { type: 'groupCreate'; workout: Workout; courseId: string; startInS: number; ftpW: number; massKg: number }
   | { type: 'groupJoin'; id: string }
@@ -109,6 +118,8 @@ export type ServerGroupMessage =
 
 /** Taille maximale d'un petit ordre du client : tout le reste est rejeté. */
 const MAX_TEXT_CHARS = 256;
+/** Taille maximale de la liste d'amis envoyée à la salle : `MAX_FRIENDS` identifiants de 40 caractères au plus. */
+const MAX_FRIENDS_CHARS = 5000;
 /** Taille maximale de la création d'un groupe, qui porte une séance entière. */
 export const MAX_CREATE_CHARS = 40_000;
 export const MAX_QUERY_CHARS = 40;
@@ -136,7 +147,7 @@ export function parseClientMessage(text: string): ClientGroupMessage | undefined
     return undefined;
   }
   if (!m || typeof m !== 'object' || Array.isArray(m)) return undefined;
-  if (m.type !== 'groupCreate' && text.length > MAX_TEXT_CHARS) return undefined;
+  if (m.type === 'friends' ? text.length > MAX_FRIENDS_CHARS : m.type !== 'groupCreate' && text.length > MAX_TEXT_CHARS) return undefined;
   switch (m.type) {
     case 'joinable':
       return JOINABLE_VALUES.includes(m.who as JoinableBy) ? { type: 'joinable', who: m.who as JoinableBy } : undefined;
@@ -152,6 +163,10 @@ export function parseClientMessage(text: string): ClientGroupMessage | undefined
     }
     case 'time':
       return isFiniteNumber(m.c) ? { type: 'time', c: m.c } : undefined;
+    case 'friends': {
+      if (!Array.isArray(m.ids) || m.ids.length > MAX_FRIENDS || !m.ids.every(isAccountId)) return undefined;
+      return { type: 'friends', ids: [...new Set(m.ids as string[])] };
+    }
     case 'groupCreate': {
       const workout = readWireWorkout(m.workout);
       if (!workout || !isId(m.courseId, MAX_COURSE_ID_CHARS) || !isFiniteNumber(m.startInS)) return undefined;
@@ -225,7 +240,8 @@ export function parseServerMessage(m: Record<string, unknown>): ServerGroupMessa
       const riders: OnlineRider[] = [];
       for (const r of m.riders as Record<string, unknown>[]) {
         if (!r || !isSlot(r.slot) || typeof r.name !== 'string' || typeof r.riding !== 'boolean') return undefined;
-        riders.push({ slot: r.slot, name: r.name, riding: r.riding });
+        if (!isAccountId(r.uid) || typeof r.friend !== 'boolean' || typeof r.open !== 'boolean') return undefined;
+        riders.push({ slot: r.slot, name: r.name, riding: r.riding, uid: r.uid, friend: r.friend, open: r.open });
       }
       const groups: GroupSummary[] = [];
       for (const g of m.groups as Record<string, unknown>[]) {

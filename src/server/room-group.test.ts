@@ -57,9 +57,9 @@ describe('Room : qui est en ligne', () => {
     send(0, { type: 'who' });
     const who = conns[0]!.last('who')!;
     expect(who.riders).toEqual([
-      { slot: slots[2], name: 'Émile', riding: true },
-      { slot: slots[1], name: 'Léa', riding: false },
-      { slot: slots[3], name: 'Zoé', riding: false },
+      { slot: slots[2], name: 'Émile', riding: true, uid: 'u2', friend: false, open: true },
+      { slot: slots[1], name: 'Léa', riding: false, uid: 'u1', friend: false, open: true },
+      { slot: slots[3], name: 'Zoé', riding: false, uid: 'u3', friend: false, open: true },
     ]);
     expect(who.total).toBe(3);
   });

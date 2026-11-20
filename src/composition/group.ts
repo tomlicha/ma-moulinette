@@ -86,19 +86,20 @@ export function composeGroup(w: Wiring): void {
   // Quand on arrête sa sortie, on ne suit plus personne : le coureur suivi n'a plus à nous attendre.
   w.rideSession.on('stopped', () => follow.stop('manual'));
 
-  // Qui peut me rejoindre : un réglage du menu de la sortie, retenu sur l'appareil. Tous par défaut, ou personne ; « mes
-  // amis » viendra avec la liste d'amis (le serveur le sait déjà appliquer).
-  const toggle = $<HTMLInputElement>('joinable-toggle');
+  // Qui peut me rejoindre : un réglage du menu de la sortie, retenu sur l'appareil. Tout le monde par défaut ; « mes amis » :
+  // ceux que j'ai ajoutés depuis la liste « En ligne » (la salle l'applique, voir `Room`) ; ou personne.
+  const select = $<HTMLSelectElement>('joinable-select');
   let who: JoinableBy = 'all';
   try {
-    if (w.prefs.getItem(JOINABLE_KEY) === 'none') who = 'none';
+    const saved = w.prefs.getItem(JOINABLE_KEY);
+    if (saved === 'none' || saved === 'friends') who = saved;
   } catch {
-    // préférence illisible : tous
+    // préférence illisible : tout le monde
   }
-  toggle.checked = who === 'all';
+  select.value = who;
   w.world.setJoinable(who);
-  toggle.addEventListener('change', () => {
-    who = toggle.checked ? 'all' : 'none';
+  select.addEventListener('change', () => {
+    who = select.value === 'none' || select.value === 'friends' ? select.value : 'all';
     w.world.setJoinable(who);
     try {
       w.prefs.setItem(JOINABLE_KEY, who);

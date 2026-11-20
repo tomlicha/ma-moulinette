@@ -6,7 +6,7 @@
  */
 import { COL_DES_ERABLES } from '../src/domain/course/courses/col-des-erables.ts';
 import type { GroupSnapshot, GroupStore } from '../src/server/groups.ts';
-import { Room, TICK_MS, type Connection, type Member } from '../src/server/room.ts';
+import { Room, TICK_MS, type Connection, type FriendListStore, type Member } from '../src/server/room.ts';
 
 /** Ce que ce module utilise des WebSocket de Cloudflare : de quoi le tester sans leurs types. */
 export interface CfWebSocket {
@@ -32,9 +32,10 @@ export interface DurableObjectStateLike {
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>;
 }
 
-/** Clés du stockage : un groupe par clé, et le prochain numéro de groupe. */
+/** Clés du stockage : un groupe par clé, le prochain numéro de groupe, et la liste d'amis de chaque coureur connecté. */
 export const GROUP_PREFIX = 'group:';
 export const GROUP_NEXT_KEY = 'groups:next';
+export const FRIENDS_PREFIX = 'friends:';
 
 declare const WebSocketPair: { new (): { 0: CfWebSocket; 1: CfWebSocket } };
 
@@ -62,7 +63,13 @@ export class WorldRoom {
         void ctx.storage.put(GROUP_NEXT_KEY, next).catch(ignore);
       },
     };
-    this.room = new Room(COL_DES_ERABLES, undefined, { groupStore: store });
+    // La liste d'amis de chaque coureur connecté, envoyée par sa page : rangée de même, pour qu'un redémarrage ne la perde pas
+    // (une liste peut dépasser ce que la pièce jointe d'une connexion peut porter).
+    const friendStore: FriendListStore = {
+      save: (userId, ids) => void ctx.storage.put(FRIENDS_PREFIX + userId, ids).catch(ignore),
+      remove: (userId) => void ctx.storage.delete(FRIENDS_PREFIX + userId).catch(ignore),
+    };
+    this.room = new Room(COL_DES_ERABLES, undefined, { groupStore: store, friendStore });
     for (const ws of ctx.getWebSockets()) {
       const m = ws.deserializeAttachment() as Member | null;
       if (m) this.room.restore(m, connectionOf(ws));
@@ -72,6 +79,8 @@ export class WorldRoom {
       const stored = await ctx.storage.list<GroupSnapshot>({ prefix: GROUP_PREFIX });
       const next = (await ctx.storage.get<number>(GROUP_NEXT_KEY)) ?? 1;
       this.room.restoreGroups([...stored.values()], next);
+      const friends = await ctx.storage.list<string[]>({ prefix: FRIENDS_PREFIX });
+      this.room.restoreFriends([...friends].map(([key, ids]) => [key.slice(FRIENDS_PREFIX.length), ids] as const));
     });
   }
 

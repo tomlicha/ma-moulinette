@@ -16,6 +16,8 @@ export interface OnlineActions {
   /** Rejoindre un coureur en sortie : la sortie repart derrière lui. */
   joinRider(slot: number, name: string): void;
   joinGroup(id: string): void;
+  /** Ajouter (`on`) ou retirer un coureur de mes amis : `uid` est son compte. */
+  toggleFriend(uid: string, name: string, on: boolean): void;
   /** Créer une séance de groupe qui démarre dans `startInS` secondes. */
   createGroup(startInS: number): void;
   leaveGroup(): void;
@@ -53,6 +55,12 @@ const TEMPLATE = `
     <div data-o="browse">
       <label class="op-search"><span class="op-sr">Chercher un coureur</span><input type="search" data-o="q" maxlength="40" placeholder="Chercher un coureur" autocomplete="off" enterkeyhint="search" /></label>
 
+      <section aria-labelledby="op-riders-title">
+        <h3 id="op-riders-title" class="op-kicker" data-o="riders-title">En ligne</h3>
+        <ul class="op-list" data-o="riders"></ul>
+        <p class="op-empty" data-o="riders-empty">Personne d’autre en ligne pour l’instant.</p>
+      </section>
+
       <section aria-labelledby="op-groups-title">
         <h3 id="op-groups-title" class="op-kicker">Séances de groupe</h3>
         <ul class="op-list" data-o="groups"></ul>
@@ -68,11 +76,6 @@ const TEMPLATE = `
         </div>
       </section>
 
-      <section aria-labelledby="op-riders-title">
-        <h3 id="op-riders-title" class="op-kicker" data-o="riders-title">En ligne</h3>
-        <ul class="op-list" data-o="riders"></ul>
-        <p class="op-empty" data-o="riders-empty">Personne d’autre en ligne pour l’instant.</p>
-      </section>
     </div>
   </div>
 </aside>`;
@@ -240,7 +243,14 @@ export function setupOnlinePanel(
         dot.setAttribute('aria-hidden', 'true');
         const name = el('span', 'op-who', r.name);
         row.append(dot, name, el('span', 'op-state', riderStatus(r)));
-        if (r.riding) {
+        const star = el('button', `op-star${r.friend ? ' op-friend' : ''}`, r.friend ? '★' : '☆');
+        star.type = 'button';
+        star.setAttribute('aria-pressed', String(r.friend));
+        star.setAttribute('aria-label', r.friend ? `Retirer ${r.name} de mes amis` : `Ajouter ${r.name} à mes amis`);
+        star.title = r.friend ? 'Retirer de mes amis' : 'Ajouter à mes amis';
+        star.addEventListener('click', () => actions.toggleFriend(r.uid, r.name, !r.friend));
+        row.append(star);
+        if (r.riding && r.open) {
           const join = el('button', 'op-btn', 'Rejoindre');
           join.type = 'button';
           join.dataset.needsTrainer = '';

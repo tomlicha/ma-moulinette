@@ -98,7 +98,7 @@ module.exports = async function group({ playwright, browser, url }) {
         followText: follow && !follow.hidden ? t('follow') : '',
         followButtons: [...document.querySelectorAll('.rn-follow')].filter((b) => !b.hidden).map((b) => b.getAttribute('aria-label')),
         followedRows: [...document.querySelectorAll('.rn-followed .rn-name')].map((n) => n.textContent),
-        joinable: document.getElementById('joinable-toggle')?.checked ?? null,
+        joinable: document.getElementById('joinable-select')?.value ?? null,
       };
     }, label);
   const steps = new Steps(snap);
@@ -112,7 +112,7 @@ module.exports = async function group({ playwright, browser, url }) {
   };
   const last = (type) => heard.filter((m) => m.type === type).at(-1);
 
-  await steps.mark('salle connectée', { crowd: /1 autre coureur/i, joinable: true });
+  await steps.mark('salle connectée', { crowd: /1 autre coureur/i, joinable: 'all' });
 
   // Trainer simulé, sortie libre ; l'encart ouvre sa liste (un toucher), Lucie y a son bouton « Suivre ».
   await click('connect-sim');
@@ -164,12 +164,12 @@ module.exports = async function group({ playwright, browser, url }) {
 
   // Le réglage « me rejoindre » part à la salle.
   await page.evaluate(() => {
-    const e = document.getElementById('joinable-toggle');
-    e.checked = false;
+    const e = document.getElementById('joinable-select');
+    e.value = 'friends';
     e.dispatchEvent(new Event('change'));
   });
   await sleep(300);
-  await steps.mark('réglage : personne', (s) => (s.joinable === false && last('joinable')?.who === 'none' ? undefined : `joinable = ${s.joinable}, salle = ${JSON.stringify(last('joinable'))}`));
+  await steps.mark('réglage : mes amis', (s) => (s.joinable === 'friends' && last('joinable')?.who === 'friends' ? undefined : `joinable = ${s.joinable}, salle = ${JSON.stringify(last('joinable'))}`));
 
   await click('ride-toggle');
   clearInterval(timer);

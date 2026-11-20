@@ -32,7 +32,21 @@ export function groupLine(g: GroupSummary, serverNowMs: number, courseName: stri
 }
 
 /** Ce que dit la ligne d'un coureur de la liste « En ligne ». */
-export const riderStatus = (r: Pick<OnlineRider, 'riding'>): string => (r.riding ? 'en sortie' : 'en ligne');
+export const riderStatus = (r: Pick<OnlineRider, 'riding' | 'open'>): string => (r.riding ? (r.open ? 'en sortie' : 'en sortie · amis seulement') : 'en ligne');
+
+/** Pourquoi un ami n'a pas pu être ajouté ou retiré. */
+export function friendErrorText(reason: string): string {
+  switch (reason) {
+    case 'too-many':
+      return 'Tu as déjà 100 amis : retires-en un avant d’en ajouter.';
+    case 'unknown':
+      return 'Ce coureur n’est plus disponible.';
+    case 'signed-out':
+      return 'Connecte-toi avec Strava pour garder tes amis.';
+    default:
+      return 'Impossible de joindre le serveur : réessaie dans un instant.';
+  }
+}
 
 /** En-tête de la liste des coureurs : combien il y en a, et combien la liste ne montre pas. */
 export function ridersTitle(shown: number, total: number): string {

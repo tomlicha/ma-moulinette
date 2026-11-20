@@ -1,6 +1,6 @@
 # Sortie de groupe : séance ensemble, rejoindre, suivre
 
-Spec du 20 novembre 2026. **Codé le 20 novembre 2026** : le suivi en sortie libre, la liste « En ligne » avec recherche, la séance de groupe. **Pas codé** : la liste d'amis (voir « Amis Strava »). Voir « État de l'implémentation ». Références : [salle](salle.md) (relais et aspiration), [compte](compte.md), [synchronisation](synchronisation.md), [sortie](sortie.md).
+Spec du 20 novembre 2026. **Codé le 20 novembre 2026** : le suivi en sortie libre, la liste « En ligne » avec recherche, la séance de groupe, les amis (dans l'application). Voir « État de l'implémentation ». Références : [salle](salle.md) (relais et aspiration), [compte](compte.md), [synchronisation](synchronisation.md), [sortie](sortie.md).
 
 ## Ce qu'on veut
 
@@ -188,7 +188,7 @@ Tests : règles et `Journey.placeAt` (unitaires), salle (`room-follow.test.ts`),
 
 - **Deux façons de rejoindre.** Sortie **déjà en cours** : on **rattrape** le coureur (mode `chase`), sans changer de place : la distance du fichier FIT reste continue, pas de saut de plusieurs centaines de mètres. Sortie **pas encore démarrée** : la sortie repart **10 m derrière lui** (mode `place`, `Journey.placeAt`). Il faut un trainer connecté dans les deux cas.
 - **Pas de suivi en séance** : l'icône disparaît et un suivi en cours s'arrête quand une séance démarre. La séance fixe la puissance ; rattraper quelqu'un n'y a pas de sens.
-- **« Qui peut me rejoindre » : tous ou personne** (un interrupteur). Le serveur sait déjà appliquer « mes amis » (`areFriends`), mais **il n'y a pas encore de liste d'amis** : la valeur par défaut est donc **tous**, pas « mes amis » comme la spec le voulait. À repasser en « mes amis » avec l'étape 7. Le réglage est **gardé sur l'appareil**, pas encore synchronisé avec le compte.
+- ~~**« Qui peut me rejoindre » : tous ou personne**~~ Remplacé le 20 novembre 2026 : un menu **Tout le monde / Mes amis / Personne** (voir « Les amis »). Le défaut reste **tout le monde**, non « mes amis » comme la spec le voulait : ce choix de confidentialité reste à Tom. Le réglage est **gardé sur l'appareil**, pas encore synchronisé avec le compte.
 - **Refus : sans délai de 5 s.** Le coureur suivi voit « Marc te suit » avec **Refuser** tant que l'autre le suit ; le suiveur reçoit « préfère rouler seul ».
 - **Décrochage : reprise automatique.** Pas de bouton **Reprendre** : si l'écart repasse sous 150 m, le suivi repart tout seul.
 - **Gestion d'intérêt inchangée** : le coureur suivi reste dans les 1,5 km autour du suiveur tant que le suivi tient (le décrochage intervient bien avant). Rien à garder de plus côté serveur.
@@ -208,9 +208,22 @@ Tests : règles et `Journey.placeAt` (unitaires), salle (`room-follow.test.ts`),
 
 Tests : `wire`, `group-pace` (déterminisme), `Groups` et `Room` (`room-group.test.ts`), `GroupSession` (horloge simulée), `WorkoutSession` synchronisée, `RideSession` à rythme imposé, textes du panneau, et le scénario `npm run e2e -- online` (iPhone 13 paysage, salle simulée : pastille, panneau, recherche, rejoindre un coureur, créer un groupe, salle d'attente, départ, séance verrouillée, quitter).
 
+### Les amis (20 novembre 2026)
+
+Décision de Tom : **on ajoute un ami depuis la liste « En ligne », sans réciprocité, rangé dans D1 par compte Strava.** (Les amis Strava eux-mêmes sont inaccessibles, voir plus bas.)
+
+- **Ajouter, retirer** : une **étoile** sur la ligne de chaque coureur de la liste « En ligne » (pleine : c'est un ami). Le geste se voit tout de suite ; si le serveur refuse (100 amis au plus, compte inconnu, connexion perdue), la liste revient en arrière avec un message.
+- **À sens unique** : j'ajoute un coureur sans qu'il le sache et sans qu'il ait à accepter. Rien n'indique à l'autre qu'il est mon ami.
+- **D1** : table `friends (user_id, friend_id, created_at)`, migration [`0006_friends.sql`](../../worker/migrations/0006_friends.sql), suppression en cascade avec le compte. **À appliquer en production** (`wrangler d1 migrations apply`) avant de déployer. Adresse `/api/friends` : `GET` la liste (avec les noms que les amis montrent aux autres), `POST { add }` ou `{ remove }` ([`server/friends.ts`](../../src/server/friends.ts), [`worker/friend-store.ts`](../../worker/friend-store.ts)). Seuls les comptes au **nom validé** peuvent être ajoutés ; on ne s'ajoute pas soi-même.
+- **La salle** : à la connexion et à chaque changement, la page lui dit sa liste (`friends`, jusqu'à 100 identifiants de compte). Elle sert à **deux choses seulement**, pour ce coureur : (1) **mes amis en tête** de la liste « En ligne » ; (2) **« Qui peut me rejoindre : Mes amis »** : les **amis du coureur suivi**, ceux qu'**il** a ajoutés (pas l'inverse : ajouter quelqu'un ne donne aucun droit sur lui). Les listes sont rangées dans le stockage du Durable Object (`friends:<compte>`) et reprises après un redémarrage pour les comptes encore connectés ; celle d'un compte qui part est effacée.
+- **« Qui peut me rejoindre »** devient un **menu à trois choix** dans le menu de la sortie : Tout le monde (défaut), Mes amis, Personne. La liste « En ligne » dit si on peut rejoindre quelqu'un (`open`) : un coureur « amis seulement » dont on n'est pas l'ami n'a pas de bouton « Rejoindre » (« en sortie · amis seulement »).
+- **Les identifiants de compte** des coureurs en ligne (`uid`) sont donnés par la salle pour pouvoir les ajouter ; ils ne sont pas les identifiants Strava.
+- Protocole **version 3**. Tests : `friends.test.ts` (serveur), `friend-store.test.ts` (D1 simulé avec le vrai SQL et les vraies migrations, et mémoire), `room-friends.test.ts`, `world-room.test.ts` (redémarrage), `friends-list.test.ts`, `group-protocol.test.ts`, et le scénario `online` (ajouter puis retirer un ami, serveur de comptes et salle simulés).
+- **Pas fait** : les amis **hors ligne** ne sont pas listés (la liste ne montre que ceux qui sont en ligne), et le réglage « Qui peut me rejoindre » ne suit pas le compte.
+
 ### Amis Strava : impossible, liste globale à la place
 
-Décision de Tom (20 novembre 2026) : « prendre les amis Strava si possible, sinon la liste globale des gens en ligne avec une recherche ». **Ce n'est pas possible** : l'endpoint `athlete/friends` de l'API Strava a été retiré en janvier 2018 (le support de Strava l'a confirmé à des développeurs, d'après le fil du groupe strava-api ; le journal officiel des changements ne le remet pas). Notre application, limitée à 10 athlètes, n'aurait de toute façon connu que peu d'amis. D'où la **liste globale avec recherche par nom**. La valeur « mes amis » de « Qui peut me rejoindre » reste côté serveur, inutilisée : une liste d'amis dans l'application serait un chantier à part.
+Décision de Tom (20 novembre 2026) : « prendre les amis Strava si possible, sinon la liste globale des gens en ligne avec une recherche ». **Ce n'est pas possible** (revérifié le 20 novembre 2026 dans la spécification officielle `swagger.json` de l'API Strava : 29 chemins, aucun « friends », « followers » ou « following » ; l'application ne demande d'ailleurs que le droit `activity:write`) : l'endpoint `athlete/friends` de l'API Strava a été retiré en janvier 2018 (le support de Strava l'a confirmé à des développeurs, d'après le fil du groupe strava-api ; le journal officiel des changements ne le remet pas). Notre application, limitée à 10 athlètes, n'aurait de toute façon connu que peu d'amis. D'où la **liste globale avec recherche par nom**. La valeur « mes amis » de « Qui peut me rejoindre » reste côté serveur, inutilisée : une liste d'amis dans l'application serait un chantier à part.
 
 ### Carrefours en groupe : le créateur choisit (20 novembre 2026)
 
@@ -264,13 +277,12 @@ Les coureurs gardent leurs connexions (API d'hibernation) mais l'objet perdait s
 - **Décrochage** : 60 s sans pédaler et le coureur quitte le groupe (sa sortie redevient libre, sa séance s'arrête). Pas d'étape « grisé » à 30 s.
 - **Trainer perdu en pleine séance** : la sortie se met en pause comme d'habitude ; à la reconnexion, le point de groupe est rejoué d'un trait et le coureur retrouve le groupe.
 - **Départ dans 2, 5 ou 10 min** (le serveur accepte de 30 s à 30 min). La séance et le parcours sont ceux choisis sur l'accueil.
-- **Tout le monde voit tous les groupes** (pas de visibilité « amis » sans liste d'amis).
+- **Tout le monde voit tous les groupes** (pas de visibilité « amis » pour un groupe, seulement pour « Qui peut me rejoindre » d'un coureur).
 - **Départ manqué** : si le trainer n'est pas connecté ou si une sortie est en cours à l'heure du départ, on quitte le groupe avec un message.
 - **Gestion d'intérêt** : au-delà de 33 coureurs actifs, la salle n'envoie rien à qui n'a pas encore donné de position ; la liste « En ligne » vient d'un message à part (`who`), mais « rejoindre » un coureur lointain marche, car la réponse du serveur donne sa position.
 
 ### Ce qui reste
 
-1. Liste d'amis dans l'application (relation réciproque, D1, « Qui peut me rejoindre : mes amis »).
 2. % de FTP et état « à l'arrêt » des membres pendant la séance.
 4. Mesure de charge **réelle** du Durable Object avec 30 coureurs d'un groupe (`npm run bots` contre un aperçu de branche). La logique de la salle est mesurée (`npm run load`, voir [salle](salle.md#rouler-avec-dautres--coût-des-messages-20-novembre-2026)) : quelques centièmes de milliseconde par message de groupe, `who` à 0,2 ms pour 1000 coureurs.
 

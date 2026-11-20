@@ -20,8 +20,21 @@ module.exports = async function online({ playwright, browser, url }) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push('console.error: ' + m.text()));
+  // Le serveur de comptes simulé, avec ses amis (`/api/friends`, src/server/friends.ts) : ils se gardent d'un appel à l'autre.
+  const knownNames = { 'u-lucie': 'Lucie', 'u-marc': 'Marc' };
+  let friendIds = [];
+  const friendPosts = [];
   await page.route('**/api/**', (r) => {
     const name = new URL(r.request().url()).pathname.split('/').pop();
+    if (name === 'friends') {
+      if (r.request().method() === 'POST') {
+        const body = JSON.parse(r.request().postData() || '{}');
+        friendPosts.push(body);
+        if (body.add && knownNames[body.add] && !friendIds.includes(body.add)) friendIds.push(body.add);
+        if (body.remove) friendIds = friendIds.filter((id) => id !== body.remove);
+      }
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ friends: friendIds.map((id) => ({ id, name: knownNames[id] })) }) });
+    }
     return r.fulfill({ status: name === 'me' ? 200 : 404, contentType: 'application/json', body: JSON.stringify(name === 'me' ? { user: USER, methods: METHODS } : {}) });
   });
 
@@ -42,9 +55,11 @@ module.exports = async function online({ playwright, browser, url }) {
   const t0 = Date.now();
   let socket;
   let timer;
+  /** La dernière liste d'amis que la page a dite à la salle. */
+  let friendsSaid;
   const riders = [
-    { slot: 2, name: 'Lucie', riding: true },
-    { slot: 3, name: 'Marc', riding: false },
+    { slot: 2, name: 'Lucie', riding: true, uid: 'u-lucie', open: true },
+    { slot: 3, name: 'Marc', riding: false, uid: 'u-marc', open: true },
   ];
   await page.routeWebSocket(/\/api\/world\/ws/, (ws) => {
     socket = ws;
@@ -71,11 +86,16 @@ module.exports = async function online({ playwright, browser, url }) {
       heard.push(msg);
       const send = (m) => ws.send(JSON.stringify(m));
       if (msg.type === 'time') send({ type: 'time', c: msg.c, s: Date.now() });
+      if (msg.type === 'friends') friendsSaid = msg.ids;
       if (msg.type === 'who') {
         const q = fold(msg.q ?? '');
         send({
           type: 'who',
-          riders: riders.filter((r) => !q || fold(r.name).includes(q)),
+          // Comme la salle : mes amis d'abord (la page renvoie sa liste avec `friends`), puis par ordre de la liste.
+          riders: riders
+            .filter((r) => !q || fold(r.name).includes(q))
+            .map((r) => ({ ...r, friend: (friendsSaid ?? []).includes(r.uid) }))
+            .sort((a, b) => Number(b.friend) - Number(a.friend)),
           groups: [{ id: 'g9', name: 'Séance de Lucie', workoutName: 'Sweet spot', courseId: 'col', t0: Date.now() + 120_000, durationS: 1500, count: 1 }],
           total: riders.length,
         });
@@ -121,6 +141,8 @@ module.exports = async function online({ playwright, browser, url }) {
         panelOpen: panel?.open ?? false,
         riders: [...document.querySelectorAll('[data-o="riders"] .op-who')].map((n) => n.textContent),
         joinRiders: [...document.querySelectorAll('[data-o="riders"] .op-btn')].map((b) => b.getAttribute('aria-label')),
+        stars: [...document.querySelectorAll('[data-o="riders"] .op-star')].map((b) => b.getAttribute('aria-pressed')),
+        notice: t('[data-o="notice"]:not([hidden])'),
         groups: [...document.querySelectorAll('[data-o="groups"] .op-group')].map((n) => n.innerText.replace(/\s+/g, ' ').trim()),
         block: t('[data-o="block"]:not([hidden])'),
         lobbyHidden: document.querySelector('[data-o="lobby"]')?.hidden ?? null,
@@ -158,6 +180,27 @@ module.exports = async function online({ playwright, browser, url }) {
   await steps.mark('recherche « MAR »', (s) => (s.riders.join() === 'Marc' ? undefined : `coureurs = ${s.riders}`));
   await page.fill('[data-o="q"]', '');
   await waitFor(() => document.querySelectorAll('[data-o="riders"] .op-who').length === 2);
+
+  // Ajouter Marc en ami (l'étoile) : il passe en tête, le serveur de comptes et la salle le savent. À sens unique : rien d'autre.
+  await steps.mark('avant les amis : aucun ami, étoiles vides', (s) => (s.stars.join() === 'false,false' ? undefined : `étoiles = ${s.stars}`));
+  await page.evaluate(() => [...document.querySelectorAll('[data-o="riders"] .op-star')][1]?.click());
+  await waitFor(() => document.querySelector('[data-o="riders"] .op-who')?.textContent === 'Marc');
+  await sleep(400);
+  await steps.mark('Marc ajouté en ami : en tête, étoile pleine', (s) => {
+    if (s.riders.join() !== 'Marc,Lucie') return `ordre = ${s.riders}`;
+    if (s.stars.join() !== 'true,false') return `étoiles = ${s.stars}`;
+    if (JSON.stringify(friendPosts) !== JSON.stringify([{ add: 'u-marc' }])) return `serveur de comptes = ${JSON.stringify(friendPosts)}`;
+    if (JSON.stringify(friendsSaid) !== JSON.stringify(['u-marc'])) return `salle = ${JSON.stringify(friendsSaid)}`;
+  });
+  await shot('1b-amis');
+  // Le retirer : il reprend sa place.
+  await page.evaluate(() => document.querySelector('[data-o="riders"] .op-star')?.click());
+  await sleep(500);
+  await steps.mark('Marc retiré des amis', (s) => {
+    if (s.riders.join() !== 'Lucie,Marc' || s.stars.join() !== 'false,false') return `ordre = ${s.riders}, étoiles = ${s.stars}`;
+    if (JSON.stringify(friendPosts.at(-1)) !== JSON.stringify({ remove: 'u-marc' })) return `serveur de comptes = ${JSON.stringify(friendPosts)}`;
+    if (JSON.stringify(friendsSaid) !== '[]') return `salle = ${JSON.stringify(friendsSaid)}`;
+  });
   await page.evaluate(() => document.querySelector('.op-close')?.click());
   await sleep(300);
 

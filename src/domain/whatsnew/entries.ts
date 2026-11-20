@@ -120,7 +120,7 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     id: '2026-11-20-suivre-un-coureur',
     kind: 'new',
     title: 'Rouler avec quelqu’un',
-    text: 'Dans « En ligne » sur l’accueil, ou dans la liste des coureurs proches, rejoins un coureur en sortie : l’écart s’affiche et un coup de pouce t’aide à recoller.',
+    text: 'Dans « En ligne » sur l’accueil, ajoute des amis d’une étoile et rejoins un coureur en sortie : l’écart s’affiche et un coup de pouce t’aide à recoller.',
     icon: 'people',
     target: { view: 'accueil', label: 'Voir qui est en ligne' },
   },

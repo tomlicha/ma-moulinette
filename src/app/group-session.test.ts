@@ -177,7 +177,7 @@ describe('GroupSession', () => {
     const { session, world } = setup();
     const online = vi.fn();
     session.on('online', online);
-    session.handle({ type: 'who', riders: [{ slot: 2, name: 'Léa', riding: true }], groups: [], total: 1 });
+    session.handle({ type: 'who', riders: [{ slot: 2, name: 'Léa', riding: true, uid: 'u2', friend: false, open: true }], groups: [], total: 1 });
     expect(session.online.riders[0]!.name).toBe('Léa');
     expect(online).toHaveBeenCalledTimes(1);
     session.refreshOnline('le');

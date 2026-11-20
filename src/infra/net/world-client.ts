@@ -96,6 +96,7 @@ export class WorldClient {
   private wanted = false;
   private lastSent = -Infinity;
   private joinable: JoinableBy = 'all';
+  private friends: readonly string[] = [];
   private readonly now: () => number;
 
   constructor(
@@ -119,6 +120,12 @@ export class WorldClient {
   setJoinable(who: JoinableBy): void {
     this.joinable = who;
     this.sendGroup({ type: 'joinable', who });
+  }
+
+  /** Mes amis (identifiants de compte) : la salle les montre en tête et laisse entrer ceux de « mes amis ». Retenus, renvoyés à chaque connexion. */
+  setFriends(ids: readonly string[]): void {
+    this.friends = ids;
+    this.sendGroup({ type: 'friends', ids: [...ids] });
   }
 
   /** Rejoindre et suivre le coureur `slot` ; la réponse arrive par `onGroup` (`followStart` ou `followEnd`). */
@@ -292,6 +299,7 @@ export class WorldClient {
       this.lastSent = -Infinity;
       this.setStatus('online');
       if (this.joinable !== 'all') this.sendGroup({ type: 'joinable', who: this.joinable });
+      if (this.friends.length) this.sendGroup({ type: 'friends', ids: [...this.friends] });
     } else if (msg.type === 'join' && typeof msg.slot === 'number' && typeof msg.name === 'string') {
       this.names.set(msg.slot, msg.name);
       const r = this.remotes.get(msg.slot);

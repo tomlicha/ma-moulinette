@@ -12,8 +12,9 @@
 import { CLOSE_NAME_PENDING, CLOSE_OUTDATED, CLOSE_REPLACED, CLOSE_SIGNED_OUT } from '../shared/protocol/close-codes';
 import type { RoadNetwork } from '../domain/course/network';
 import { INTEREST_K, INTEREST_RANGE_M, MSG_SNAPSHOT, SNAPSHOT_MAX, StateCodec, STATE_BYTES } from '../infra/net/protocol';
-import { parseClientMessage, type ClientGroupMessage, type FollowEndReason, type JoinableBy, type ServerGroupMessage } from '../infra/net/group-protocol';
+import { parseClientMessage, type ClientGroupMessage, type FollowEndReason, type JoinableBy, type OnlineRider, type ServerGroupMessage } from '../infra/net/group-protocol';
 import { FollowBook } from './follow-book';
+import { MAX_FRIENDS } from '../shared/protocol/friends';
 import { Groups, type GroupSnapshot, type GroupStore } from './groups';
 
 /** Cadence des instantanés, en ms. */
@@ -42,8 +43,19 @@ export interface RoomOptions {
   rangeM?: number;
   /** Où ranger les groupes pour qu'ils survivent à un redémarrage du Durable Object (voir `restoreGroups`). */
   groupStore?: GroupStore;
-  /** Deux comptes sont-ils amis ? Sert au réglage « Qui peut me rejoindre : mes amis ». Sans amis connus, personne ne l'est. */
-  areFriends?: (userId: string, otherUserId: string) => boolean;
+  /** Où ranger les listes d'amis envoyées par les coureurs, pour qu'elles survivent à un redémarrage (voir `restoreFriends`). */
+  friendStore?: FriendListStore;
+  /**
+   * `userId` est-il parmi les amis de `ofUserId` (ceux que celui-ci a ajoutés) ? Sert au réglage « Qui peut me rejoindre : mes
+   * amis ». Par défaut, les listes envoyées par les coureurs (`friends`) ; une autre règle ne sert qu'aux tests.
+   */
+  areFriends?: (userId: string, ofUserId: string) => boolean;
+}
+
+/** Où la salle range la liste d'amis de chaque coureur connecté (le stockage du Durable Object). */
+export interface FriendListStore {
+  save(userId: string, ids: readonly string[]): void;
+  remove(userId: string): void;
 }
 
 export interface Connection {
@@ -97,7 +109,10 @@ export class Room {
   private readonly rangeM: number;
   private readonly follows = new FollowBook();
   private readonly groups: Groups;
-  private readonly areFriends: (a: string, b: string) => boolean;
+  private readonly areFriends: (userId: string, ofUserId: string) => boolean;
+  /** Les amis de chaque compte connecté (ceux qu'il a ajoutés), tels qu'il les a envoyés : il est le seul à en décider. */
+  private readonly friendsOf = new Map<string, Set<string>>();
+  private readonly friendStore: FriendListStore | undefined;
 
   constructor(
     private readonly network: RoadNetwork,
@@ -107,7 +122,8 @@ export class Room {
     this.codec = new StateCodec(network);
     this.interestK = opts.interestK ?? INTEREST_K;
     this.rangeM = opts.rangeM ?? INTEREST_RANGE_M;
-    this.areFriends = opts.areFriends ?? (() => false);
+    this.friendStore = opts.friendStore;
+    this.areFriends = opts.areFriends ?? ((userId, ofUserId) => this.friendsOf.get(ofUserId)?.has(userId) ?? false);
     this.groups = new Groups(opts.groupStore);
   }
 
@@ -155,8 +171,20 @@ export class Room {
     this.groups.restore(snapshots, next, (slot) => this.members.has(slot));
   }
 
+  /** Reprend les listes d'amis rangées avant un redémarrage (celles des comptes encore connectés). */
+  restoreFriends(entries: readonly (readonly [string, readonly string[]])[]): void {
+    const online = new Set([...this.members.values()].map((m) => m.userId));
+    for (const [userId, ids] of entries) {
+      if (online.has(userId)) this.friendsOf.set(userId, new Set(ids));
+      else this.friendStore?.remove(userId);
+    }
+  }
+
   leave(slot: number): void {
+    const gone = this.members.get(slot);
     if (!this.members.delete(slot)) return;
+    // La liste d'amis part avec la dernière connexion du compte : à sa reconnexion, la page la renvoie.
+    if (gone && ![...this.members.values()].some((m) => m.userId === gone.userId) && this.friendsOf.delete(gone.userId)) this.friendStore?.remove(gone.userId);
     const { wasFollowing, followers } = this.follows.drop(slot);
     this.leaveGroup(slot);
     this.broadcast(JSON.stringify({ type: 'leave', slot }));
@@ -211,6 +239,13 @@ export class Room {
       case 'time':
         this.tell(m.slot, { type: 'time', c: msg.c, s: this.now() });
         return;
+      case 'friends': {
+        // Ses propres amis : il est seul à en décider, et ils ne servent qu'à lui (ordre de la liste, qui peut le rejoindre).
+        const ids = msg.ids.filter((id) => id !== m.userId).slice(0, MAX_FRIENDS);
+        this.friendsOf.set(m.userId, new Set(ids));
+        this.friendStore?.save(m.userId, ids);
+        return;
+      }
       case 'groupCreate':
         return this.afterJoin(m, this.groups.create({ slot: m.slot, name: m.name }, msg.workout, msg.courseId, msg.startInS, this.now(), { ftpW: msg.ftpW, massKg: msg.massKg }), undefined);
       case 'groupJoin':
@@ -255,13 +290,16 @@ export class Room {
     if (m.lastWhoAt !== undefined && t - m.lastWhoAt < MIN_WHO_INTERVAL_MS) return;
     m.lastWhoAt = t;
     const q = fold(query.trim());
-    const found: { slot: number; name: string; riding: boolean }[] = [];
+    const mine = this.friendsOf.get(m.userId);
+    const found: OnlineRider[] = [];
     for (const o of this.members.values()) {
       if (o === m || o.joinable === 'none' || (q && !fold(o.name).includes(q))) continue;
       const state = o.body && t - o.at < STATE_TTL_MS ? this.codec.decodeBody(o.body) : undefined;
-      found.push({ slot: o.slot, name: o.name, riding: !!state?.riding });
+      const open = o.joinable === 'all' || (o.joinable === 'friends' && this.areFriends(m.userId, o.userId));
+      found.push({ slot: o.slot, name: o.name, riding: !!state?.riding, uid: o.userId, friend: mine?.has(o.userId) ?? false, open });
     }
-    found.sort((a, b) => Number(b.riding) - Number(a.riding) || a.name.localeCompare(b.name, 'fr'));
+    // Mes amis d'abord, puis ceux qui roulent, puis par nom.
+    found.sort((a, b) => Number(b.friend) - Number(a.friend) || Number(b.riding) - Number(a.riding) || a.name.localeCompare(b.name, 'fr'));
     this.expireGroups();
     this.tell(m.slot, { type: 'who', riders: found.slice(0, WHO_MAX), groups: this.groups.summaries(), total: found.length });
   }
