@@ -142,6 +142,7 @@ export function setupAccount(o: {
         <span class="account-who"><b>${html(user.displayName)}</b><span class="account-status" data-tone="${line.tone}">${html(line.text)}</span></span>
         <svg class="account-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
       </button>
+      <button type="button" class="account-final-surge-test" aria-label="Ouvrir Final Surge pour le test">Final Surge · test</button>
       <div class="account-menu" role="menu" hidden>
         <button type="button" role="menuitem" data-act="name">Changer de nom</button>
         <button type="button" role="menuitem" data-act="final-surge">Connecter Final Surge</button>
@@ -150,6 +151,9 @@ export function setupAccount(o: {
       </div>`;
     const chip = el.querySelector<HTMLButtonElement>('.account-chip')!;
     const menu = el.querySelector<HTMLElement>('.account-menu')!;
+    el.querySelector<HTMLButtonElement>('.account-final-surge-test')?.addEventListener('click', () => {
+      window.dispatchEvent(new Event('mm:final-surge-open'));
+    });
     const toggle = (open: boolean) => {
       menu.hidden = !open;
       chip.setAttribute('aria-expanded', String(open));
