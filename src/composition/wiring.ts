@@ -20,6 +20,7 @@ import type { SensorHub } from '../infra/sensors/hub';
 import type { SensorReadings } from '../app/sensor-readings';
 import type { SettingsStore } from '../app/settings-store';
 import type { SyncJournal } from '../infra/sync/journal';
+import type { SyncSource } from '../infra/sync/client';
 import type { TrainerController } from '../app/trainer-controller';
 import type { WebBluetoothTrainer } from '../infra/sensors/ble/web-bluetooth';
 import type { Workout } from '../domain/workout/model';
@@ -43,6 +44,8 @@ import type { setupTelemetry } from '../infra/telemetry/wiring';
  * précédents ont rangé, le reste à l'usage (dans une fonction ou un écouteur).
  */
 export interface Wiring {
+  /** Le compte est connu et la première synchronisation passée (ou sans compte : tout de suite). Rangé par `account`. */
+  accountSettled: Promise<void>;
   autoStart: AutoStart;
   blockLibrary: BlockLibrary;
   chooseWorkout: (value: string) => void;
@@ -88,6 +91,8 @@ export interface Wiring {
   startRide: () => void;
   stopRide: (resetTrainer?: boolean) => void;
   syncJournal: SyncJournal;
+  /** Ce que la synchronisation avec le compte porte : FTP et masse, séances, blocs, puis ce que les modules suivants y ajoutent (avant la première synchronisation, qui attend le réseau). */
+  syncSources: SyncSource[];
   telemetry: ReturnType<typeof setupTelemetry>;
   trainerCtl: TrainerController;
   workoutControls: WorkoutControlsView;

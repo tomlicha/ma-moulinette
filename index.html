@@ -183,6 +183,10 @@
               <a href="#appareils" data-nav="appareils"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><path d="M6 6a8.5 8.5 0 0 0 0 12M18 6a8.5 8.5 0 0 1 0 12M9 9a4.5 4.5 0 0 0 0 6M15 9a4.5 4.5 0 0 1 0 6"/></svg><span>Appareils</span></a>
             </nav>
             <div class="home-chips">
+              <!-- Journal des nouveautés (docs/design/nouveautes.md) : rempli par ui/whatsnew/whats-new-chip.ts. -->
+              <button id="home-news-chip" class="home-chip chip-news" type="button" aria-haspopup="dialog" aria-label="Nouveautés">
+                <span class="news-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16v4M17 18h4"/></svg></span><span class="news-label">Nouveautés</span><i class="news-dot" aria-hidden="true"></i>
+              </button>
               <a id="home-devices-chip" class="home-chip chip-devices" href="#appareils" aria-label="Appareils">
                 <span class="dev-pill" data-dev-role="trainer"><i></i>Trainer</span><span class="dev-pill" data-dev-role="hr"><i></i>Cardio</span>
               </a>
@@ -266,6 +270,10 @@
               </div>
             </div>
           </dialog>
+
+          <!-- Nouveautés depuis la dernière visite : la carte (N1) et le journal (N3), remplis par ui/whatsnew/ (docs/design/nouveautes.md). -->
+          <dialog id="whatsnew-card"></dialog>
+          <dialog id="whatsnew-journal"></dialog>
         </div>
       </section>
 

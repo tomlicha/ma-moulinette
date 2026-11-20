@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
-const BUDGET_KIB = { js: 100, css: 30 };
+// JS : 100 Kio jusqu'au 20 novembre 2026, relevé à 110 sur décision de Tom (nouveautés, marge de 0,1 Kio seulement).
+const BUDGET_KIB = { js: 110, css: 30 };
 
 // fileURLToPath, pas `.pathname` : sous Windows, `.pathname` donne « /C:/… », que `join` double en « C:\C:\… ».
 const dist = fileURLToPath(new URL('../../dist/', import.meta.url));

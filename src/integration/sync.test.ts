@@ -9,6 +9,7 @@ import { WorkoutLibrary } from '../domain/workout/library';
 import { migrateLegacyKeys } from '../infra/storage/legacy-storage';
 import { createSyncClient, type SyncSource } from '../infra/sync/client';
 import { SyncJournal } from '../infra/sync/journal';
+import { WhatsNewMarks } from '../app/whats-new-marks';
 import { blockSource, workoutSource } from '../infra/sync/sources';
 
 const ORIGIN = 'https://moulinette.example';
@@ -244,5 +245,69 @@ describe('anciennes clés du navigateur', () => {
     expect(migrateLegacyKeys(s)).toBe(2);
     expect(Object.fromEntries(s.data)).toEqual({ 'mamoulinette.ftp': '240', 'mamoulinette.workouts': '[]', 'mamoulinette.mass': '72', autre: 'x' });
     expect(migrateLegacyKeys(s)).toBe(0);
+  });
+});
+
+describe('nouveautés lues : les repères suivent le compte', () => {
+  /** Un appareil qui ne porte que les repères de lecture des nouveautés, avec une horloge qu'on avance à la main. */
+  function readerDevice(srv: ReturnType<typeof server>, clock: { t: number }) {
+    let cookie: string | undefined;
+    const store = new MemStore();
+    const journal = new SyncJournal(store, () => clock.t);
+    const marks = new WhatsNewMarks(store, journal);
+    const client = createSyncClient({ journal, sources: [marks], log: () => {}, fetch: srv.fetchFor(() => cookie), debounceMs: 60_000 });
+    return {
+      marks,
+      client,
+      async signIn(user: { id: string; cookie: string }) {
+        cookie = user.cookie;
+        await client.setUser(user);
+      },
+    };
+  }
+
+  it('lire sur l\'ordinateur : l\'iPhone le sait à sa première synchronisation, sans revoir la carte', async () => {
+    const srv = server();
+    const clock = { t: 1000 };
+    const tom = await srv.login('Tom');
+    const desktop = readerDevice(srv, clock);
+    await desktop.signIn(tom);
+    desktop.marks.raise('announced', '2026-11-20-accueil-refait');
+    desktop.marks.raise('read', '2026-11-20-accueil-refait');
+    await desktop.client.now();
+
+    clock.t = 2000;
+    const phone = readerDevice(srv, clock);
+    await phone.signIn(tom);
+    expect(phone.marks.get('announced')).toBe('2026-11-20-accueil-refait');
+    expect(phone.marks.get('read')).toBe('2026-11-20-accueil-refait');
+  });
+
+  it('un appareil resté hors ligne avec une vieille valeur ne fait pas reculer le compte', async () => {
+    const srv = server();
+    const clock = { t: 1000 };
+    const tom = await srv.login('Tom');
+    const a = readerDevice(srv, clock);
+    const b = readerDevice(srv, clock);
+    await a.signIn(tom);
+    await b.signIn(tom);
+
+    clock.t = 2000;
+    b.marks.raise('read', '2026-11-20-accueil-refait');
+    await b.client.now();
+
+    // A, hors ligne, a lu moins loin mais plus tard (son horloge dit 3000) : son envoi l'emporte sur le serveur.
+    clock.t = 3000;
+    a.marks.raise('read', '2026-11-17-carte-carrefour');
+    await a.client.now();
+
+    // B reçoit cette valeur plus ancienne : il garde la sienne et la renvoie ; tout converge vers la plus récente.
+    clock.t = 4000;
+    await b.client.now();
+    clock.t = 5000;
+    await a.client.now();
+
+    expect(b.marks.get('read')).toBe('2026-11-20-accueil-refait');
+    expect(a.marks.get('read')).toBe('2026-11-20-accueil-refait');
   });
 });

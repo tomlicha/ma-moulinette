@@ -18,6 +18,14 @@ export type SyncKind = (typeof SYNC_KINDS)[number];
 export const SYNC_SETTINGS = { ftp: FTP_LIMITS, mass: MASS_LIMITS } as const;
 export type SyncSetting = keyof typeof SYNC_SETTINGS;
 
+/**
+ * Réglages textuels : les repères de lecture des nouveautés (docs/design/nouveautes.md). Le contenu est l'id d'une entrée
+ * du catalogue. Ils ne font qu'augmenter : le client garde le plus grand des deux et renvoie le sien s'il dépasse celui
+ * du compte, car la fusion du serveur (« la plus récente gagne ») pourrait sinon les faire reculer.
+ */
+export const SYNC_TEXT_SETTINGS = ['whatsnew-announced', 'whatsnew-read'] as const;
+export type SyncTextSetting = (typeof SYNC_TEXT_SETTINGS)[number];
+
 export interface SyncItem {
   kind: SyncKind;
   /** Identifiant dans son espèce : nom du réglage, identifiant de la séance ou du bloc. */
@@ -72,6 +80,7 @@ const isBlocks = (v: unknown, min: number) =>
 function isBody(kind: SyncKind, id: string, body: unknown): boolean {
   switch (kind) {
     case 'setting': {
+      if ((SYNC_TEXT_SETTINGS as readonly string[]).includes(id)) return typeof body === 'string' && ID.test(body);
       if (!Object.hasOwn(SYNC_SETTINGS, id)) return false;
       const limits = SYNC_SETTINGS[id as SyncSetting];
       return typeof body === 'number' && body >= limits.min && body <= limits.max;

@@ -8,6 +8,16 @@ Le code de `src/` est rangé en couches (`shared < domain < infra < app < ui, re
 - Une classe, une responsabilité ; horloge, stockage et réseau injectés par le constructeur ; un test à côté.
 - Une Vue (`src/ui/<écran>/`) affiche et signale des intentions, sans règle métier.
 
+## Nouveautés : une entrée pour chaque fonctionnalité utile à l'utilisateur
+
+L'écran « Nouveautés » (carte après une mise à jour, journal sur l'accueil) lit un catalogue écrit à la main : [`src/domain/whatsnew/entries.ts`](src/domain/whatsnew/entries.ts). Spec : [docs/design/nouveautes.md](docs/design/nouveautes.md). **Quand un changement apporte à l'utilisateur quelque chose qu'il voit, peut faire de nouveau ou ressent à l'usage** (nouvelle fonction, écran ou parcours, comportement qui change, amélioration visible, réglage qui suit le compte), **ajoute son entrée dans ce fichier, dans le même changement**, avant de commiter ou d'ouvrir la PR.
+
+- `id` : `AAAA-MM-JJ-nom-court` (la date du jour), ajouté **en fin de liste** (la liste est triée, ancienne en premier) ; il ne change jamais ensuite.
+- `kind` : `new` ou `improved`. `title` court ; `text` : une phrase qui dit **ce que le cycliste y gagne**, avec ses mots à lui (« elle s'affiche 250 m avant chaque intersection »), jamais ce que le code a fait. `icon` obligatoire ; `art` et `target` (où mène « Essayer ») si utiles ; `featured` seulement pour la plus marquante d'un lot.
+- **Une entrée par fonction, pas par commit.** Si la fonction évolue avant d'être livrée, on modifie son entrée.
+- **Pas d'entrée** pour : refonte interne (découpage du code, `main.ts`, classes extraites), tests, CI, déploiement, outillage, docs, dépendances, correction que personne n'aurait remarquée, performance qui ne se sent pas. Test : *un cycliste qui n'a jamais vu le code s'en apercevrait-il ?* Sinon, aucune entrée.
+- Dis-le dans ton compte rendu : « entrée de nouveauté ajoutée : … », ou « pas d'entrée : changement interne ». `npx vitest run src/domain/whatsnew` (depuis PowerShell) vérifie l'ordre, les ids, les champs, et refuse le jargon de développeur.
+
 ## iPhone : toujours sans bordures
 
 Sur iPhone, l'application s'affiche **sans bordures, en plein écran**, y compris dans le navigateur : pas de barres Safari autour de la page. Pour tout test, audit, capture ou calcul de mise en page sur iPhone, utiliser la **taille plein écran** de l'appareil, jamais la fenêtre réduite de Safari :
