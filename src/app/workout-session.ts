@@ -259,6 +259,7 @@ export class WorkoutSession extends TypedEmitter<{
   private finish(why: string, completed?: CompletedWorkout): void {
     if (!this.current) return;
     clearInterval(this.timer);
+    this.timer = undefined;
     this.current = undefined;
     this.waitingForPedaling = false;
     this.pausedFlag = false;
