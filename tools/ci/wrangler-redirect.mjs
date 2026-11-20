@@ -40,12 +40,12 @@ export const PREVIEW_CONFIG = 'wrangler.app.preview.toml';
  * plus (« A preview with name ... already exists », code 100338). Constaté le 19 novembre 2026.
  */
 export function stripMigrations(toml) {
-  return toml.replace(/^\\[\\[migrations\\]\\]\\r?\\n(?:(?!\\[)[^\\n]*\\n?)*/gm, '');
+  return toml.replace(/^\[\[migrations\]\]\r?\n(?:(?!\[)[^\n]*\n?)*/gm, '');
 }
 
 /** Les previews utilisent `exports` à la place de `migrations` pour déclarer le Durable Object. */
 export function previewConfig(toml) {
-  return `${stripMigrations(toml).trimEnd()}\\n\\n# Déclaration du Durable Object pour les Worker Previews.\\n[exports.WorldRoom]\\ntype = \\"durable-object\\"\\nstorage = \\"sqlite\\"\\n`;
+  return `${stripMigrations(toml).trimEnd()}\n\n# Déclaration du Durable Object pour les Worker Previews.\n[exports.WorldRoom]\ntype = "durable-object"\nstorage = "sqlite"\n`;
 }
 
 /** Vrai pour une branche d'aperçu : Workers Builds donne son nom dans WORKERS_CI_BRANCH ; `main` est la production. */
