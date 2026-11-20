@@ -39,9 +39,9 @@ async function login(credentials: FinalSurgeCredentials, f: typeof fetch): Promi
   const payload = await response.json() as Record<string, unknown>;
   const data = (payload.data && typeof payload.data === 'object' ? payload.data : payload) as Record<string, unknown>;
   const token = data.token ?? data.accessToken ?? data.access_token;
-  const userKey = data.user_key ?? data.key ?? data.userKey ?? data.userkey;
-  if (payload.success === false || typeof token !== 'string' || typeof userKey !== 'string') throw new Error('Réponse de connexion Final Surge non reconnue.');
-  return { token, userKey };
+  const userKey = data.user_key ?? data.key ?? data.userKey ?? data.userkey ?? data.UserKey;
+  if (payload.success === false || typeof token !== 'string' || (typeof userKey !== 'string' && typeof userKey !== 'number')) throw new Error('Réponse de connexion Final Surge non reconnue.');
+  return { token, userKey: String(userKey) };
 }
 function validDate(v: unknown): v is string {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -90,10 +90,11 @@ export function createFinalSurge(accounts: Accounts, store: FinalSurgeStore, sec
         const workouts: ReturnType<typeof mapFinalSurgeWorkout>[] = [];
         const errors: string[] = [];
         for (const summary of summaries) {
-          const key = summary.WorkoutKey ?? summary.workoutKey ?? summary.workout_key ?? summary.Key ?? summary.key ?? summary.Id ?? summary.id;
-          if (typeof key !== 'string' || !key.trim()) { errors.push('Une séance sans identifiant a été ignorée.'); continue; }
+          const key = summary.WorkoutKey ?? summary.workoutKey ?? summary.workout_key ?? summary.WorkoutId ?? summary.Key ?? summary.key ?? summary.Id ?? summary.id;
+          if ((typeof key !== 'string' && typeof key !== 'number') || !String(key).trim()) { errors.push('Une séance sans identifiant a été ignorée.'); continue; }
+          const workoutKey = String(key);
           try {
-            const builder = await client.getStructuredWorkout(key);
+            const builder = await client.getStructuredWorkout(workoutKey);
             const mapped = mapFinalSurgeWorkout(summary as FinalSurgeRecord, builder);
             if (mapped.workout.steps.length) workouts.push(mapped);
             else errors.push(`${mapped.workout.name} : aucune étape exploitable.`);
