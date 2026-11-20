@@ -19,6 +19,14 @@ const VISIBLE = (selector) => {
   return null;
 };
 
+// Chaque ligne du menu (Strava, Final Surge) tient sur une seule ligne : logo à la hauteur du texte, libellé qui ne passe pas dessous.
+const ONE_LINE = (selector) => {
+  const el = document.querySelector(selector);
+  if (!el) return `${selector} : absent de la page`;
+  const h = el.getBoundingClientRect().height;
+  return h > 56 ? `${selector} : sur plusieurs lignes (${Math.round(h)} px de haut)` : null;
+};
+
 module.exports = async function account({ playwright, browser, url }) {
   const steps = [];
   const failures = [];
@@ -73,6 +81,9 @@ module.exports = async function account({ playwright, browser, url }) {
           chipLabel: document.querySelector('.account-chip')?.getAttribute('aria-label') ?? null,
           menuOpen: document.querySelector('.account-menu') ? !document.querySelector('.account-menu').hidden : null,
           nameDialogOpen: dialog?.open ?? false,
+          menuLogout: !!document.querySelector('.account-menu [data-act="logout"]'),
+          stravaDialogOpen: document.querySelector('dialog.strava-dialog')?.open ?? false,
+          stravaDialogText: (document.querySelector('dialog.strava-dialog')?.textContent ?? '').replace(/\s+/g, ' '),
           nameValue: document.getElementById('name-input')?.value ?? null,
           nameError: err && !err.hidden ? err.textContent : null,
           appTry: (() => {
@@ -161,9 +172,13 @@ module.exports = async function account({ playwright, browser, url }) {
     await s.mark('changer de nom', { nameDialogOpen: true, nameValue: 'Tom L.', menuOpen: false });
     await page.evaluate(() => document.getElementById('name-later').click());
     await page.evaluate(() => document.querySelector('.account-chip').click());
-    await page.evaluate(() => document.querySelector('.account-menu [data-act="logout"]').click());
+    await s.mark('le menu n’a pas de bouton de déconnexion direct', (snap) => (snap.menuLogout ? 'un bouton « Se déconnecter » est resté dans le menu' : undefined));
+    await page.evaluate(() => document.querySelector('.account-menu [data-act="strava"]').click());
+    await waitFor(() => document.querySelector('dialog.strava-dialog')?.open);
+    await s.mark('ligne Strava : sous-menu ouvert', { stravaDialogOpen: true, menuOpen: false, stravaDialogText: /Strava connecté[\s\S]*Tom L\./ });
+    await page.evaluate(() => document.getElementById('strava-logout').click());
     await waitFor(() => document.querySelector('.strava-connect'));
-    await s.mark('déconnecté', { stravaHref: '/api/auth/login', nameDialogOpen: false });
+    await s.mark('déconnecté', { stravaHref: '/api/auth/login', nameDialogOpen: false, stravaDialogOpen: false });
   });
 
   // iPhone couché en plein écran (844 × 390, sans bordures) : sur chaque écran qui porte le compte, le bouton Strava et le menu
@@ -212,8 +227,21 @@ module.exports = async function account({ playwright, browser, url }) {
       if (s.failures.length) return; // pastille introuvable : inutile d'essayer de la toucher
       await page.locator(`${root} .account-chip`).tap();
       await sleep(300);
-      await seen(`${view}, menu du compte ouvert`, [`${root} .account-menu`, `${root} .account-menu [data-act="final-surge"]`, `${root} .account-menu [data-act="logout"]`]);
-      await page.keyboard.press('Escape');
+      await seen(`${view}, menu du compte ouvert`, [`${root} .account-menu`, `${root} .account-menu [data-act="final-surge"]`, `${root} .account-menu [data-act="strava"]`, `${root} .account-menu .account-menu-strava .strava-mark`]);
+      if (await page.evaluate((r) => !!document.querySelector(`${r} .account-menu [data-act="logout"]`), root)) s.fail(`« ${view}, menu du compte ouvert » : un bouton « Se déconnecter » est resté dans le menu`);
+      for (const row of ['.account-menu-strava', '.account-menu-final-surge']) {
+        const problem = await page.evaluate(ONE_LINE, `${root} ${row}`);
+        if (problem) s.fail(`« ${view}, menu du compte ouvert » : ${problem}`);
+      }
+      const strava = await page.evaluate((r) => document.querySelector(`${r} .account-menu-strava`)?.textContent.trim(), root);
+      if (strava !== 'Strava connecté') s.fail(`« ${view}, menu du compte ouvert » : ligne Strava = ${JSON.stringify(strava)}, attendu « Strava connecté »`);
+      // La ligne Strava ouvre son sous-menu : infos et déconnexion, entiers dans l'écran.
+      await page.locator(`${root} .account-menu [data-act="strava"]`).tap();
+      await sleep(300);
+      await seen(`${view}, sous-menu Strava`, ['dialog.strava-dialog', 'dialog.strava-dialog #strava-logout', 'dialog.strava-dialog #strava-close']);
+      if (s.failures.length) return; // sous-menu absent : rien à fermer
+      await page.locator('#strava-close').tap();
+      await sleep(200);
     }
   });
 

@@ -25,7 +25,7 @@
 .account-status[data-tone='busy']::before { background: #d6336c; }
 .account-caret { width: 12px; height: 12px; color: var(--muted); }
 
-.account-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 10; min-width: 220px; display: flex; flex-direction: column; padding: 6px; border-radius: 16px; background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .22); }
+.account-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 10; width: max-content; min-width: 220px; display: flex; flex-direction: column; padding: 6px; border-radius: 16px; background: #fff; box-shadow: 0 18px 48px rgb(0 0 0 / .22); }
 .account-menu[hidden] { display: none; }
 .account-menu button { min-height: 44px; padding: 10px 14px; border-radius: 10px; background: none; color: var(--fg); font-weight: 600; text-align: left; }
 .account-menu button:hover, .account-menu button:focus-visible { background: #f4ede3; outline: none; }
@@ -84,6 +84,18 @@
 .account-menu .account-menu-final-surge.is-connected { color: #176b3a; }
 .fs-brand-mark, .fs-button-logo, .fs-logo { display: block; flex: 0 0 auto; width: auto; height: auto; object-fit: contain; background: transparent; }
 .fs-brand-mark { width: 76px; max-height: 24px; }
+
+/* Menu du compte : une ligne par service, logo à la hauteur du texte, libellés alignés, jamais sur deux lignes. */
+.account-menu .account-menu-final-surge, .account-menu .account-menu-strava { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.account-menu .account-menu-strava { color: #176b3a; }
+.account-menu .menu-chevron { flex: none; width: 12px; height: 12px; margin-left: auto; color: var(--muted); }
+/* Fenêtre Strava : logo officiel à côté du titre, comme celle de Final Surge. */
+.strava-dialog-brand { display: flex; align-items: center; gap: 13px; }
+.strava-dialog-brand h2 { margin: 2px 0 0; font: 700 2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.strava-logo { display: block; flex: none; width: 88px; height: auto; }
+.account-menu .menu-logo { flex: 0 0 62px; width: 62px; height: 1.05em; max-height: none; object-fit: contain; object-position: left center; }
+.account-menu .fs-brand-mark { height: 1.5em; }
+.account-menu .strava-mark { height: .8em; }
 .fs-dialog-brand { display: flex; align-items: center; gap: 13px; }
 .fs-dialog-brand h2 { margin: 2px 0 0; font: 700 2rem/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
 .fs-logo { width: 132px; max-height: 42px; }

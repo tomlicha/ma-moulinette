@@ -12,6 +12,7 @@ import { devLogin, fetchAccount, logout, nativeStravaLogin, saveDisplayName } fr
 import { Moulinette, isNativeShell } from '../infra/native/shell';
 import { setupAccount } from '../ui/account/account-chip';
 import { setupFinalSurgeDialog } from '../ui/account/final-surge-dialog';
+import { setupStravaDialog } from '../ui/account/strava-dialog';
 import type { Wiring } from './wiring';
 
 export function composeAccount(w: Wiring): void {
@@ -106,6 +107,7 @@ export function composeAccount(w: Wiring): void {
     log: w.log,
   });
   const account = setupAccount({ hosts: [...document.querySelectorAll<HTMLElement>('.home-top')], session });
+  setupStravaDialog({ session });
   const syncFinalSurge = () => synchronizeFinalSurge({
     fetchWorkouts: fetchFinalSurgeWorkouts,
     importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp() }),

@@ -135,8 +135,8 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
     id: '2026-11-20-vos-comptes-telephone',
     kind: 'improved',
-    title: 'Ton compte sur téléphone',
-    text: 'Sur l’accueil du téléphone, le bouton Strava et le menu de ton compte (dont Final Surge) sont de nouveau en haut à droite.',
+    title: 'Strava et Final Surge, bien visibles',
+    text: 'Sur téléphone, le bouton Strava et le menu de ton compte sont de nouveau en haut à droite. Strava et Final Surge y montrent leur logo quand ils sont connectés : un toucher ouvre leurs infos et leur déconnexion.',
     icon: 'sync',
     target: { view: 'accueil', label: 'Ouvrir l’accueil' },
   },
