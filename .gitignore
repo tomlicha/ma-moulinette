@@ -9,3 +9,4 @@ dist
 .dev.vars
 .vscode/
 .e2e/
+wrangler.app.preview.toml

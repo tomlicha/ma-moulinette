@@ -29,16 +29,41 @@ export function redirectFile(configName = APP_CONFIG) {
   return `${JSON.stringify({ configPath: `../../${configName}` })}\n`;
 }
 
+export const PREVIEW_CONFIG = 'wrangler.app.preview.toml';
+
+/**
+ * Configuration des aperçus : celle de l'application sans les blocs `[[migrations]]`.
+ *
+ * La migration Durable Object `v1` (WorldRoom) est déjà appliquée au Worker parent. `wrangler preview` la renvoyait
+ * pourtant à chaque nouvel aperçu, sans `old_tag`, et Cloudflare refusait le déploiement (code 10079, « got tag ''
+ * when expected tag is 'v1' »), laissant un aperçu créé mais sans déploiement, que le build suivant ne retrouvait
+ * plus (« A preview with name ... already exists », code 100338). Constaté le 19 novembre 2026.
+ */
+export function stripMigrations(toml) {
+  return toml.replace(/^\[\[migrations\]\]\r?\n(?:(?!\[)[^\n]*\n?)*/gm, '');
+}
+
+/** Vrai pour une branche d'aperçu : Workers Builds donne son nom dans WORKERS_CI_BRANCH ; `main` est la production. */
+export function isPreviewBuild(env) {
+  return Boolean(env.WORKERS_CI_BRANCH) && env.WORKERS_CI_BRANCH !== 'main';
+}
+
 /** Écrit la redirection dans `root` si l'on est dans Workers Builds ; renvoie le chemin écrit, sinon `undefined`. */
 export function writeRedirect(root, env) {
   if (!inWorkersBuilds(env)) return undefined;
+  let target = APP_CONFIG;
+  const appConfig = path.join(root, APP_CONFIG);
+  if (isPreviewBuild(env) && fs.existsSync(appConfig)) {
+    fs.writeFileSync(path.join(root, PREVIEW_CONFIG), stripMigrations(fs.readFileSync(appConfig, 'utf8')));
+    target = PREVIEW_CONFIG;
+  }
   const file = path.join(root, '.wrangler', 'deploy', 'config.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, redirectFile());
+  fs.writeFileSync(file, redirectFile(target));
   return file;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const file = writeRedirect(process.cwd(), process.env);
-  console.log(file ? `wrangler : configuration redirigée vers ${APP_CONFIG} (${path.relative(process.cwd(), file)})` : 'wrangler : pas de redirection (hors Workers Builds)');
+  console.log(file ? `wrangler : configuration redirigée (${JSON.parse(fs.readFileSync(file, 'utf8')).configPath}) (${path.relative(process.cwd(), file)})` : 'wrangler : pas de redirection (hors Workers Builds)');
 }

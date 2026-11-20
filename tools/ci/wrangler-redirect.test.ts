@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error module JavaScript sans types
-import { inWorkersBuilds, redirectFile } from './wrangler-redirect.mjs';
+import { inWorkersBuilds, redirectFile, stripMigrations, writeRedirect } from './wrangler-redirect.mjs';
 
 const script = path.resolve('tools/ci/wrangler-redirect.mjs');
 
@@ -31,5 +31,28 @@ describe('redirection de configuration wrangler', () => {
     const file = run({ WORKERS_CI: '1' });
     expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({ configPath: '../../wrangler.app.toml' });
     expect(fs.existsSync(run({}))).toBe(false);
+  });
+});
+
+describe('aperçus de branche', () => {
+  const toml = 'name = "x"\n\n[[migrations]]\ntag = "v1"\nnew_sqlite_classes = ["WorldRoom"]\n\n[triggers]\ncrons = ["30 3 * * *"]\n';
+
+  it('retire les migrations Durable Object, rien d’autre', () => {
+    expect(stripMigrations(toml)).toBe('name = "x"\n\n[triggers]\ncrons = ["30 3 * * *"]\n');
+  });
+
+  it('une branche autre que main passe par la configuration sans migrations', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wr-'));
+    fs.writeFileSync(path.join(root, 'wrangler.app.toml'), toml);
+    writeRedirect(root, { WORKERS_CI: '1', WORKERS_CI_BRANCH: 'ma-branche' });
+    expect(JSON.parse(fs.readFileSync(path.join(root, '.wrangler/deploy/config.json'), 'utf8'))).toEqual({ configPath: '../../wrangler.app.preview.toml' });
+    expect(fs.readFileSync(path.join(root, 'wrangler.app.preview.toml'), 'utf8')).not.toContain('migrations');
+  });
+
+  it('main garde la configuration complète', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wr-'));
+    fs.writeFileSync(path.join(root, 'wrangler.app.toml'), toml);
+    writeRedirect(root, { WORKERS_CI: '1', WORKERS_CI_BRANCH: 'main' });
+    expect(fs.existsSync(path.join(root, 'wrangler.app.preview.toml'))).toBe(false);
   });
 });
