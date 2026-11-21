@@ -1,0 +1,38 @@
+# Ma Moulinette
+
+> Application web gratuite d'entraînement cycliste en intérieur avec environnement 3D, connexion aux home trainers Bluetooth et séances structurées.
+
+Ma Moulinette permet de s'entraîner sur un home trainer connecté directement dans un navigateur compatible, sans installer de logiciel sur ordinateur.
+
+## Fonctionnalités
+
+- Environnement virtuel 3D pour les sorties de vélo en intérieur.
+- Connexion Bluetooth aux home trainers et aux capteurs cardiaques compatibles.
+- Lecture de la puissance, de la cadence, de la vitesse et de la fréquence cardiaque selon les capteurs disponibles.
+- Pilotage de la résistance en mode ERG pour suivre une puissance cible.
+- Mode SIM pour adapter la résistance à la pente du parcours.
+- Import de séances structurées aux formats ZWO (Zwift), ERG et MRC.
+- Création et modification de séances structurées.
+- Export des sorties au format FIT.
+- Envoi des sorties vers Strava après connexion du compte.
+- Mode multijoueur permettant de voir d'autres cyclistes dans le monde virtuel.
+- Utilisation sans compte possible pour rouler seul et exporter ses sorties FIT.
+
+## Public cible
+
+Cyclistes sur home trainer, pratiquants de vélo d'intérieur, utilisateurs de home trainers intelligents, cyclistes qui suivent des entraînements structurés et utilisateurs de fichiers de séances ZWO, ERG ou MRC.
+
+## Compatibilité et limites
+
+- La connexion Web Bluetooth nécessite un navigateur compatible, notamment Chrome ou Edge, et un contexte sécurisé HTTPS (ou localhost).
+- Les fonctions disponibles dépendent du modèle de home trainer et des protocoles Bluetooth qu'il expose.
+- Un compte Strava est facultatif ; l'application peut être utilisée sans synchronisation Strava.
+- L'application est accessible gratuitement depuis le navigateur.
+
+## Site officiel
+
+https://ma-moulinette-ride.moulinette-ride.workers.dev/
+
+## Langue
+
+Français (Canada).

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr-CA">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
@@ -10,11 +10,59 @@
     <meta name="apple-mobile-web-app-title" content="Ma Moulinette" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Ma Moulinette — home trainer 3D et séances structurées</title>
-    <meta name="description" content="Roule sur ton home trainer connecté dans un monde 3D : vélo et capteurs en Bluetooth, séances structurées en mode ERG, export FIT et envoi à Strava. Directement dans le navigateur." />
+    <meta name="description" content="Entraînement vélo en intérieur dans un monde 3D. Connecte ton home trainer Bluetooth, suis des séances structurées en ERG, importe des fichiers ZWO, ERG et MRC, puis exporte tes sorties en FIT vers Strava." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="googlebot" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="Ma Moulinette" />
+    <meta name="application-name" content="Ma Moulinette" />
+    <link rel="canonical" href="%SITE_URL%/" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Ma Moulinette",
+        "url": "%SITE_URL%/",
+        "description": "Entraînement vélo en intérieur dans un monde 3D. Connecte ton home trainer Bluetooth, suis des séances structurées en ERG, importe des fichiers ZWO, ERG et MRC, puis exporte tes sorties en FIT vers Strava.",
+        "inLanguage": "fr-CA",
+        "browserRequirements": "Navigateur compatible Web Bluetooth, HTTPS requis pour la connexion Bluetooth.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "CAD"
+        },
+        "applicationCategory": "Sports",
+        "operatingSystem": "Tout appareil équipé d'un navigateur web moderne",
+        "isAccessibleForFree": true,
+        "featureList": [
+          "Entraînement cycliste en environnement 3D",
+          "Connexion Bluetooth aux home trainers et capteurs cardiaques",
+          "Séances structurées avec pilotage ERG",
+          "Export des sorties au format FIT",
+          "Synchronisation avec Strava"
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {"@type":"Question","name":"Ma Moulinette est-elle gratuite ?","acceptedAnswer":{"@type":"Answer","text":"Oui. L'application est accessible gratuitement depuis un navigateur compatible. La connexion à Strava est facultative."}},
+          {"@type":"Question","name":"Quels home trainers sont compatibles ?","acceptedAnswer":{"@type":"Answer","text":"La compatibilité dépend du modèle et des protocoles Bluetooth qu'il expose. Ma Moulinette prend en charge les appareils compatibles avec FTMS ainsi que certains protocoles propriétaires. Le Wahoo KICKR testé dans le projet fonctionne en lecture et en pilotage. Les autres modèles doivent être vérifiés individuellement."}},
+          {"@type":"Question","name":"Quel navigateur faut-il utiliser ?","acceptedAnswer":{"@type":"Answer","text":"Sur ordinateur, utilise un navigateur compatible Web Bluetooth, comme Chrome ou Edge, et ouvre le site en HTTPS."}},
+          {"@type":"Question","name":"Faut-il un capteur cardiaque ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le capteur cardiaque est facultatif. Tu peux utiliser ton home trainer seul."}},
+          {"@type":"Question","name":"Peut-on importer des séances Zwift ou d'autres plateformes ?","acceptedAnswer":{"@type":"Answer","text":"Tu peux importer des fichiers d'entraînement structurés aux formats ZWO, ERG et MRC. Tu peux aussi créer et modifier tes propres séances dans l'éditeur intégré."}},
+          {"@type":"Question","name":"À quoi sert le mode ERG ?","acceptedAnswer":{"@type":"Answer","text":"Le mode ERG demande au home trainer de réguler la résistance pour atteindre une puissance cible. Son fonctionnement dépend de la compatibilité du home trainer et de son protocole de contrôle."}},
+          {"@type":"Question","name":"Peut-on exporter ses entraînements vers Strava ?","acceptedAnswer":{"@type":"Answer","text":"Tu peux exporter une activité au format FIT ou connecter ton compte Strava pour lui envoyer ta sortie. Un compte Strava n'est pas nécessaire pour télécharger un fichier FIT."}},
+          {"@type":"Question","name":"Peut-on utiliser Ma Moulinette sans connexion Internet ?","acceptedAnswer":{"@type":"Answer","text":"Après le premier chargement et la mise en cache des ressources, l'application web peut démarrer et permettre de rouler hors ligne. Les fonctions qui nécessitent le serveur, comme Strava et le multijoueur, demandent une connexion Internet."}},
+          {"@type":"Question","name":"Comment fonctionne le mode multijoueur ?","acceptedAnswer":{"@type":"Answer","text":"Le mode multijoueur permet de croiser d'autres cyclistes dans le monde virtuel. La connexion à un compte Strava est nécessaire pour rejoindre la salle en ligne ; elle reste facultative pour les sorties individuelles."}}
+        ]
+      }
+    </script>
     <!-- Aperçu des liens partagés. %SITE_URL% : adresse publique, donnée au build (vite.config.ts, siteUrl). -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Ma Moulinette" />
-    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:locale" content="fr_CA" />
     <meta property="og:title" content="Ma Moulinette — home trainer 3D et séances structurées" />
     <meta property="og:description" content="Roule sur ton home trainer connecté dans un monde 3D, avec tes séances structurées. Directement dans le navigateur." />
     <meta property="og:url" content="%SITE_URL%/" />
@@ -23,6 +71,10 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Un cycliste roule sur une route bordée d'arbres, montagnes au coucher du soleil." />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ma Moulinette — entraînement vélo en 3D sur home trainer" />
+    <meta name="twitter:description" content="Connecte ton home trainer Bluetooth, suis tes séances structurées en ERG et roule dans un environnement 3D. Gratuit, directement dans ton navigateur." />
+    <meta name="twitter:image" content="%SITE_URL%/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Un cycliste roule sur une route bordée d'arbres, montagnes au coucher du soleil." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <!-- Icône de l'application installée sur l'écran d'accueil d'un iPhone (iOS n'accepte pas le SVG). -->
@@ -91,8 +143,8 @@
           <section class="dev-hero" aria-labelledby="dev-title">
             <div class="dev-hero-txt">
               <span class="home-kicker">Appareils</span>
-              <h1 id="dev-title">Équipe ton coureur</h1>
-              <p class="dev-lede">Chaque appareil apparaît sur le radar, relié à ton coureur. Un trainer suffit pour rouler.</p>
+              <h1 id="dev-title">Configure ton home trainer connecté</h1>
+              <p class="dev-lede">Connecte ton home trainer et ton capteur cardiaque en Bluetooth pour rouler dans un environnement 3D et suivre tes séances cyclistes.</p>
               <button id="rider-open" class="rider-chip" type="button" aria-haspopup="dialog">
                 <svg class="rider-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="3.4"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg>
                 <span><b>Mon coureur</b> <span id="rider-summary"></span></span>
@@ -166,6 +218,75 @@
           </section>
 
         </div>
+
+        <section class="seo-content" aria-labelledby="seo-title">
+          <div class="seo-content-inner">
+            <header class="seo-intro">
+              <p class="home-kicker">Entraînement cycliste en intérieur</p>
+              <h2 id="seo-title">Ton home trainer, ta route, tes séances</h2>
+              <p>Ma Moulinette est une application de vélo d'intérieur qui transforme ton home trainer connecté en terrain d'entraînement virtuel. Roule dans un environnement 3D, suis tes données en direct et travaille avec des séances adaptées à tes objectifs, directement depuis ton navigateur.</p>
+            </header>
+
+            <div class="seo-features">
+              <article>
+                <h3>Roule dans un monde 3D</h3>
+                <p>Choisis un parcours et pédale dans un environnement virtuel. La sortie associe les données de ton home trainer au profil du parcours pour suivre ton effort au fil de la route.</p>
+              </article>
+              <article>
+                <h3>Connecte tes capteurs en Bluetooth</h3>
+                <p>Relie un home trainer compatible et, si tu le souhaites, un capteur de fréquence cardiaque. La puissance, la cadence, la vitesse et le cardio sont affichés selon les mesures fournies par tes appareils.</p>
+              </article>
+              <article>
+                <h3>Structure tes entraînements</h3>
+                <p>Importe tes séances aux formats ZWO, ERG ou MRC, ou construis tes propres entraînements par blocs. Le mode ERG ajuste la résistance pour suivre une puissance cible lorsque ton home trainer le permet.</p>
+              </article>
+              <article>
+                <h3>Garde tes sorties</h3>
+                <p>Exporte tes activités au format FIT pour les conserver dans ton carnet d'entraînement. Tu peux aussi connecter Strava pour envoyer tes sorties depuis l'application.</p>
+              </article>
+            </div>
+
+            <section class="seo-faq" aria-labelledby="seo-faq-title">
+              <h2 id="seo-faq-title">Questions fréquentes sur Ma Moulinette</h2>
+              <details>
+                <summary>Ma Moulinette est-elle gratuite ?</summary>
+                <p>Oui. L'application est accessible gratuitement depuis un navigateur compatible. La connexion à Strava est facultative.</p>
+              </details>
+              <details>
+                <summary>Quels home trainers sont compatibles ?</summary>
+                <p>La compatibilité dépend du modèle et des protocoles Bluetooth qu'il expose. Ma Moulinette prend en charge les appareils compatibles avec FTMS ainsi que certains protocoles propriétaires. Le Wahoo KICKR testé dans le projet fonctionne en lecture et en pilotage. Les autres modèles doivent être vérifiés individuellement : la présence du Bluetooth ne garantit pas à elle seule le contrôle de la résistance.</p>
+              </details>
+              <details>
+                <summary>Quel navigateur faut-il utiliser ?</summary>
+                <p>Sur ordinateur, utilise un navigateur compatible Web Bluetooth, comme Chrome ou Edge, et ouvre le site en HTTPS. Le navigateur doit également autoriser l'accès Bluetooth au moment de la connexion.</p>
+              </details>
+              <details>
+                <summary>Faut-il un capteur cardiaque ?</summary>
+                <p>Non. Le capteur cardiaque est facultatif. Tu peux utiliser ton home trainer seul ; les données affichées dépendent des capteurs connectés.</p>
+              </details>
+              <details>
+                <summary>Peut-on importer des séances Zwift ou d'autres plateformes ?</summary>
+                <p>Tu peux importer des fichiers d'entraînement structurés aux formats ZWO (utilisé notamment par Zwift), ERG et MRC. Tu peux aussi créer et modifier tes propres séances dans l'éditeur intégré.</p>
+              </details>
+              <details>
+                <summary>À quoi sert le mode ERG ?</summary>
+                <p>Le mode ERG demande au home trainer de réguler la résistance pour atteindre une puissance cible, par exemple pendant les intervalles d'une séance. Son fonctionnement dépend de la compatibilité du home trainer et de son protocole de contrôle.</p>
+              </details>
+              <details>
+                <summary>Peut-on exporter ses entraînements vers Strava ?</summary>
+                <p>Oui. Tu peux exporter une activité au format FIT ou connecter ton compte Strava pour lui envoyer ta sortie. Un compte Strava n'est pas nécessaire pour utiliser l'application et télécharger un fichier FIT.</p>
+              </details>
+              <details>
+                <summary>Peut-on utiliser Ma Moulinette sans connexion Internet ?</summary>
+                <p>Après le premier chargement et la mise en cache des ressources, l'application web peut démarrer et permettre de rouler hors ligne. Les fonctions qui nécessitent le serveur, comme la connexion à Strava et le multijoueur, demandent une connexion Internet.</p>
+              </details>
+              <details>
+                <summary>Comment fonctionne le mode multijoueur ?</summary>
+                <p>Le mode multijoueur permet de croiser d'autres cyclistes dans le monde virtuel. La connexion à un compte Strava est nécessaire pour rejoindre la salle en ligne ; elle reste facultative pour les sorties individuelles.</p>
+              </details>
+            </section>
+          </div>
+        </section>
       </section>
 
       <!-- Écran 2 : accueil, plein écran (docs/design/accueil-refonte.md). Ordinateur : tableau (monde, parcours en vignettes, séances) ;
