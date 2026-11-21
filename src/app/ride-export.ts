@@ -120,6 +120,12 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
   /** Commence le tick 1 Hz et demande à Strava où on en est ; le départ FIT est signalé par le déclencheur partagé. */
   start(): void {
     void this.refreshStrava();
+    // Les mesures continuent d'alimenter le recorder après le déclenchement partagé.
+    // Avant le premier coup de pédale, elles sont ignorées pour ne pas créer de pré-enregistrement.
+    this.deps.hub.on('measurement', (m) => {
+      if (!this.recordingStarted) return;
+      this.recorder.update({ powerW: m.powerW, cadenceRpm: m.cadenceRpm, heartRateBpm: m.heartRateBpm }, this.clock());
+    });
     setInterval(() => this.tick(), 1000);
   }
 
