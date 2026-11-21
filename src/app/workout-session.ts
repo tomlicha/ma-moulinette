@@ -57,6 +57,8 @@ export class WorkoutSession extends TypedEmitter<{
   private current?: WorkoutRunner;
   private timer?: ReturnType<typeof setInterval>;
   private pausedFlag = false;
+  /** En démarrage local différé, la séance attend la première mesure de pédalage. */
+  private waitingForPedaling = false;
   private lastTickMs = 0;
   private last?: WorkoutState;
   private readonly follower = new ErgFollower();
@@ -115,7 +117,7 @@ export class WorkoutSession extends TypedEmitter<{
    * `clockS` : séance de groupe, le temps est celui du groupe (secondes depuis son départ) ; on arrive alors au bon palier,
    * même en retard, et on ne peut ni mettre en pause ni sauter de palier.
    */
-  start(clockS?: () => number): void {
+  start(clockS?: () => number, waitForPedaling = false): void {
     const workout = this.chosen;
     if (!workout || this.current) return;
     this.external = clockS;
@@ -125,13 +127,34 @@ export class WorkoutSession extends TypedEmitter<{
     this.ergOptOut = false;
     this.holdUntilMs = 0;
     this.follower.reset();
+    this.waitingForPedaling = waitForPedaling && !clockS;
     this.lastTickMs = this.clock();
-    this.timer = setInterval(() => this.tick(), TICK_MS);
+    if (!this.waitingForPedaling) this.startClock();
     this.emit('intensity', 1);
     this.emit('changed');
     this.deps.log(`séance démarrée : ${workout.name}, FTP ${runner.ftpW} W`);
     this.emit('started', workout.name);
+    if (!this.waitingForPedaling) this.tick();
+    else {
+      // Publier aussi l'état initial dans le getter `state` pendant l'attente du premier coup de pédale.
+      this.last = runner.state();
+      this.emit('state', this.last);
+    }
+  }
+
+  /** Démarre le chronomètre au premier coup de pédale reçu du trainer. */
+  onMeasurement(m: { powerW?: number; cadenceRpm?: number }): void {
+    if (!this.current || !this.waitingForPedaling) return;
+    if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
+    this.waitingForPedaling = false;
+    this.lastTickMs = this.clock();
+    this.startClock();
+    this.deps.log('premier coup de pédale : chronomètre de la séance démarré');
     this.tick();
+  }
+
+  private startClock(): void {
+    if (!this.timer) this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
   /** Arrête la séance en cours (à la main) : l'ERG est relâché. */
@@ -159,7 +182,7 @@ export class WorkoutSession extends TypedEmitter<{
   /** Change l'intensité de `delta` (0,05 = 5 %), entre 50 et 150 %. */
   adjustIntensity(delta: number): void {
     const runner = this.current;
-    if (!runner) return;
+    if (!runner || this.waitingForPedaling) return;
     runner.intensity = Math.min(INTENSITY.max, Math.max(INTENSITY.min, Math.round((runner.intensity + delta) * 100) / 100));
     this.emit('intensity', runner.intensity);
     this.follower.reset();
@@ -240,7 +263,9 @@ export class WorkoutSession extends TypedEmitter<{
   private finish(why: string, completed?: CompletedWorkout): void {
     if (!this.current) return;
     clearInterval(this.timer);
+    this.timer = undefined;
     this.current = undefined;
+    this.waitingForPedaling = false;
     this.pausedFlag = false;
     this.ergOptOut = false;
     this.external = undefined;

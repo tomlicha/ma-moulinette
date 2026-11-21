@@ -102,8 +102,9 @@ export function composeRide(w: Wiring): void {
   /** Démarrer la sortie, ou l'arrêter : un arrêt volontaire, hors séance, fige la sortie et ouvre son récapitulatif (docs/design/recap.md). */
   function toggleRide() {
     if (!rideSession.active) return startRide();
+    // Un arrêt manuel termine aussi une séance structurée, sans la déclarer « menée au bout ».
+    if (w.workoutSession.running) w.workoutSession.stop('sortie arrêtée');
     stopRide();
-    if (w.workoutSession.running) return;
     w.exporter.onRideStopped();
     w.offerRecap();
   }
