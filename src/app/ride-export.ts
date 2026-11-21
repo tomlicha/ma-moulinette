@@ -124,8 +124,8 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
       const now = this.clock();
       const firstPedal = !this.recordingStarted && ((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0);
       if (firstPedal) {
-        // Efface les valeurs reçues à l'arrêt : le FIT commence sur le même événement que la séance.
-        this.recorder.reset();
+        // Les mesures capteur pré-départ sont ignorées ; on conserve les derniers snapshots route/séance,
+        // déjà actualisés indépendamment, pour les inclure dans le tout premier échantillon.
         this.recordingStarted = true;
       }
       if (!this.recordingStarted) return;
