@@ -41,16 +41,20 @@ export class AutoStart {
   }
 
   /** À appeler à chaque mesure reçue du trainer. */
-  onMeasurement(m: { powerW?: number; cadenceRpm?: number }): void {
+  onMeasurement(m: { powerW?: number; cadenceRpm?: number }): boolean {
     const { rideSession, workoutSession, trainer, log } = this.d;
-    if (!this.armed || workoutSession.running || !this.d.rideScreenOpen()) return;
-    if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
+    if (!this.armed || workoutSession.running || !this.d.rideScreenOpen()) return false;
+    if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return false;
     if (workoutSession.workout && !this.d.workoutBlocked()) {
       log('premier coup de pédale : démarrage de la séance');
       this.d.startWorkout();
-    } else if (!rideSession.active && trainer.connected) {
+      return true;
+    }
+    if (!rideSession.active && trainer.connected) {
       log('premier coup de pédale : démarrage de la sortie');
       this.d.startRide();
+      return true;
     }
+    return false;
   }
 }
