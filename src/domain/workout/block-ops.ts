@@ -14,7 +14,7 @@ const watts = (f: number, ftpW: number) => `${Math.round(f * ftpW)} W`;
 export function nudgePower(b: EditorBlock, delta: number): EditorBlock {
   switch (b.type) {
     case 'steady':
-      return { ...b, power: clampPower(b.power + delta) };
+      return { ...b, power: clampPower(b.power + delta), ...(b.powerTo === undefined ? {} : { powerTo: clampPower(b.powerTo + delta) }) };
     case 'intervals':
       return { ...b, onPower: clampPower(b.onPower + delta) };
     case 'warmup':
@@ -68,7 +68,7 @@ export function blockShort(b: EditorBlock): string {
     case 'ramp':
       return `${mmss(b.durationS)} · ${Math.round(b.from * 100)}→${pct(b.to)}`;
     case 'steady':
-      return `${mmss(b.durationS)} · ${pct(b.power)}`;
+      return `${mmss(b.durationS)} · ${b.powerTo === undefined || b.powerTo === b.power ? pct(b.power) : `${pct(b.power)}–${pct(b.powerTo)}`}`;
     case 'intervals':
       return `${b.repeat} × (${mmss(b.onS)} à ${pct(b.onPower)} + ${mmss(b.offS)} à ${pct(b.offPower)})`;
     case 'free':
@@ -85,7 +85,9 @@ export function describeBlock(b: EditorBlock, ftpW: number): string {
     case 'ramp':
       return `${BLOCK_LABEL[b.type]} · ${mmss(b.durationS)} de ${pct(b.from)} à ${pct(b.to)} (${watts(b.from, ftpW)} → ${watts(b.to, ftpW)})`;
     case 'steady':
-      return `Palier · ${mmss(b.durationS)} à ${pct(b.power)} (${watts(b.power, ftpW)}, ${zone(b.power)})`;
+      return b.powerTo === undefined || b.powerTo === b.power
+        ? `Palier · ${mmss(b.durationS)} à ${pct(b.power)} (${watts(b.power, ftpW)}, ${zone(b.power)})`
+        : `Palier · ${mmss(b.durationS)} entre ${pct(b.power)} et ${pct(b.powerTo)} (${watts(b.power, ftpW)}–${watts(b.powerTo, ftpW)})`;
     case 'intervals':
       return `Intervalles · ${b.repeat} × ${mmss(b.onS)} à ${pct(b.onPower)} (${watts(b.onPower, ftpW)}, ${zone(b.onPower)}), récupération ${mmss(b.offS)} à ${pct(b.offPower)} (${watts(b.offPower, ftpW)})`;
     case 'free':

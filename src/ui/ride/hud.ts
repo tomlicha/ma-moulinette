@@ -125,7 +125,7 @@ const TEMPLATE = `
     <div class="hud-side">
       <div class="row lab" data-when="not-workout"><span class="hud-pill" data-h="zone">–</span><span><span data-h="pctFtp">–</span> % de la FTP</span></div>
       <div class="row lab" data-when="workout">
-        <span class="hud-wo-line"><span class="hud-pill" data-h="woZone">–</span><span class="hud-chip" data-h="woChip">ERG</span><span>écart <span data-h="delta">–</span> W</span></span>
+        <span class="hud-wo-line"><span class="hud-pill" data-h="woZone">–</span><span class="hud-chip" data-h="woChip">ERG</span><span>écart <span data-h="delta">–</span> <span data-h="deltaUnit">W</span></span></span>
         <span data-h="range"></span>
       </div>
     </div>
@@ -180,16 +180,17 @@ const hEl = (tag: string, cls: string, text?: string) => {
 /** Une ligne de la liste « À suivre » : bloc de la couleur de zone, long comme l'intensité, puis la durée. */
 function upRow(s: UpcomingStep, ftpW: number, cls: string) {
   const free = s.fromW === undefined || s.toW === undefined;
-  const ramp = !free && s.fromW !== s.toW;
-  const row = hEl('div', ['hud-up', cls, ramp ? 'ramp' : '', free ? 'free' : ''].filter(Boolean).join(' '));
+  const ramp = !free && s.fromW !== s.toW && !s.targetRange;
+  const band = !free && s.targetRange;
+  const row = hEl('div', ['hud-up', cls, ramp ? 'ramp' : '', band ? 'band' : '', free ? 'free' : ''].filter(Boolean).join(' '));
   row.dataset.z = s.zoneFrom;
   if (ramp) {
     row.style.setProperty('--z-from', `var(--h${s.zoneFrom})`);
     row.style.setProperty('--z-to', `var(--h${s.zoneTo})`);
   }
   const frac = free ? 0 : Math.min(1, Math.max(s.fromW!, s.toW!) / (ftpW * UP_MAX));
-  const pw = hEl('span', 'hud-up-pw', free ? 'libre' : ramp ? `${s.fromW}→${s.toW}` : String(s.fromW));
-  if (!free && !ramp) pw.append(hEl('small', '', 'W'));
+  const pw = hEl('span', 'hud-up-pw', free ? 'libre' : band ? `${s.fromW}–${s.toW} W` : ramp ? `${s.fromW}→${s.toW}` : String(s.fromW));
+  if (!free && !ramp && !band) pw.append(hEl('small', '', 'W'));
   pw.style.width = `calc(66px + (100% - 66px) * ${frac.toFixed(3)})`;
   const track = hEl('span', 'hud-up-track');
   track.append(pw);
@@ -496,7 +497,8 @@ export class RideHud {
   }
 
   private updateWorkout({ workout, state: s, ftpW, intensity = 1 }: NonNullable<HudInput['workout']>, p: number | undefined) {
-    const free = s.targetW === undefined;
+    const band = s.targetRangeW !== undefined;
+    const free = s.targetW === undefined && !band;
     const fresh = this.series?.workout !== workout;
     if (fresh) this.series = { workout, list: findSeries(workout.steps) };
     const r = repetitionAt(this.series!.list, s.stepIndex);
@@ -507,20 +509,29 @@ export class RideHud {
     this.text('stepLeft', fmtTime(s.stepRemainingS));
     this.text('stepDone', `${fmtTime(s.stepElapsedS)} / ${fmtTime(s.step.durationS)}`);
     this.text('stepCadence', s.step.cadenceRpm ? `cadence ${s.step.cadenceRpm}` : '');
-    const z = zoneLabel(s.targetW ?? p ?? 0, ftpW);
+    const targetCenterW = band ? (s.targetRangeW!.fromW + s.targetRangeW!.toW) / 2 : s.targetW;
+    const z = zoneLabel(targetCenterW ?? p ?? 0, ftpW);
     const prog = this.node('stepProg');
     prog.style.width = `${Math.min(100, (s.stepElapsedS / (s.step.durationS || 1)) * 100)}%`;
     prog.dataset.z = z.id;
 
-    this.text('target', free ? 'libre' : String(s.targetW));
+    this.text('target', free ? 'libre' : band ? `${s.targetRangeW!.fromW}–${s.targetRangeW!.toW}` : String(s.targetW));
     this.node('targetUnit').hidden = free;
     this.node('target').dataset.z = free ? '' : z.id;
     this.zone('woZone', free && p === undefined ? '' : z.id, free && p === undefined ? '–' : z.label);
-    this.text('delta', free || p === undefined ? '–' : signed(p - s.targetW!));
-    this.text('range', free ? 'palier libre' : `plage ${Math.round(s.targetW! * (1 - TARGET_BAND))}–${Math.round(s.targetW! * (1 + TARGET_BAND))} W`);
+    const delta = band && p !== undefined
+      ? p < s.targetRangeW!.fromW ? signed(p - s.targetRangeW!.fromW) : p > s.targetRangeW!.toW ? signed(p - s.targetRangeW!.toW) : 'dans la plage'
+      : free || p === undefined ? '–' : signed(p - s.targetW!);
+    this.text('delta', delta);
+    this.node('deltaUnit').hidden = band && p !== undefined && p >= s.targetRangeW!.fromW && p <= s.targetRangeW!.toW;
+    this.text('range', free ? 'palier libre' : band ? `cible ${s.targetRangeW!.fromW}–${s.targetRangeW!.toW} W` : `plage ${Math.round(s.targetW! * (1 - TARGET_BAND))}–${Math.round(s.targetW! * (1 + TARGET_BAND))} W`);
+    this.text('woChip', band ? 'PLAGE' : 'ERG');
     this.node('woChip').hidden = free;
     this.band.hidden = free;
-    if (!free) {
+    if (band) {
+      this.band.style.left = this.pct(s.targetRangeW!.fromW, ftpW);
+      this.band.style.width = `${((s.targetRangeW!.toW - s.targetRangeW!.fromW) / (ftpW * ZBAR_MAX)) * 100}%`;
+    } else if (!free) {
       this.band.style.left = this.pct(s.targetW! * (1 - TARGET_BAND), ftpW);
       this.band.style.width = `${((s.targetW! * 2 * TARGET_BAND) / (ftpW * ZBAR_MAX)) * 100}%`;
     }

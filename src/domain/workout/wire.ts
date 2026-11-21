@@ -32,6 +32,14 @@ function readStep(v: unknown): WorkoutStep | undefined {
   const target = readTarget(v.target);
   if (!target) return undefined;
   const step: WorkoutStep = { kind: v.kind as StepKind, durationS: v.durationS, target };
+  if (v.targetRange !== undefined) {
+    if (v.targetRange !== true || target.kind !== 'ftp') return undefined;
+    step.targetRange = true;
+  }
+  if (v.zoneIndex !== undefined) {
+    if (!num(v.zoneIndex, 1, 6) || !Number.isInteger(v.zoneIndex)) return undefined;
+    step.zoneIndex = v.zoneIndex;
+  }
   if (v.cadenceRpm !== undefined) {
     if (!num(v.cadenceRpm, 0, 250)) return undefined;
     step.cadenceRpm = v.cadenceRpm;

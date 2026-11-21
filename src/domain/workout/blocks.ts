@@ -6,7 +6,7 @@ import { targetWatts, totalDurationS, type Workout, type WorkoutStep } from './m
  */
 export type EditorBlock =
   | { type: 'warmup' | 'cooldown' | 'ramp'; durationS: number; from: number; to: number; cadenceRpm?: number }
-  | { type: 'steady'; durationS: number; power: number; cadenceRpm?: number }
+  | { type: 'steady'; durationS: number; power: number; powerTo?: number; cadenceRpm?: number }
   | {
       type: 'intervals';
       repeat: number;
@@ -59,7 +59,7 @@ export function blockSteps(b: EditorBlock): WorkoutStep[] {
     case 'ramp':
       return [{ kind: b.type, durationS: b.durationS, target: ftp(b.from, b.to), cadenceRpm: b.cadenceRpm }];
     case 'steady':
-      return [{ kind: 'steady', durationS: b.durationS, target: ftp(b.power), cadenceRpm: b.cadenceRpm }];
+      return [{ kind: 'steady', durationS: b.durationS, target: ftp(b.power, b.powerTo ?? b.power), ...(b.powerTo !== undefined ? { targetRange: true } : {}), cadenceRpm: b.cadenceRpm }];
     case 'intervals':
       return Array.from({ length: b.repeat }, () => [
         { kind: 'on' as const, durationS: b.onS, target: ftp(b.onPower), cadenceRpm: b.cadenceRpm },
@@ -83,8 +83,10 @@ export function validateBlocks(blocks: EditorBlock[]): string[] {
     const durations = b.type === 'intervals' ? [b.onS, b.offS] : [b.durationS];
     if (durations.some((d) => !Number.isFinite(d) || d < 1)) errors.push(`${at} : durée d'au moins 1 s attendue.`);
     if (b.type === 'intervals' && (!Number.isInteger(b.repeat) || b.repeat < 1)) errors.push(`${at} : nombre de répétitions entier attendu.`);
-    const powers = b.type === 'intervals' ? [b.onPower, b.offPower] : b.type === 'steady' ? [b.power] : b.type === 'free' ? [] : [b.from, b.to];
-    if (powers.some((p) => !Number.isFinite(p) || p <= 0 || p > 3)) errors.push(`${at} : puissance entre 1 et 300 % de la FTP attendue.`);
+    if (b.type === 'steady' && b.powerTo !== undefined && b.powerTo < b.power) errors.push(`${at} : la borne maximale doit être supérieure ou égale à la borne minimale.`);
+    const powers = b.type === 'intervals' ? [b.onPower, b.offPower] : b.type === 'steady' ? [b.power, ...(b.powerTo === undefined ? [] : [b.powerTo])] : b.type === 'free' ? [] : [b.from, b.to];
+    const allowZero = b.type === 'steady';
+    if (powers.some((p) => !Number.isFinite(p) || (allowZero ? p < 0 : p <= 0) || p > 3)) errors.push(`${at} : puissance entre 1 et 300 % de la FTP attendue.`);
   });
   return errors;
 }
@@ -133,7 +135,9 @@ export function toZwo(name: string, description: string | undefined, blocks: Edi
         return `    <${tag} Duration="${Math.round(b.durationS)}" PowerLow="${r(b.from)}" PowerHigh="${r(b.to)}"${cad(b.cadenceRpm)}/>`;
       }
       case 'steady':
-        return `    <SteadyState Duration="${Math.round(b.durationS)}" Power="${r(b.power)}"${cad(b.cadenceRpm)}/>`;
+        return b.powerTo === undefined
+          ? `    <SteadyState Duration="${Math.round(b.durationS)}" Power="${r(b.power)}"${cad(b.cadenceRpm)}/>`
+          : `    <Ramp Duration="${Math.round(b.durationS)}" PowerLow="${r(b.power)}" PowerHigh="${r(b.powerTo)}"${cad(b.cadenceRpm)}/>`;
       case 'intervals':
         return (
           `    <IntervalsT Repeat="${b.repeat}" OnDuration="${Math.round(b.onS)}" OffDuration="${Math.round(b.offS)}"` +
@@ -202,6 +206,8 @@ export function workoutToBlocks(w: Workout, ftpW: number): { blocks: EditorBlock
       blocks.push({ type: 'free', durationS: s.durationS });
     } else if (s.kind === 'warmup' || s.kind === 'cooldown') {
       blocks.push({ type: s.kind, durationS: s.durationS, from: p[0], to: p[1], cadenceRpm: s.cadenceRpm });
+    } else if (s.targetRange) {
+      blocks.push({ type: 'steady', durationS: s.durationS, power: p[0], powerTo: p[1], cadenceRpm: s.cadenceRpm });
     } else if (p[0] === p[1]) {
       blocks.push({ type: 'steady', durationS: s.durationS, power: p[0], cadenceRpm: s.cadenceRpm });
     } else {

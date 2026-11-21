@@ -88,6 +88,19 @@ function midpoint(low: number | undefined, high: number | undefined): number | u
   if (high === undefined) return low;
   return (low + high) / 2;
 }
+function mapZoneIndex(rawTargets: unknown): number | undefined {
+  for (const entry of targetEntries(rawTargets)) {
+    const type = (firstText(entry, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase().replace(/[ _-]/g, '');
+    const option = (firstText(entry, 'targetOption', 'TargetOption', 'unit', 'Unit') ?? '').toLowerCase();
+    if (type === 'zone' || type === 'zoneindex' || /zone\s*index/.test(option) || option.includes('zoneindex')) {
+      const { low, high } = numericPair(entry);
+      const encoded = option.match(/zone\s*index\s*([1-6])/i)?.[1];
+      const value = low ?? high ?? (encoded ? Number(encoded) : undefined);
+      if (value !== undefined && Number.isInteger(value) && value >= 1 && value <= 6 && (high === undefined || high === value)) return value;
+    }
+  }
+  return undefined;
+}
 function mapPowerTarget(rawTargets: unknown, warnings: string[], stepNumber: number): Target {
   const power = targetEntries(rawTargets).find((entry) => {
     const type = (firstText(entry, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase();
@@ -186,18 +199,19 @@ function expandSteps(rawSteps: unknown[], output: WorkoutStep[], warnings: strin
     if (!duration) { warnings.push(`Étape ${output.length + 1} : durée absente ou invalide; étape ignorée.`); continue; }
     const targets = get(raw, 'target', 'Target', 'targets', 'Targets');
     const stepNumber = output.length + 1;
-    const target = mapPowerTarget(targets, warnings, stepNumber);
+    const zoneIndex = mapZoneIndex(targets);
+    const target = zoneIndex === undefined ? mapPowerTarget(targets, warnings, stepNumber) : { kind: 'free' as const };
     const cadenceRpm = mapCadence(targets, warnings, stepNumber);
     const intensity = mapIntensity(get(raw, 'intensity', 'Intensity'));
     const kind: StepKind = intensity === 'free' || target.kind === 'free' ? (intensity === 'free' ? 'free' : intensity) : intensity;
-    output.push({ kind, durationS: duration, target, ...(cadenceRpm !== undefined ? { cadenceRpm } : {}) });
+    output.push({ kind, durationS: duration, target, ...(zoneIndex !== undefined ? { zoneIndex } : {}), ...(cadenceRpm !== undefined ? { cadenceRpm } : {}) });
   }
 }
 
 
 /**
- * N'accepte que les séances cyclistes dont chaque étape chronométrée possède
- * explicitement une cible de puissance ou FTP. Les valeurs ne sont pas filtrées.
+ * Accepte les séances cyclistes dont chaque étape chronométrée possède une
+ * cible de puissance/FTP ou est explicitement libre (« No Target »).
  */
 export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
   const builder = unwrapBuilder(builderPayload);
@@ -222,11 +236,18 @@ export function isCyclingIntervalWorkout(builderPayload: unknown): boolean {
       if (type !== 'step' && type !== 'workoutstep') return false;
       const durationType = (firstText(item, 'durationType', 'DurationType') ?? 'TIME').toUpperCase();
       if (durationType !== 'TIME' || !parseDurationSeconds(get(item, 'duration', 'Duration', 'durationS', 'DurationS'))) return false;
-      const targets = targetEntries(get(item, 'target', 'Target', 'targets', 'Targets'));
-      return targets.some((target) => {
-        const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase();
-        return ['power', 'watt', 'watts', 'ftp', 'percentftp'].includes(targetType);
+      const rawTargets = get(item, 'target', 'Target', 'targets', 'Targets');
+      const targets = targetEntries(rawTargets);
+      const hasPowerTarget = targets.some((target) => {
+        const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase().replace(/[ _-]/g, '');
+        return ['power', 'watt', 'watts', 'ftp', 'percentftp', 'zone', 'zoneindex'].includes(targetType) || /zone\\s*index/i.test(firstText(target, 'targetOption', 'TargetOption') ?? '');
       });
+      const hasExplicitNoTarget = (Array.isArray(rawTargets) && targets.length === 0) || targets.some((target) => {
+        const targetType = (firstText(target, 'targetType', 'TargetType', 'type', 'Type') ?? '').toLowerCase().replace(/[ _-]/g, '');
+        const targetOption = (firstText(target, 'targetOption', 'TargetOption', 'unit', 'Unit') ?? '').toLowerCase().replace(/[ _-]/g, '');
+        return ['none', 'notarget', 'free'].includes(targetType) || ['none', 'notarget', 'free'].includes(targetOption);
+      });
+      return hasPowerTarget || hasExplicitNoTarget;
     });
   };
   return hasPowerTargetOnEveryStep(readSteps(selected));

@@ -46,13 +46,13 @@ export class BlockInspector {
   }
 
   /** Champ de puissance en % avec boutons ±5 % ; `key` sert à rendre le focus après redessin. */
-  private powerStepper(label: string, value: number, set: (v: number) => void, key: string) {
-    const input = el('input', { type: 'number', value: String(pct(value)), min: '1', max: '300', step: '1' });
+  private powerStepper(label: string, value: number, set: (v: number) => void, key: string, allowZero = false) {
+    const input = el('input', { type: 'number', value: String(pct(value)), min: allowZero ? '0' : '1', max: '300', step: '1' });
     input.setAttribute('aria-label', `${label}, en % de la FTP`);
     input.dataset.key = `${key}-in`;
     input.addEventListener('input', () => {
       const v = Number(input.value);
-      const ok = input.value.trim() !== '' && v > 0 && v <= 300;
+      const ok = input.value.trim() !== '' && (allowZero ? v >= 0 : v > 0) && v <= 300;
       input.classList.toggle('invalid', !ok);
       if (!ok) return;
       this.liveEdit(() => set(v / 100));
@@ -205,7 +205,7 @@ export class BlockInspector {
         break;
       }
       case 'steady':
-        line.append(this.fieldset('Puissance', z(b.power), true, this.powerStepper('Puissance', b.power, set('power'), 'p'), this.durationField('Durée du palier', b.durationS, set('durationS'), 'dur')));
+        line.append(this.fieldset('Puissance', z(b.power), true, this.powerStepper('Minimum', b.power, set('power'), 'p', b.powerTo !== undefined), ...(b.powerTo !== undefined ? [this.powerStepper('Maximum', b.powerTo, set('powerTo'), 'p-to', true)] : []), this.durationField('Durée du palier', b.durationS, set('durationS'), 'dur')));
         break;
       case 'warmup':
       case 'cooldown':
@@ -250,6 +250,7 @@ export class BlockInspector {
       on: b.type === 'intervals' ? b.onPower : undefined,
       off: b.type === 'intervals' ? b.offPower : undefined,
       p: b.type === 'steady' ? b.power : undefined,
+      'p-to': b.type === 'steady' ? b.powerTo : undefined,
       from: 'from' in b ? b.from : undefined,
       to: 'to' in b ? b.to : undefined,
     };

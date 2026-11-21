@@ -15,6 +15,9 @@ import { setupFinalSurgeDialog } from '../ui/account/final-surge-dialog';
 import { setupStravaDialog } from '../ui/account/strava-dialog';
 import type { Wiring } from './wiring';
 
+const FINAL_SURGE_ERG_KEY = 'mamoulinette.final-surge-erg';
+const finalSurgeErgMode = (w: Wiring) => w.prefs.getItem(FINAL_SURGE_ERG_KEY) !== 'false';
+
 export function composeAccount(w: Wiring): void {
   // Données du coureur synchronisées avec son compte : FTP, masse, séances, « Mes blocs » (docs/design/compte.md).
   const riderSettingsSync = new RiderSettingsSync({
@@ -54,7 +57,7 @@ export function composeAccount(w: Wiring): void {
       if (!state.connected) return;
       const result = await synchronizeFinalSurge({
         fetchWorkouts: fetchFinalSurgeWorkouts,
-        importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp() }),
+        importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp(), ergMode: finalSurgeErgMode(w) }),
       });
       if (result.created || result.updated) w.refreshWorkoutChoices();
       const message = `Final Surge : ${result.created} créée(s), ${result.updated} mise(s) à jour, ${result.unchanged} inchangée(s), ${result.skipped} ignorée(s).`;
@@ -110,12 +113,14 @@ export function composeAccount(w: Wiring): void {
   setupStravaDialog({ session });
   const syncFinalSurge = () => synchronizeFinalSurge({
     fetchWorkouts: fetchFinalSurgeWorkouts,
-    importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp() }),
+    importWorkouts: (workouts) => mapAndSaveFinalSurgeWorkouts({ library: w.library, workouts, ftpW: w.readFtp(), ergMode: finalSurgeErgMode(w) }),
   });
   setupFinalSurgeDialog({
     syncWorkouts: syncFinalSurge,
     onImported: w.refreshWorkoutChoices,
     log: w.log,
+    ergMode: () => finalSurgeErgMode(w),
+    setErgMode: (enabled) => w.prefs.setItem(FINAL_SURGE_ERG_KEY, String(enabled)),
   });
 
   // La première synchronisation du compte précède l'import Final Surge, afin que les séances déjà synchronisées

@@ -16,8 +16,10 @@ export interface WorkoutState {
   step: WorkoutStep;
   stepElapsedS: number;
   stepRemainingS: number;
-  /** Consigne du moment, `undefined` sur un palier libre. */
+  /** Consigne fixe ou rampe, `undefined` sur un palier libre ou une plage sans ERG. */
   targetW?: number;
+  /** Plage de puissance à suivre manuellement, sans engager l'ERG. */
+  targetRangeW?: { fromW: number; toW: number };
   next?: WorkoutStep;
   nextTargetW?: number;
   elapsedS: number;
@@ -79,7 +81,11 @@ export class WorkoutRunner {
       step,
       stepElapsedS,
       stepRemainingS: step.durationS - stepElapsedS,
-      targetW: done ? undefined : targetWatts(step, stepElapsedS, this.ftpW, this.intensity),
+      targetW: done || step.targetRange ? undefined : targetWatts(step, stepElapsedS, this.ftpW, this.intensity),
+      targetRangeW: !done && step.targetRange && step.target.kind !== 'free' ? {
+        fromW: Math.round((step.target.kind === 'ftp' ? step.target.from * this.ftpW : step.target.from) * this.intensity),
+        toW: Math.round((step.target.kind === 'ftp' ? step.target.to * this.ftpW : step.target.to) * this.intensity),
+      } : undefined,
       next,
       nextTargetW: next ? targetWatts(next, 0, this.ftpW, this.intensity) : undefined,
       elapsedS: this.elapsed,

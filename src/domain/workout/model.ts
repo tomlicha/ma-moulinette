@@ -1,4 +1,4 @@
-/** Cible d'un palier : fraction de FTP ou watts absolus, constante (`from` = `to`) ou en rampe linéaire ; `free` = pas de consigne. */
+/** Cible d'un palier : fraction de FTP ou watts absolus, constante ou en rampe linéaire ; `targetRange` distingue une bande de consigne fixe ; `free` = pas de consigne. */
 export type Target =
   | { kind: 'ftp'; from: number; to: number }
   | { kind: 'watts'; from: number; to: number }
@@ -11,6 +11,10 @@ export interface WorkoutStep {
   durationS: number;
   target: Target;
   cadenceRpm?: number;
+  /** Final Surge Zone Index (1–6), resolved with the importing rider's FTP. */
+  zoneIndex?: number;
+  /** True when from/to are a target band, not a linear ramp. */
+  targetRange?: boolean;
 }
 
 export interface WorkoutMessage {
@@ -41,7 +45,7 @@ export function targetWatts(step: WorkoutStep, t: number, ftpW: number, intensit
   const tg = step.target;
   if (tg.kind === 'free') return undefined;
   const k = step.durationS > 0 ? Math.min(1, Math.max(0, t / step.durationS)) : 0;
-  const v = tg.from + (tg.to - tg.from) * k;
+  const v = step.targetRange ? (tg.from + tg.to) / 2 : tg.from + (tg.to - tg.from) * k;
   return Math.round((tg.kind === 'ftp' ? v * ftpW : v) * intensity);
 }
 

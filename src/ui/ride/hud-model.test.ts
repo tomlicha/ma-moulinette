@@ -186,6 +186,12 @@ describe('upcoming', () => {
     ]);
   });
 
+  it('affiche une plage cible comme intervalle et non comme rampe', () => {
+    const range = { kind: 'steady' as const, durationS: 600, target: { kind: 'ftp' as const, from: 0.56, to: 0.755 }, targetRange: true };
+    const first = upcoming([range], [], -1, 200).items[0]!;
+    expect(first).toEqual({ kind: 'step', step: { fromW: 112, toW: 151, durationS: 600, zoneFrom: 'z2', zoneTo: 'z2', targetRange: true } });
+  });
+
   it('s’arrête au nombre d’éléments demandé et compte le reste', () => {
     const steps = Array.from({ length: 8 }, (_, k) => st('steady', 60 + k, 0.7));
     const { items, rest } = upcoming(steps, [], 0, 260);

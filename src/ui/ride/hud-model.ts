@@ -13,6 +13,8 @@ export interface UpcomingStep {
   /** Zone au début et à la fin du palier, `free` sur un palier libre. */
   zoneFrom: Zone;
   zoneTo: Zone;
+  /** A fixed interval to follow manually, not a ramp. */
+  targetRange?: boolean;
 }
 
 export type UpcomingItem =
@@ -38,7 +40,7 @@ export interface Series {
 const sameTarget = (a: Target, b: Target) =>
   a.kind === b.kind && (a.kind === 'free' || (b.kind !== 'free' && a.from === b.from && a.to === b.to));
 const sameStep = (a: WorkoutStep, b: WorkoutStep) =>
-  a.kind === b.kind && a.durationS === b.durationS && a.cadenceRpm === b.cadenceRpm && sameTarget(a.target, b.target);
+  a.kind === b.kind && a.durationS === b.durationS && a.cadenceRpm === b.cadenceRpm && a.targetRange === b.targetRange && sameTarget(a.target, b.target);
 
 /** Séries d'une séance : A, B, A… avec A et B différents et A au moins deux fois. Un palier qui rompt l'alternance clôt la série. */
 export function findSeries(steps: readonly WorkoutStep[]): Series[] {
@@ -64,10 +66,14 @@ export function repetitionAt(series: readonly Series[], i: number): { rep: numbe
 }
 
 function upcomingStep(step: WorkoutStep, ftpW: number, intensity: number): UpcomingStep {
-  const fromW = targetWatts(step, 0, ftpW, intensity);
-  const toW = targetWatts(step, step.durationS, ftpW, intensity);
+  const fromW = step.targetRange && step.target.kind !== 'free'
+    ? Math.round((step.target.kind === 'ftp' ? step.target.from * ftpW : step.target.from) * intensity)
+    : targetWatts(step, 0, ftpW, intensity);
+  const toW = step.targetRange && step.target.kind !== 'free'
+    ? Math.round((step.target.kind === 'ftp' ? step.target.to * ftpW : step.target.to) * intensity)
+    : targetWatts(step, step.durationS, ftpW, intensity);
   const zone = (w: number | undefined): Zone => (w === undefined ? 'free' : zoneOf(w / ftpW));
-  return { fromW, toW, durationS: step.durationS, zoneFrom: zone(fromW), zoneTo: zone(toW) };
+  return { fromW, toW, durationS: step.durationS, zoneFrom: zone(fromW), zoneTo: zone(toW), ...(step.targetRange ? { targetRange: true } : {}) };
 }
 
 /**

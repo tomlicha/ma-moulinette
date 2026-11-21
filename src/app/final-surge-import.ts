@@ -1,6 +1,7 @@
 import type { EditorBlock } from '../domain/workout/blocks';
-import type { SavedWorkout, WorkoutLibrary, WorkoutSource } from '../domain/workout/library';
+import type { WorkoutLibrary, WorkoutSource } from '../domain/workout/library';
 import type { Workout, WorkoutStep } from '../domain/workout/model';
+import { zoneRangesW } from '../domain/workout/zones';
 
 export interface ImportedWorkout {
   workout: Workout;
@@ -8,9 +9,18 @@ export interface ImportedWorkout {
 }
 export interface ImportResult { created: number; updated: number; unchanged: number; skipped: number; }
 
-function blocksFromWorkout(workout: Workout, ftpW: number): EditorBlock[] {
+function blocksFromWorkout(workout: Workout, ftpW: number, ergMode: boolean): EditorBlock[] {
   return workout.steps.map((step: WorkoutStep): EditorBlock => {
     const cadenceRpm = step.cadenceRpm;
+    if (step.zoneIndex !== undefined) {
+      const range = zoneRangesW(ftpW)[step.zoneIndex - 1];
+      if (!range) return { type: 'free', durationS: step.durationS };
+      const lowW = range.fromW ?? 0;
+      const highW = range.toW ?? Math.round(ftpW * 1.5);
+      const low = lowW / ftpW;
+      const high = highW / ftpW;
+      return { type: 'steady', durationS: step.durationS, power: ergMode ? (low + high) / 2 : low, ...(!ergMode ? { powerTo: high } : {}), ...(cadenceRpm ? { cadenceRpm } : {}) };
+    }
     if (step.kind === 'warmup' || step.kind === 'cooldown' || step.kind === 'ramp') {
       const from = step.target.kind === 'ftp' ? step.target.from : step.target.kind === 'watts' ? step.target.from / ftpW : 0.5;
       const to = step.target.kind === 'ftp' ? step.target.to : step.target.kind === 'watts' ? step.target.to / ftpW : from;
@@ -22,10 +32,7 @@ function blocksFromWorkout(workout: Workout, ftpW: number): EditorBlock[] {
   });
 }
 
-/**
- * Identifiant local stable pour une séance Final Surge. Il doit être identique sur tous les appareils :
- * deux imports indépendants du même externalId deviennent ainsi le même élément dans le journal de synchronisation.
- */
+/** Stable cross-device ID: independent imports of the same Final Surge workout converge to one record. */
 function finalSurgeWorkoutId(externalId: string): string {
   let h1 = 1779033703;
   let h2 = 3144134277;
@@ -57,6 +64,8 @@ export function importFinalSurgeWorkouts(options: {
   library: Pick<WorkoutLibrary, 'list' | 'save' | 'remove'>;
   workouts: ImportedWorkout[];
   ftpW: number;
+  /** true = fixed ERG midpoint; false = preserve the full target interval. */
+  ergMode?: boolean;
 }): ImportResult {
   const ftpW = Number.isFinite(options.ftpW) && options.ftpW > 0 ? options.ftpW : 1;
   const result: ImportResult = { created: 0, updated: 0, unchanged: 0, skipped: 0 };
@@ -65,14 +74,21 @@ export function importFinalSurgeWorkouts(options: {
     const mapped = item.workout;
     const source = sourceOf(item);
     if (!mapped.steps.length || !source) { result.skipped++; continue; }
-    const blocks = blocksFromWorkout(mapped, ftpW);
+    const blocks = blocksFromWorkout(mapped, ftpW, options.ergMode ?? true);
     const warnings = [...mapped.warnings];
+    if (mapped.steps.some((step) => step.zoneIndex === 6)) warnings.push('Z6 est ouverte dans le profil : plafond conventionnel de 150 % FTP utilisé pour calculer la plage cible.');
     if (mapped.steps.some((s) => s.kind === 'off' || s.kind === 'on' || s.kind === 'max')) {
       warnings.push('Certains types d’intensité Final Surge sont représentés comme paliers dans l’éditeur.');
     }
-    const description = [mapped.description, ...warnings].filter(Boolean).join('\n\n');
+    const description = [
+      mapped.description,
+      ...warnings,
+      mapped.steps.some((s) => s.zoneIndex !== undefined)
+        ? ((options.ergMode ?? true) ? 'Zones Final Surge converties en consignes ERG fixes (milieu de plage).' : 'Zones Final Surge conservées comme plages de puissance.')
+        : undefined,
+    ].filter(Boolean).join('\n\n');
 
-    // Relecture pour chaque élément : ne pas réutiliser un instantané antérieur aux sauvegardes précédentes.
+    // Re-read for each item: earlier saves in this same batch may have changed the library.
     const matches = options.library.list().filter((w) =>
       w.source?.provider === 'final-surge' && w.source.externalId === source.externalId);
     const id = finalSurgeWorkoutId(source.externalId);
@@ -90,7 +106,7 @@ export function importFinalSurgeWorkouts(options: {
       result.unchanged++;
     }
 
-    // Les anciennes versions utilisaient des IDs aléatoires : les retirer pour converger vers l'ID stable.
+    // Remove legacy/random IDs and duplicate records so all devices converge to the stable ID.
     for (const duplicate of matches) {
       if (duplicate.id !== id) options.library.remove(duplicate.id);
     }
