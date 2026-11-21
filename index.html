@@ -11,6 +11,26 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Ma Moulinette — home trainer 3D et séances structurées</title>
     <meta name="description" content="Roule sur ton home trainer connecté dans un monde 3D : vélo et capteurs en Bluetooth, séances structurées en mode ERG, export FIT et envoi à Strava. Directement dans le navigateur." />
+    <link rel="canonical" href="%SITE_URL%/" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Ma Moulinette",
+        "url": "%SITE_URL%/",
+        "description": "Roule sur ton home trainer connecté dans un monde 3D : vélo et capteurs en Bluetooth, séances structurées en mode ERG, export FIT et envoi à Strava. Directement dans le navigateur.",
+        "applicationCategory": "Sports",
+        "operatingSystem": "Tout appareil équipé d'un navigateur web moderne",
+        "isAccessibleForFree": true,
+        "featureList": [
+          "Entraînement cycliste en environnement 3D",
+          "Connexion Bluetooth aux home trainers et capteurs cardiaques",
+          "Séances structurées avec pilotage ERG",
+          "Export des sorties au format FIT",
+          "Synchronisation avec Strava"
+        ]
+      }
+    </script>
     <!-- Aperçu des liens partagés. %SITE_URL% : adresse publique, donnée au build (vite.config.ts, siteUrl). -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Ma Moulinette" />
@@ -91,8 +111,8 @@
           <section class="dev-hero" aria-labelledby="dev-title">
             <div class="dev-hero-txt">
               <span class="home-kicker">Appareils</span>
-              <h1 id="dev-title">Équipe ton coureur</h1>
-              <p class="dev-lede">Chaque appareil apparaît sur le radar, relié à ton coureur. Un trainer suffit pour rouler.</p>
+              <h1 id="dev-title">Configure ton home trainer connecté</h1>
+              <p class="dev-lede">Connecte ton home trainer et ton capteur cardiaque en Bluetooth pour rouler dans un environnement 3D et suivre tes séances cyclistes.</p>
               <button id="rider-open" class="rider-chip" type="button" aria-haspopup="dialog">
                 <svg class="rider-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="3.4"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg>
                 <span><b>Mon coureur</b> <span id="rider-summary"></span></span>
