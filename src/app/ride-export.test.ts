@@ -42,7 +42,9 @@ function setup(initial: StravaStatus | Error = { configured: false, connected: f
   /** Pédale `seconds` secondes à `powerW` (0 : on s'arrête de pédaler). */
   const pedal = (seconds: number, powerW = 200) => {
     for (let i = 0; i < seconds; i++) {
-      exporter.onFirstPedal({ powerW, cadenceRpm: powerW ? 90 : 0 });
+      const measurement = { t: Date.now(), powerW, cadenceRpm: powerW ? 90 : 0 };
+      exporter.onFirstPedal(measurement);
+      for (const handler of handlers) handler(measurement);
       vi.advanceTimersByTime(1000);
     }
   };
