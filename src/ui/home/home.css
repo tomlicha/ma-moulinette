@@ -518,3 +518,42 @@ button.wo-item-head { display: flex; align-items: center; gap: 12px; width: 100%
   .wo-stats span { font-size: .78rem; }
   .wo-actions button { height: 44px; }
 }
+
+
+/* Contenu éditorial SEO : intégré à l'écran Appareils, sous l'interface existante.
+   Il reste dans le flux normal de la page et ne recouvre pas les commandes de l'application. */
+.seo-content {
+  position: relative; z-index: 1; padding: 56px 24px 88px;
+  background: #F4EDE3; color: #14171A; color-scheme: light;
+  font-family: Barlow, system-ui, sans-serif;
+}
+.seo-content-inner { width: min(100%, 1080px); margin: 0 auto; }
+.seo-intro { max-width: 780px; margin: 0 auto 32px; text-align: center; }
+.seo-intro h2, .seo-faq h2 {
+  margin: 8px 0 12px; color: #14171A;
+  font: 700 clamp(2rem, 4vw, 3rem)/1.05 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+}
+.seo-intro > p:last-child { margin: 0; color: #4F5865; font-size: 1.08rem; line-height: 1.65; }
+.seo-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.seo-features article {
+  padding: 22px 24px; border: 1px solid rgb(90 60 30 / .14); border-radius: 18px;
+  background: #fff; box-shadow: 0 6px 18px rgb(80 50 20 / .07);
+}
+.seo-features h3 { margin: 0 0 7px; color: #14171A; font: 700 1.45rem/1.1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+.seo-features p { margin: 0; color: #4F5865; line-height: 1.6; }
+.seo-faq { max-width: 860px; margin: 48px auto 0; }
+.seo-faq h2 { margin-bottom: 18px; text-align: center; }
+.seo-faq details { border-bottom: 1px solid rgb(90 60 30 / .18); }
+.seo-faq details:first-of-type { border-top: 1px solid rgb(90 60 30 / .18); }
+.seo-faq summary { position: relative; padding: 17px 42px 17px 4px; color: #14171A; font-weight: 700; cursor: pointer; list-style: none; }
+.seo-faq summary::-webkit-details-marker { display: none; }
+.seo-faq summary::after { content: '+'; position: absolute; right: 8px; top: 50%; translate: 0 -50%; color: #C2410C; font-size: 1.5rem; font-weight: 400; }
+.seo-faq details[open] summary::after { content: '−'; }
+.seo-faq details p { max-width: 76ch; margin: -4px 32px 18px 4px; color: #4F5865; line-height: 1.6; }
+.seo-content a { color: #9A3108; }
+@media (max-width: 700px) {
+  .seo-content { padding: 38px 16px 76px; }
+  .seo-features { grid-template-columns: 1fr; }
+  .seo-features article { padding: 18px 20px; }
+  .seo-faq { margin-top: 36px; }
+}
