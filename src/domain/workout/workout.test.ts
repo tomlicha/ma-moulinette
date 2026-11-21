@@ -148,6 +148,13 @@ describe('déroulement', () => {
     expect(s).toMatchObject({ stepIndex: 2, targetW: 110 });
   });
 
+  it('ne commande pas le milieu dune plage sans ERG et expose ses deux bornes en watts', () => {
+    const workout = { name: 'Zone 2', steps: [{ kind: 'steady' as const, durationS: 600, target: { kind: 'ftp' as const, from: 0.56, to: 0.755 }, targetRange: true }], messages: [], warnings: [] };
+    const state = new WorkoutRunner(workout, 200).state();
+    expect(state.targetW).toBeUndefined();
+    expect(state.targetRangeW).toEqual({ fromW: 112, toW: 151 });
+  });
+
   it("n'a pas de consigne sur le palier libre, et termine proprement", () => {
     const r = new WorkoutRunner(w, 200);
     expect(r.advance(1100).targetW).toBeUndefined(); // dans le FreeRide (1080 à 1140 s)
@@ -209,6 +216,14 @@ describe('profil de séance', () => {
     expect(shapes[0]!.d).toMatch(/^M0 100L0 /); // commence au bord gauche, au sol
     expect(shapes.at(-1)!.d).toMatch(/L1380 100Z$/); // finit au bord droit
     expect(shapes.map((s) => s.zone)).toEqual(['z2', 'z5', 'z1', 'z5', 'z1', 'z5', 'z1', 'z5', 'z1', 'z4', 'free', 'z1']);
+  });
+
+  it('dessine une cible sans ERG comme une bande entre ses deux bornes', () => {
+    const workout = { name: 'Zone 2', steps: [{ kind: 'steady' as const, durationS: 600, target: { kind: 'ftp' as const, from: 0.56, to: 0.755 }, targetRange: true }], messages: [], warnings: [] };
+    const shape = profileShapes(workout, 200, 600, 100)[0]!;
+    expect(shape.zone).toBe('z2');
+    expect(shape.d).not.toMatch(/L0 100/);
+    expect(profileShapes(workout, 200, 600, 100)).toHaveLength(1);
   });
 
   it('classe les zones aux bornes usuelles', () => {

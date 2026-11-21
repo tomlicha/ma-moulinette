@@ -21,6 +21,11 @@ describe('readWireWorkout', () => {
     expect(r).toEqual({ ...good, warnings: [] });
   });
 
+  it('conserve les plages cibles et les indices de zone synchronisés', () => {
+    const value = { ...good, steps: [{ kind: 'steady', durationS: 600, target: { kind: 'ftp', from: 0.56, to: 0.755 }, targetRange: true, zoneIndex: 2 }] };
+    expect(readWireWorkout(value)?.steps[0]).toMatchObject({ targetRange: true, zoneIndex: 2 });
+  });
+
   it("n'a besoin ni de description, ni de messages", () => {
     const { description: _d, messages: _m, ...bare } = good;
     expect(readWireWorkout(bare)).toMatchObject({ name: 'Sweet spot', messages: [] });

@@ -4,6 +4,15 @@ import { isCyclingIntervalWorkout, mapFinalSurgeWorkout } from '../mapper.ts';
 const power = (value: number) => [{ targetType: 'power', targetOption: 'percentFTP', targetLow: value, targetHigh: value }];
 
 describe('mapFinalSurgeWorkout', () => {
+  it('preserves Final Surge Zone Index targets for rider-specific resolution during import', () => {
+    const result = mapFinalSurgeWorkout({ Title: 'Zones' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '15:00', target: [{ targetType: 'power', targetOption: 'Zone Index 2' }] },
+      { type: 'step', durationType: 'TIME', duration: '2:00', target: [] },
+    ] }] });
+    expect(result.workout.steps[0]).toMatchObject({ kind: 'steady', durationS: 900, zoneIndex: 2, target: { kind: 'free' } });
+    expect(result.workout.steps[1]).toMatchObject({ target: { kind: 'free' } });
+  });
+
   it('uses the midpoint of %FTP ranges as a fixed ERG target', () => {
     const result = mapFinalSurgeWorkout({ Title: 'ERG range' }, { target_options: [{ sport: 'cycling', target: 'power', steps: [
       { type: 'step', intensity: 'ACTIVE', durationType: 'TIME', duration: '8:00', target: [{ targetType: 'power', targetOption: 'percentFTP', targetLow: 80, targetHigh: 90 }] },
@@ -130,14 +139,24 @@ describe('isCyclingIntervalWorkout', () => {
     ] }] })).toBe(true);
   });
 
-  it('rejects a cycling workout if any step, including one inside a repeat, has no power or FTP target', () => {
-    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+  it('accepts a No Target recovery step inside a repeated cycling workout', () => {
+    const builder = { target_options: [{ sport: 'Bike - Interval', target: 'power', steps: [
       { type: 'step', durationType: 'TIME', duration: '10:00', target: power(60) },
       { type: 'repeat', repeats: 2, data: [
         { type: 'step', durationType: 'TIME', duration: '5:00', target: power(90) },
         { type: 'step', durationType: 'TIME', duration: '2:00', target: [] },
       ] },
-    ] }] })).toBe(false);
+    ] }] };
+    expect(isCyclingIntervalWorkout(builder)).toBe(true);
+    const mapped = mapFinalSurgeWorkout({ Title: 'Free recovery' }, builder);
+    expect(mapped.workout.steps).toHaveLength(5);
+    expect(mapped.workout.steps[2]).toMatchObject({ durationS: 120, target: { kind: 'free' } });
+  });
+
+  it('accepts Final Surge explicit No Target descriptors', () => {
+    expect(isCyclingIntervalWorkout({ target_options: [{ sport: 'cycling', target: 'power', steps: [
+      { type: 'step', durationType: 'TIME', duration: '2:00', target: [{ targetType: 'none', targetOption: 'No Target' }] },
+    ] }] })).toBe(true);
   });
 
   it('accepts a repeated workout when every step has a power target', () => {

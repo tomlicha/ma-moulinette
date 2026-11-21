@@ -9,6 +9,8 @@ export function setupFinalSurgeDialog(options: {
   syncWorkouts: () => Promise<FinalSurgeSyncResult>;
   onImported: () => void;
   log: (message: string) => void;
+  ergMode: () => boolean;
+  setErgMode: (enabled: boolean) => void;
 }): void {
   const dialog = document.createElement('dialog');
   dialog.className = 'rider-dialog name-dialog';
@@ -24,6 +26,8 @@ export function setupFinalSurgeDialog(options: {
       </div>
       <div class="fs-connected" hidden>
         <p class="note">Compte Final Surge connecté.</p>
+        <label class="name-field fs-erg-choice"><span><input type="checkbox" name="ergMode" checked> Mode ERG : utiliser le milieu de chaque plage de zone</span></label>
+        <p class="note">Désactive cette option pour conserver les plages complètes (minimum–maximum) comme cibles.</p>
         <button type="button" data-act="sync">Synchroniser maintenant</button>
         <button type="button" class="secondary" data-act="disconnect">Déconnecter Final Surge</button>
       </div>
@@ -39,6 +43,9 @@ export function setupFinalSurgeDialog(options: {
   const errors = dialog.querySelector<HTMLUListElement>('.fs-errors')!;
   const email = form.elements.namedItem('email') as HTMLInputElement;
   const password = form.elements.namedItem('password') as HTMLInputElement;
+  const ergMode = form.elements.namedItem('ergMode') as HTMLInputElement;
+  ergMode.checked = options.ergMode();
+  ergMode.addEventListener('change', () => options.setErgMode(ergMode.checked));
 
   const showStatus = (message: string) => { status.textContent = message; };
   const setConnected = (value: boolean) => { credentials.hidden = value; connected.hidden = !value; };

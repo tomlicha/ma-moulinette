@@ -26,7 +26,10 @@ export interface ProfileShape {
 export function profilePeakW(w: Workout, ftpW: number): number {
   return Math.max(
     1.3 * ftpW,
-    ...w.steps.map((s) => Math.max(targetWatts(s, 0, ftpW) ?? 0, targetWatts(s, s.durationS, ftpW) ?? 0) * 1.08),
+    ...w.steps.map((s) => {
+      if (s.targetRange && s.target.kind !== 'free') return (s.target.kind === 'ftp' ? s.target.to * ftpW : s.target.to) * 1.08;
+      return Math.max(targetWatts(s, 0, ftpW) ?? 0, targetWatts(s, s.durationS, ftpW) ?? 0) * 1.08;
+    }),
   );
 }
 
@@ -43,10 +46,16 @@ export function profileShapes(w: Workout, ftpW: number, width: number, height: n
     const to = targetWatts(s, s.durationS, ftpW);
     const free = from === undefined || to === undefined;
     const [a, b] = free ? [0.3 * ftpW, 0.3 * ftpW] : [from, to];
-    out.push({
-      d: `M${x0} ${height}L${x0} ${y(a)}L${x1} ${y(b)}L${x1} ${height}Z`,
-      zone: free ? 'free' : zoneOf((a + b) / 2 / ftpW),
-    });
+    if (s.targetRange && s.target.kind !== 'free') {
+      const low = s.target.kind === 'ftp' ? s.target.from * ftpW : s.target.from;
+      const high = s.target.kind === 'ftp' ? s.target.to * ftpW : s.target.to;
+      out.push({ d: `M${x0} ${y(high)}L${x1} ${y(high)}L${x1} ${y(low)}L${x0} ${y(low)}Z`, zone: zoneOf((low + high) / 2 / ftpW) });
+    } else {
+      out.push({
+        d: `M${x0} ${height}L${x0} ${y(a)}L${x1} ${y(b)}L${x1} ${height}Z`,
+        zone: free ? 'free' : zoneOf((a + b) / 2 / ftpW),
+      });
+    }
     t += s.durationS;
   }
   return out;

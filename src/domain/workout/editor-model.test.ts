@@ -33,6 +33,15 @@ describe('blocs de l\'éditeur', () => {
     expect(validateBlocks(ALL.map(defaultBlock))).toEqual([]);
   });
 
+  it('préserve une plage cible dans un palier éditable et la traite comme une bande, pas une rampe', () => {
+    const block: EditorBlock = { type: 'steady', durationS: 600, power: 0.56, powerTo: 0.755 };
+    const workout = blocksToWorkout('Zone 2', undefined, [block]);
+    expect(workout.steps[0]).toMatchObject({ targetRange: true, target: { kind: 'ftp', from: 0.56, to: 0.755 } });
+    expect(workoutStats(workout, 200).avgW).toBe(132);
+    expect(workoutToBlocks(workout, 200).blocks).toEqual([block]);
+    expect(validateBlocks([block])).toEqual([]);
+  });
+
   it('déplie les intervalles et calcule les durées', () => {
     const w = blocksToWorkout('  ', undefined, sample);
     expect(w.name).toBe('Séance sans nom');

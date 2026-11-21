@@ -6,7 +6,7 @@ import { formatDuration, parseDuration } from '../shared/duration';
 import { DURATION_STEP_S, POWER_STEP } from './constants';
 import { byId, el, pct } from './dom';
 
-type PowerField = 'onPower' | 'offPower' | 'power' | 'from' | 'to';
+type PowerField = 'onPower' | 'offPower' | 'power' | 'powerTo' | 'from' | 'to';
 
 /** Ce que la saisie règle : une puissance (% et W), une durée, une cadence, ou les répétitions. */
 interface EditSpec {
@@ -257,10 +257,17 @@ export class PhoneBlockControls {
         put(reps, px(r.end) - 48, 4, 44);
         break;
       }
-      case 'steady':
-        cap('power', b.power, x0 + px(b.durationS) / 2, 'Puissance', false, capMin(topOf(b.power)), { title: 'Puissance', power: 'power', dur: 'block', cad: 'on' });
-        chip(x0 + px(b.durationS) / 2, b.durationS, topOf(b.power), { title: 'Durée', dur: 'block' });
+      case 'steady': {
+        const center = x0 + px(b.durationS) / 2;
+        if (b.powerTo === undefined) {
+          cap('power', b.power, center, 'Puissance', false, capMin(topOf(b.power)), { title: 'Puissance', power: 'power', dur: 'block', cad: 'on' });
+        } else {
+          cap('power', b.power, center - 22, 'Minimum', true, capMin(Math.min(topOf(b.power), topOf(b.powerTo))), { title: 'Minimum', power: 'power', dur: 'block', cad: 'on' });
+          cap('powerTo', b.powerTo, center + 22, 'Maximum', true, 0, { title: 'Maximum', power: 'powerTo', dur: 'block', cad: 'on' });
+        }
+        chip(center, b.durationS, Math.min(topOf(b.power), topOf(b.powerTo ?? b.power)), { title: 'Durée', dur: 'block' });
         break;
+      }
       case 'warmup':
       case 'cooldown':
       case 'ramp': {
