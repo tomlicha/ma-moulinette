@@ -143,14 +143,15 @@ export class WorkoutSession extends TypedEmitter<{
   }
 
   /** Démarre le chronomètre au premier coup de pédale reçu du trainer. */
-  onMeasurement(m: { powerW?: number; cadenceRpm?: number }): void {
-    if (!this.current || !this.waitingForPedaling) return;
-    if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
+  onMeasurement(m: { powerW?: number; cadenceRpm?: number }): boolean {
+    if (!this.current || !this.waitingForPedaling) return false;
+    if (!((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return false;
     this.waitingForPedaling = false;
     this.lastTickMs = this.clock();
     this.startClock();
     this.deps.log('premier coup de pédale : chronomètre de la séance démarré');
     this.tick();
+    return true;
   }
 
   private startClock(): void {

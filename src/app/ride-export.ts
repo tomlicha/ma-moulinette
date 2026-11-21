@@ -106,6 +106,8 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
   /** Séance démarrée depuis le dernier export ; sans elle, la sortie porte le nom de la route. */
   private workoutName?: string;
   private busy = false;
+  /** Aucun échantillon avant le premier vrai coup de pédale (même si cardio/vitesse arrivent déjà). */
+  private recordingStarted = false;
   private readonly port: StravaPort;
   private readonly clock: () => number;
 
@@ -115,19 +117,32 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
     this.clock = deps.clock ?? (() => Date.now());
   }
 
-  /** Commence à enregistrer les mesures, à un pas d'une seconde, et demande à Strava où on en est. */
+  /** Commence le tick 1 Hz et demande à Strava où on en est ; le départ FIT est signalé par le déclencheur partagé. */
   start(): void {
     void this.refreshStrava();
+    // Les mesures continuent d'alimenter le recorder après le déclenchement partagé.
+    // Avant le premier coup de pédale, elles sont ignorées pour ne pas créer de pré-enregistrement.
     this.deps.hub.on('measurement', (m) => {
+      if (!this.recordingStarted) return;
       this.recorder.update({ powerW: m.powerW, cadenceRpm: m.cadenceRpm, heartRateBpm: m.heartRateBpm }, this.clock());
     });
     setInterval(() => this.tick(), 1000);
   }
 
+  /** Départ FIT sur le même événement que celui qui démarre la sortie ou le chronomètre de séance. */
+  onFirstPedal(m: { powerW?: number; cadenceRpm?: number; heartRateBpm?: number }): void {
+    if (this.recordingStarted || !((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
+    const now = this.clock();
+    // Les mesures capteur pré-départ sont ignorées ; les snapshots route/séance restent disponibles pour ce point.
+    this.recordingStarted = true;
+    this.recorder.update({ powerW: m.powerW, cadenceRpm: m.cadenceRpm, heartRateBpm: m.heartRateBpm }, now);
+    this.recorder.tick(now);
+  }
+
   /** Le pas d'une seconde (public pour les tests). */
   tick(): void {
-    this.recorder.tick(this.clock());
-    if (this.watchFrom !== undefined && this.recorder.resumedAfter(this.watchFrom, RESUME_S)) {
+    if (this.recordingStarted) this.recorder.tick(this.clock());
+    if (this.recordingStarted && this.watchFrom !== undefined && this.recorder.resumedAfter(this.watchFrom, RESUME_S)) {
       this.watchFrom = undefined;
       // D'abord le récapitulatif : s'il avait un envoi programmé, il part avec la sortie figée, qu'il prend tout de suite.
       this.emit('resumed');
@@ -157,6 +172,7 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
 
   /** À appeler à chaque changement d'état du trainer : l'enregistrement se met en pause hors connexion. */
   onTrainerState(s: ConnectionState): void {
+    if (!this.recordingStarted) return;
     if (s === 'connected') this.recorder.resume(this.clock());
     else this.recorder.pause(this.clock());
   }
@@ -322,6 +338,7 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
     const { encodeActivity } = await this.encoder();
     const rec = pending ?? this.recorder.finish(this.clock());
     if (pending) this.recorder.reset();
+    this.recordingStarted = false;
     if (!rec) {
       if (this.exported && name) this.exported.name = name;
       return this.exported;
@@ -337,6 +354,7 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
   }
 
   private freeze(why: string): void {
+    if (!this.recordingStarted) return;
     const now = this.clock();
     this.recorder.tick(now); // la dernière seconde, si le tick à 1 Hz ne l'a pas encore prise
     this.frozen = this.recorder.snapshot(now);

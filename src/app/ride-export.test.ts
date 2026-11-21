@@ -42,7 +42,9 @@ function setup(initial: StravaStatus | Error = { configured: false, connected: f
   /** Pédale `seconds` secondes à `powerW` (0 : on s'arrête de pédaler). */
   const pedal = (seconds: number, powerW = 200) => {
     for (let i = 0; i < seconds; i++) {
-      for (const h of handlers) h({ t: Date.now(), powerW, cadenceRpm: powerW ? 90 : 0 });
+      const measurement = { t: Date.now(), powerW, cadenceRpm: powerW ? 90 : 0 };
+      exporter.onFirstPedal(measurement);
+      for (const handler of handlers) handler(measurement);
       vi.advanceTimersByTime(1000);
     }
   };
@@ -77,6 +79,17 @@ describe('RideExport', () => {
       pedal(5);
       expect(exporter.status().samples).toBeGreaterThanOrEqual(4);
       expect(changed.mock.calls.length).toBeGreaterThanOrEqual(5);
+    });
+
+    it("ne commence le FIT qu'au premier coup de pédale, avec son timestamp exact", async () => {
+      const { exporter, pedal } = await started();
+      vi.advanceTimersByTime(5000);
+      expect(exporter.status().samples).toBe(0);
+      const firstPedalAt = Date.now();
+      exporter.onFirstPedal({ heartRateBpm: 131, powerW: 150, cadenceRpm: 80 });
+      expect(exporter.current()?.startMs).toBe(firstPedalAt);
+      expect(exporter.current()?.samples[0]).toMatchObject({ t: firstPedalAt, powerW: 150, cadenceRpm: 80, heartRateBpm: 131 });
+      pedal(2);
     });
 
     it('se met en pause quand le trainer est perdu, et reprend à la reconnexion', async () => {
