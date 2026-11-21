@@ -351,6 +351,7 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
   }
 
   private freeze(why: string): void {
+    if (!this.recordingStarted) return;
     const now = this.clock();
     this.recorder.tick(now); // la dernière seconde, si le tick à 1 Hz ne l'a pas encore prise
     this.frozen = this.recorder.snapshot(now);
