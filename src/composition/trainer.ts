@@ -87,7 +87,8 @@ export function composeTrainer(w: Wiring): void {
     // Un seul signal de départ partagé : démarrage auto de la sortie/séance ou démarrage différé du chrono.
     const autoStarted = w.autoStart.onMeasurement(m);
     const workoutStarted = w.workoutSession.onMeasurement(m);
-    if (autoStarted || workoutStarted) w.exporter.onFirstPedal(m);
+    const pedalingStartedRide = w.rideSession.active && ((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0);
+    if (autoStarted || workoutStarted || pedalingStartedRide) w.exporter.onFirstPedal(m);
     readings.record(m);
   });
 }
