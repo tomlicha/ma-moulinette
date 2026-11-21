@@ -42,7 +42,7 @@ function setup(initial: StravaStatus | Error = { configured: false, connected: f
   /** Pédale `seconds` secondes à `powerW` (0 : on s'arrête de pédaler). */
   const pedal = (seconds: number, powerW = 200) => {
     for (let i = 0; i < seconds; i++) {
-      for (const h of handlers) h({ t: Date.now(), powerW, cadenceRpm: powerW ? 90 : 0 });
+      exporter.onFirstPedal({ powerW, cadenceRpm: powerW ? 90 : 0 });
       vi.advanceTimersByTime(1000);
     }
   };
@@ -80,13 +80,11 @@ describe('RideExport', () => {
     });
 
     it("ne commence le FIT qu'au premier coup de pédale, avec son timestamp exact", async () => {
-      const { exporter, hub, pedal } = await started();
-      const handlers = (hub.on.mock.calls as unknown as [string, (m: Measurement) => void][]).filter(([event]) => event === 'measurement').map(([, handler]) => handler);
-      handlers.forEach((handler) => handler({ t: Date.now(), heartRateBpm: 130, powerW: 0, cadenceRpm: 0 } as Measurement));
+      const { exporter, pedal } = await started();
       vi.advanceTimersByTime(5000);
       expect(exporter.status().samples).toBe(0);
       const firstPedalAt = Date.now();
-      handlers.forEach((handler) => handler({ t: firstPedalAt, heartRateBpm: 131, powerW: 150, cadenceRpm: 80 } as Measurement));
+      exporter.onFirstPedal({ heartRateBpm: 131, powerW: 150, cadenceRpm: 80 });
       expect(exporter.current()?.startMs).toBe(firstPedalAt);
       expect(exporter.current()?.samples[0]).toMatchObject({ t: firstPedalAt, powerW: 150, cadenceRpm: 80, heartRateBpm: 131 });
       pedal(2);
