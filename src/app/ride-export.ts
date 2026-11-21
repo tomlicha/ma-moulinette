@@ -335,6 +335,7 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
     const { encodeActivity } = await this.encoder();
     const rec = pending ?? this.recorder.finish(this.clock());
     if (pending) this.recorder.reset();
+    this.recordingStarted = false;
     if (!rec) {
       if (this.exported && name) this.exported.name = name;
       return this.exported;
