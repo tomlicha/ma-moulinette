@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr-CA">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
@@ -39,6 +39,23 @@
           "Séances structurées avec pilotage ERG",
           "Export des sorties au format FIT",
           "Synchronisation avec Strava"
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {"@type":"Question","name":"Ma Moulinette est-elle gratuite ?","acceptedAnswer":{"@type":"Answer","text":"Oui. L'application est accessible gratuitement depuis un navigateur compatible. La connexion à Strava est facultative."}},
+          {"@type":"Question","name":"Quels home trainers sont compatibles ?","acceptedAnswer":{"@type":"Answer","text":"La compatibilité dépend du modèle et des protocoles Bluetooth qu'il expose. Ma Moulinette prend en charge les appareils compatibles avec FTMS ainsi que certains protocoles propriétaires. Le Wahoo KICKR testé dans le projet fonctionne en lecture et en pilotage. Les autres modèles doivent être vérifiés individuellement."}},
+          {"@type":"Question","name":"Quel navigateur faut-il utiliser ?","acceptedAnswer":{"@type":"Answer","text":"Sur ordinateur, utilise un navigateur compatible Web Bluetooth, comme Chrome ou Edge, et ouvre le site en HTTPS."}},
+          {"@type":"Question","name":"Faut-il un capteur cardiaque ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le capteur cardiaque est facultatif. Tu peux utiliser ton home trainer seul."}},
+          {"@type":"Question","name":"Peut-on importer des séances Zwift ou d'autres plateformes ?","acceptedAnswer":{"@type":"Answer","text":"Tu peux importer des fichiers d'entraînement structurés aux formats ZWO, ERG et MRC. Tu peux aussi créer et modifier tes propres séances dans l'éditeur intégré."}},
+          {"@type":"Question","name":"À quoi sert le mode ERG ?","acceptedAnswer":{"@type":"Answer","text":"Le mode ERG demande au home trainer de réguler la résistance pour atteindre une puissance cible. Son fonctionnement dépend de la compatibilité du home trainer et de son protocole de contrôle."}},
+          {"@type":"Question","name":"Peut-on exporter ses entraînements vers Strava ?","acceptedAnswer":{"@type":"Answer","text":"Tu peux exporter une activité au format FIT ou connecter ton compte Strava pour lui envoyer ta sortie. Un compte Strava n'est pas nécessaire pour télécharger un fichier FIT."}},
+          {"@type":"Question","name":"Peut-on utiliser Ma Moulinette sans connexion Internet ?","acceptedAnswer":{"@type":"Answer","text":"Après le premier chargement et la mise en cache des ressources, l'application web peut démarrer et permettre de rouler hors ligne. Les fonctions qui nécessitent le serveur, comme Strava et le multijoueur, demandent une connexion Internet."}},
+          {"@type":"Question","name":"Comment fonctionne le mode multijoueur ?","acceptedAnswer":{"@type":"Answer","text":"Le mode multijoueur permet de croiser d'autres cyclistes dans le monde virtuel. La connexion à un compte Strava est nécessaire pour rejoindre la salle en ligne ; elle reste facultative pour les sorties individuelles."}}
         ]
       }
     </script>
