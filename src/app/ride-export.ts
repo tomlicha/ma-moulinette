@@ -117,23 +117,20 @@ export class RideExport extends TypedEmitter<{ changed: []; resumed: [] }> {
     this.clock = deps.clock ?? (() => Date.now());
   }
 
-  /** Commence à enregistrer les mesures, à un pas d'une seconde, et demande à Strava où on en est. */
+  /** Commence le tick 1 Hz et demande à Strava où on en est ; le départ FIT est signalé par le déclencheur partagé. */
   start(): void {
     void this.refreshStrava();
-    this.deps.hub.on('measurement', (m) => {
-      const now = this.clock();
-      const firstPedal = !this.recordingStarted && ((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0);
-      if (firstPedal) {
-        // Les mesures capteur pré-départ sont ignorées ; on conserve les derniers snapshots route/séance,
-        // déjà actualisés indépendamment, pour les inclure dans le tout premier échantillon.
-        this.recordingStarted = true;
-      }
-      if (!this.recordingStarted) return;
-      this.recorder.update({ powerW: m.powerW, cadenceRpm: m.cadenceRpm, heartRateBpm: m.heartRateBpm }, now);
-      // Le premier point est pris immédiatement, sans attendre le prochain tick 1 Hz.
-      if (firstPedal) this.recorder.tick(now);
-    });
     setInterval(() => this.tick(), 1000);
+  }
+
+  /** Départ FIT sur le même événement que celui qui démarre la sortie ou le chronomètre de séance. */
+  onFirstPedal(m: { powerW?: number; cadenceRpm?: number; heartRateBpm?: number }): void {
+    if (this.recordingStarted || !((m.powerW ?? 0) > 0 || (m.cadenceRpm ?? 0) > 0)) return;
+    const now = this.clock();
+    // Les mesures capteur pré-départ sont ignorées ; les snapshots route/séance restent disponibles pour ce point.
+    this.recordingStarted = true;
+    this.recorder.update({ powerW: m.powerW, cadenceRpm: m.cadenceRpm, heartRateBpm: m.heartRateBpm }, now);
+    this.recorder.tick(now);
   }
 
   /** Le pas d'une seconde (public pour les tests). */
